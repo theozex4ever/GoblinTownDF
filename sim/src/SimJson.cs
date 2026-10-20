@@ -76,6 +76,9 @@ public static class SimJson
 			}
 			Require(job >= 0 && job < tiles && s.DesignationAt(job) != DesignationKind.None,
 				$"Goblin {g} works tile {job}, which is not designated.");
+			if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Digging)
+				Require(JobSystem.CanDigFrom(s, s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]), job),
+					$"Goblin {g} is digging tile {job} from where it cannot dig it.");
 			for (var other = 0; other < g; other++)
 				Require(s.GoblinJobTile[other] != job, $"Goblins {other} and {g} both claim tile {job}.");
 		}

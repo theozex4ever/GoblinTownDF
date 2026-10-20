@@ -148,9 +148,22 @@ public sealed class JobSystem
 	}
 
 	/// <summary>
-	/// Appends the tiles a goblin can dig <paramref name="tile"/> from: walkable orthogonal neighbours on
-	/// its level, and Stairs directly above or below it.
+	/// Whether a goblin on <paramref name="stand"/> can dig <paramref name="tile"/>: from a walkable
+	/// orthogonal neighbour on its level, or from Stairs directly above or below it.
 	/// </summary>
+	public static bool CanDigFrom(SimState s, int stand, int tile)
+	{
+		var layer = s.Width * s.Height;
+		var dx = Math.Abs(stand % s.Width - tile % s.Width);
+		var dy = Math.Abs(stand / s.Width % s.Height - tile / s.Width % s.Height);
+		var dz = Math.Abs(stand / layer - tile / layer);
+		var kind = s.KindAt(stand);
+		return dz == 0
+			? dx + dy == 1 && TileRules.IsWalkable(kind)
+			: dz == 1 && dx == 0 && dy == 0 && kind == TileKind.Stairs;
+	}
+
+	/// <summary>Appends the tiles a goblin can dig <paramref name="tile"/> from (see <see cref="CanDigFrom"/>).</summary>
 	void AddStandingTiles(SimState s, int tile)
 	{
 		var width = s.Width;
@@ -158,18 +171,17 @@ public sealed class JobSystem
 		var x = tile % width;
 		var y = tile / width % s.Height;
 		var z = tile / layer;
-		if (x > 0) AddIfWalkable(s, tile - 1, tile, walkableOnly: true);
-		if (x < width - 1) AddIfWalkable(s, tile + 1, tile, walkableOnly: true);
-		if (y > 0) AddIfWalkable(s, tile - width, tile, walkableOnly: true);
-		if (y < s.Height - 1) AddIfWalkable(s, tile + width, tile, walkableOnly: true);
-		if (z > 0) AddIfWalkable(s, tile - layer, tile, walkableOnly: false);
-		if (z < s.Depth - 1) AddIfWalkable(s, tile + layer, tile, walkableOnly: false);
+		if (x > 0) AddIfStanding(s, tile - 1, tile);
+		if (x < width - 1) AddIfStanding(s, tile + 1, tile);
+		if (y > 0) AddIfStanding(s, tile - width, tile);
+		if (y < s.Height - 1) AddIfStanding(s, tile + width, tile);
+		if (z > 0) AddIfStanding(s, tile - layer, tile);
+		if (z < s.Depth - 1) AddIfStanding(s, tile + layer, tile);
 	}
 
-	void AddIfWalkable(SimState s, int stand, int job, bool walkableOnly)
+	void AddIfStanding(SimState s, int stand, int job)
 	{
-		var kind = s.KindAt(stand);
-		if (walkableOnly ? TileRules.IsWalkable(kind) : kind == TileKind.Stairs)
+		if (CanDigFrom(s, stand, job))
 		{
 			_goals.Add(stand);
 			_goalJobs.Add(job);

@@ -179,6 +179,52 @@ public class SaveTests
 		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(stepping)));
 	}
 
+	[Theory]
+	[InlineData(16, 16, 0, 0)] // far away
+	[InlineData(1, 6, 0, 0)] // diagonal
+	[InlineData(0, 5, 0, 0)] // on the tile itself
+	[InlineData(31, 4, 0, 0)] // next to it in the tile array, across the row edge
+	[InlineData(0, 5, 0, 1)] // on Floor above a tile on z1
+	public void A_goblin_digging_from_where_it_cannot_dig_is_rejected(int x, int y, int z, int jobZ)
+	{
+		var sim = DiggingAt(x, y, z, jobZ);
+
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));
+	}
+
+	[Theory]
+	[InlineData(1, 5, 0, 0)]
+	[InlineData(0, 4, 0, 0)]
+	[InlineData(0, 6, 0, 0)]
+	public void A_goblin_digging_from_beside_its_tile_loads(int x, int y, int z, int jobZ)
+	{
+		var sim = DiggingAt(x, y, z, jobZ);
+
+		AssertIdentical(sim, SimJson.Deserialize(SimJson.Serialize(sim)));
+	}
+
+	[Fact]
+	public void A_goblin_digging_from_Stairs_above_its_tile_loads()
+	{
+		var sim = DiggingAt(0, 5, 0, jobZ: 1);
+		sim.State.TileKinds[sim.State.TileIndex(0, 5, 0)] = (byte)TileKind.Stairs;
+
+		AssertIdentical(sim, SimJson.Deserialize(SimJson.Serialize(sim)));
+	}
+
+	// Goblin 0 at (x, y, z), digging a designated (0, 5, jobZ).
+	static Simulation DiggingAt(int x, int y, int z, int jobZ)
+	{
+		var sim = Simulation.NewWorld(seed: 42);
+		var s = sim.State;
+		var job = s.TileIndex(0, 5, jobZ);
+		s.Designations[job] = (byte)DesignationKind.DigStairs;
+		(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (x, y, z);
+		s.GoblinTask[0] = (byte)GoblinTask.Digging;
+		s.GoblinJobTile[0] = job;
+		return sim;
+	}
+
 	[Fact]
 	public void Two_goblins_claiming_one_tile_are_rejected()
 	{
