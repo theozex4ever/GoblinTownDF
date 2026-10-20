@@ -27,16 +27,36 @@ public static class SimJson
 		var tiles = (long)s.Width * s.Height * s.Depth;
 		Require(s.TileKinds is not null && s.TileKinds.LongLength == tiles, "TileKinds does not match the map size.");
 		Require(s.TileMaterials is not null && s.TileMaterials.LongLength == tiles, "TileMaterials does not match the map size.");
+		Require(s.Designations is not null && s.Designations.LongLength == tiles, "Designations does not match the map size.");
+		Require(s.DigProgress is not null && s.DigProgress.LongLength == tiles, "DigProgress does not match the map size.");
 		foreach (var kind in s.TileKinds!)
 			Require(Enum.IsDefined((TileKind)kind), $"Unknown tile kind {kind}.");
 		foreach (var material in s.TileMaterials!)
 			Require(Enum.IsDefined((Material)material), $"Unknown material {material}.");
 
+		for (var tile = 0; tile < s.Designations!.Length; tile++)
+		{
+			var designation = s.Designations[tile];
+			Require(Enum.IsDefined((DesignationKind)designation), $"Unknown designation {designation}.");
+			if (designation == (byte)DesignationKind.DigStairs)
+			{
+				var digTicks = MaterialRules.DigTicks(s.MaterialAt(tile));
+				Require(TileRules.CanDigStairs(s.KindAt(tile)) && digTicks > 0,
+					$"Tile {tile} is designated but cannot be dug.");
+				Require(s.DigProgress![tile] < digTicks, $"Tile {tile} has dig progress {s.DigProgress![tile]}, past its dig time.");
+			}
+			else
+				Require(s.DigProgress![tile] == 0, $"Tile {tile} has dig progress but no designation.");
+		}
+
 		Require(s.GoblinCount >= 0 && s.GoblinCount <= SimState.MaxGoblins, $"GoblinCount {s.GoblinCount} is outside 0..{SimState.MaxGoblins}.");
 		Require(s.GoblinX is { Length: SimState.MaxGoblins }
 			&& s.GoblinY is { Length: SimState.MaxGoblins }
 			&& s.GoblinZ is { Length: SimState.MaxGoblins }
-			&& s.GoblinRole is { Length: SimState.MaxGoblins },
+			&& s.GoblinRole is { Length: SimState.MaxGoblins }
+			&& s.GoblinTask is { Length: SimState.MaxGoblins }
+			&& s.GoblinJobTile is { Length: SimState.MaxGoblins }
+			&& s.GoblinStepTicks is { Length: SimState.MaxGoblins },
 			$"Goblin arrays must hold {SimState.MaxGoblins} entries.");
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
@@ -45,6 +65,19 @@ public static class SimJson
 				&& s.GoblinZ[g] >= 0 && s.GoblinZ[g] < s.Depth,
 				$"Goblin {g} is off the map.");
 			Require(Enum.IsDefined((Role)s.GoblinRole[g]), $"Goblin {g} has unknown role {s.GoblinRole[g]}.");
+
+			Require(Enum.IsDefined((GoblinTask)s.GoblinTask[g]), $"Goblin {g} has unknown task {s.GoblinTask[g]}.");
+			Require(s.GoblinStepTicks[g] < JobSystem.WalkTicksPerTile, $"Goblin {g} has step ticks {s.GoblinStepTicks[g]}.");
+			var job = s.GoblinJobTile[g];
+			if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Idle)
+			{
+				Require(job == -1, $"Goblin {g} is idle but holds job tile {job}.");
+				continue;
+			}
+			Require(job >= 0 && job < tiles && s.DesignationAt(job) != DesignationKind.None,
+				$"Goblin {g} works tile {job}, which is not designated.");
+			for (var other = 0; other < g; other++)
+				Require(s.GoblinJobTile[other] != job, $"Goblins {other} and {g} both claim tile {job}.");
 		}
 	}
 

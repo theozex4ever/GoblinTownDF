@@ -130,7 +130,7 @@ The first prototype answers one question: is it fun to dig a warren and watch go
 
   **P1 decisions**
 
-  - **Map:** z0 is walkable Floor (Surface). z1 and z2 are Solid dirt. The map is flat and identical for every seed; the seed still goes through `SimRandom`. One Grunt starts on z0. There is no starting chamber and no fixed entrance.
+  - **Map:** z0 is walkable Floor (Surface) made of dirt, so digging it yields dirt. z1 and z2 are Solid dirt. The map is flat and identical for every seed; the seed still goes through `SimRandom`. One Grunt starts on z0. There is no starting chamber and no fixed entrance.
   - **Designations:** Dig (Solid → Floor) and Dig stairs (Solid or Floor → Stairs). Two Stairs tiles directly above each other link their levels. Going down two levels means designating stairs on each level. Stairs on z2 lead nowhere further down.
   - **Digging:** the goblin digs from a walkable orthogonal neighbour, or from Stairs directly above or below when digging stairs. Each tile takes a fixed 20 ticks, set per material. Walking takes 3 ticks per tile, orthogonal steps only.
   - **Dug material:** a tile-dug Event carries the material, and nothing else happens. P2 turns that Event into hauling.

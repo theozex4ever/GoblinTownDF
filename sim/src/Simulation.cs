@@ -19,9 +19,12 @@ public sealed class Simulation
 	// Not saved: Godot drains events every frame, so a save holds none worth keeping.
 	readonly List<SimEvent> _events = [];
 
-	public Simulation(SimState state)
+	readonly JobSystem _jobs;
+
+	public Simulation(SimState state, IPathfinder? pathfinder = null)
 	{
 		State = state;
+		_jobs = new JobSystem(pathfinder ?? new GridPathfinder());
 	}
 
 	public SimState State { get; }
@@ -43,12 +46,14 @@ public sealed class Simulation
 		var layer = MapWidth * MapHeight;
 		s.TileKinds = new byte[layer * MapDepth];
 		s.TileMaterials = new byte[layer * MapDepth];
+		s.Designations = new byte[layer * MapDepth];
+		s.DigProgress = new byte[layer * MapDepth];
+		// The surface is dirt ground, so digging into it yields dirt.
+		Array.Fill(s.TileMaterials, (byte)Material.Dirt);
 		for (var z = 0; z < MapDepth; z++)
 		{
 			var kind = z == 0 ? TileKind.Floor : TileKind.Solid;
-			var material = z == 0 ? Material.None : Material.Dirt;
 			Array.Fill(s.TileKinds, (byte)kind, z * layer, layer);
-			Array.Fill(s.TileMaterials, (byte)material, z * layer, layer);
 		}
 
 		s.GoblinCount = 1;
@@ -79,6 +84,9 @@ public sealed class Simulation
 					State.Speed = c.Speed;
 					_events.Add(new SpeedChanged(c.Speed));
 				}
+				break;
+			case Designate c:
+				_jobs.Designate(State, c);
 				break;
 			default:
 				throw new ArgumentException($"Unknown command {command.GetType().Name}.", nameof(command));
@@ -123,5 +131,6 @@ public sealed class Simulation
 	void Step()
 	{
 		State.Tick++;
+		_jobs.Step(State, _events);
 	}
 }

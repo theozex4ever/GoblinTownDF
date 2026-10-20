@@ -95,6 +95,104 @@ public class SaveTests
 		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));
 	}
 
+	[Fact]
+	public void Designations_and_goblin_jobs_round_trip_through_json()
+	{
+		var sim = Simulation.NewWorld(seed: 42);
+		sim.Apply(new Designate(DesignationKind.DigStairs, 0, 14, 10, 16, 11));
+		for (var i = 0; i < 25; i++)
+			sim.Advance(0.1);
+
+		var restored = SimJson.Deserialize(SimJson.Serialize(sim));
+
+		AssertIdentical(sim, restored);
+		Assert.Equal(sim.State.Designations, restored.State.Designations);
+		Assert.Equal(sim.State.DigProgress, restored.State.DigProgress);
+		Assert.Equal(sim.State.GoblinJobTile, restored.State.GoblinJobTile);
+		Assert.Equal(sim.State.GoblinTask, restored.State.GoblinTask);
+	}
+
+	[Theory]
+	[InlineData("Designations", "null")]
+	[InlineData("DigProgress", "null")]
+	[InlineData("GoblinTask", "null")]
+	[InlineData("GoblinJobTile", "null")]
+	[InlineData("GoblinStepTicks", "null")]
+	public void A_save_missing_the_dig_state_is_rejected(string property, string value)
+	{
+		var json = Corrupt(SimJson.Serialize(Simulation.NewWorld(seed: 42)), property, value);
+
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(json));
+	}
+
+	[Fact]
+	public void A_designation_of_unknown_kind_or_on_a_tile_that_cannot_take_it_is_rejected()
+	{
+		var unknown = Simulation.NewWorld(seed: 42);
+		unknown.State.Designations[unknown.State.TileIndex(1, 1, 0)] = 200;
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(unknown)));
+
+		var onStairs = Simulation.NewWorld(seed: 42);
+		var tile = onStairs.State.TileIndex(1, 1, 0);
+		onStairs.State.TileKinds[tile] = (byte)TileKind.Stairs;
+		onStairs.State.Designations[tile] = (byte)DesignationKind.DigStairs;
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(onStairs)));
+	}
+
+	[Fact]
+	public void A_goblin_job_that_points_nowhere_is_rejected()
+	{
+		var offMap = Simulation.NewWorld(seed: 42);
+		offMap.State.GoblinTask[0] = (byte)GoblinTask.Digging;
+		offMap.State.GoblinJobTile[0] = 999_999;
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(offMap)));
+
+		var undesignated = Simulation.NewWorld(seed: 42);
+		undesignated.State.GoblinTask[0] = (byte)GoblinTask.Walking;
+		undesignated.State.GoblinJobTile[0] = undesignated.State.TileIndex(1, 1, 0);
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(undesignated)));
+
+		var idleWithJob = Simulation.NewWorld(seed: 42);
+		idleWithJob.State.GoblinJobTile[0] = idleWithJob.State.TileIndex(1, 1, 0);
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(idleWithJob)));
+
+		var unknownTask = Simulation.NewWorld(seed: 42);
+		unknownTask.State.GoblinTask[0] = 9;
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(unknownTask)));
+	}
+
+	[Fact]
+	public void Dig_progress_that_overruns_the_dig_time_or_has_no_designation_is_rejected()
+	{
+		var overrun = Simulation.NewWorld(seed: 42);
+		var tile = overrun.State.TileIndex(1, 1, 0);
+		overrun.State.Designations[tile] = (byte)DesignationKind.DigStairs;
+		overrun.State.DigProgress[tile] = 255;
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(overrun)));
+
+		var orphan = Simulation.NewWorld(seed: 42);
+		orphan.State.DigProgress[tile] = 3;
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(orphan)));
+
+		var stepping = Simulation.NewWorld(seed: 42);
+		stepping.State.GoblinStepTicks[0] = 200;
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(stepping)));
+	}
+
+	[Fact]
+	public void Two_goblins_claiming_one_tile_are_rejected()
+	{
+		var sim = Simulation.NewWorld(seed: 42);
+		var s = sim.State;
+		var tile = s.TileIndex(1, 1, 0);
+		s.Designations[tile] = (byte)DesignationKind.DigStairs;
+		s.GoblinCount = 2;
+		s.GoblinTask[0] = s.GoblinTask[1] = (byte)GoblinTask.Walking;
+		s.GoblinJobTile[0] = s.GoblinJobTile[1] = tile;
+
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));
+	}
+
 	static string Corrupt(string json, string property, string value)
 	{
 		var node = JsonNode.Parse(json)!;
@@ -117,11 +215,16 @@ public class SaveTests
 		Assert.Equal(e.Depth, a.Depth);
 		Assert.Equal(e.TileKinds, a.TileKinds);
 		Assert.Equal(e.TileMaterials, a.TileMaterials);
+		Assert.Equal(e.Designations, a.Designations);
+		Assert.Equal(e.DigProgress, a.DigProgress);
 		Assert.Equal(e.GoblinCount, a.GoblinCount);
 		Assert.Equal(e.GoblinX, a.GoblinX);
 		Assert.Equal(e.GoblinY, a.GoblinY);
 		Assert.Equal(e.GoblinZ, a.GoblinZ);
 		Assert.Equal(e.GoblinRole, a.GoblinRole);
+		Assert.Equal(e.GoblinTask, a.GoblinTask);
+		Assert.Equal(e.GoblinJobTile, a.GoblinJobTile);
+		Assert.Equal(e.GoblinStepTicks, a.GoblinStepTicks);
 		Assert.Equal(SimJson.Serialize(expected), SimJson.Serialize(actual));
 	}
 }
