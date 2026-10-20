@@ -32,6 +32,8 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Invasion | Enemies entering the warren from the map edge or surface. |
 | Legend | A chronicle entry written from a notable event. |
 | Tick | One fixed sim step; 10 per second at normal speed. |
+| Speed | How many ticks run per second of real time: 1×, 2× or 4×. Never changes the tick length. |
+| Pause | Speed 0: no ticks run. Commands still apply. |
 | Command | An input from Godot to the sim. |
 | Event | An output from the sim to Godot. |
 | Tracer bullet | A thin, end-to-end, playable slice of a milestone. |
