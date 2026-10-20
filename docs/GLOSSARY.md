@@ -15,7 +15,15 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Quirk | A fixed personality trait that bends a goblin's choices. |
 | Band | A depth range of z-levels with shared materials and hazards: Surface, Dirt, Stone, Ore, The Deep. |
 | Z-level | One horizontal layer of the map. 0 is the surface; higher numbers are deeper. |
-| Designation | A player order on tiles, such as "dig here". |
+| Tile | One cell of the map at an (x, y, z-level) position. Its kind is Solid, Floor, Open air, or Stairs. |
+| Solid | An undug tile made of a material; nothing walks through it. Avoid: wall (kept for walls goblins build). |
+| Floor | A tile goblins can walk on. |
+| Open air | An empty tile with nothing to stand on. |
+| Stairs | A walkable tile that links to a Stairs tile directly above or below it. |
+| Material | What a Solid tile is made of, such as dirt or stone. |
+| Designation | A player order on tiles: Dig or Dig stairs. |
+| Dig | A designation that turns a Solid tile into Floor. |
+| Dig stairs | A designation that turns a Solid or Floor tile into Stairs. |
 | Job | A unit of work in the global job list (dig, haul, brew, build) that an idle goblin claims. |
 | Pile | A floor zone where goblins dump items; counted per resource, not per item. |
 | Room | A painted zone that works once it holds its required item: Sleeping Heap, Grub Pit, Brewery, Pile, Shrine, Boss Throne. |

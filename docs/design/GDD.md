@@ -44,7 +44,7 @@ One embark map, about 96×96 tiles and 16 z-levels, viewed top-down one layer at
 | Ore | 10–13 | Scrap ore, shinies | Gas pockets | Rich but risky expansion |
 | The Deep | 14–15 | Rare shinies | Things That Should Not Be Woken | Late-game temptation |
 
-**Key tiles:** floor, wall, open air, up/down stairs, ramp, water, door, trap.
+**Key tiles:** solid (undug, made of a material), floor, open air, stairs, ramp, water, door, trap. "Wall" means only a wall goblins build.
 
 **Digging** is the main verb. The player designates an area and Grunts dig it out tile by tile. Every dug tile drops its material as a hauling job.
 
@@ -127,6 +127,20 @@ The first prototype answers one question: is it fun to dig a warren and watch go
 **Build order**
 
 - [ ] **P1 — Map and digging.** 32×32×3 grid, view one level at a time, designate digging, one goblin digs it out.
+
+  **P1 decisions**
+
+  - **Map:** z0 is walkable Floor (Surface). z1 and z2 are Solid dirt. The map is flat and identical for every seed; the seed still goes through `SimRandom`. One Grunt starts on z0. There is no starting chamber and no fixed entrance.
+  - **Designations:** Dig (Solid → Floor) and Dig stairs (Solid or Floor → Stairs). Two Stairs tiles directly above each other link their levels. Going down two levels means designating stairs on each level. Stairs on z2 lead nowhere further down.
+  - **Digging:** the goblin digs from a walkable orthogonal neighbour, or from Stairs directly above or below when digging stairs. Each tile takes a fixed 20 ticks, set per material. Walking takes 3 ticks per tile, orthogonal steps only.
+  - **Dug material:** a tile-dug Event carries the material, and nothing else happens. P2 turns that Event into hauling.
+  - **Jobs:** the goblin takes the nearest reachable designation by path length, ties broken by lowest tile index. Unreachable designations stay designated, show greyed out, and are checked again whenever a tile is dug. When idle, the goblin wanders a few tiles every 3–6 seconds, using `SimRandom`.
+  - **Controls:** pause, plus 1×, 2× and 4× speed. Keys move the view up and down a z-level, and the whole map fits on screen. Two keys pick the Dig or Dig stairs tool. Click-drag designates a rectangle on the viewed level, and a single click designates one tile. Right-drag cancels; cancelling a tile mid-dig throws away the progress.
+  - **View:** current level only, with a depth indicator. Goblins one level above or below show as faint markers. Stairs are marked on both levels they link. Designated tiles are outlined, and tiles being dug show a progress fill.
+  - **Text:** no goblin names or status lines. The only text is a key-hint line, written with `goblin-voice`.
+  - **Saves:** no save or load in the game. Sim tests replay a seed plus a command log and assert identical state, and round-trip the state through JSON.
+  - **Judged on:** fun tests 1 and 4. The other three are answered and logged as a baseline. A no on test 4 pauses new features.
+
 - [ ] **P2 — Hauling and piles.** Dug material drops; goblins carry it to a pile. 5 goblins.
 - [ ] **P3 — Needs.** Grub and Grog meters. Fungus farm and Brewery rooms. Goblins eat, drink, sleep.
 - [ ] **P4 — Chaos.** Chaos meter from unmet needs. At least 3 acting-out behaviours (shirk, fight, steal).
@@ -180,6 +194,6 @@ The biggest risk for a solo colony sim is scope, not tech. The prototype is deli
 
 - [ ] How does the goblin brain choose between needs, jobs, and chaos? (Next design pass.)
 - [ ] Is there a win condition, or is it endless until the warren falls?
-- [ ] Real-time with pause, or a fixed set of speeds?
-- [ ] How much direct control: designations only, or can you order a specific goblin?
+- [x] Real-time with pause, or a fixed set of speeds? **Both:** real-time with pause, plus 1×, 2× and 4× speeds. Speed changes how many ticks run per frame, never the tick length.
+- [x] How much direct control: designations only, or can you order a specific goblin? **Designations only** for the prototype.
 - [ ] Art direction for the visual version: pixel art, hand-drawn, or something else?
