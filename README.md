@@ -20,7 +20,7 @@ a-thousand-goblins-deep/
 │   ├── design/GDD.md      # Game design doc (source of truth)
 │   ├── GLOSSARY.md        # Domain vocabulary
 │   ├── adr/               # Architecture decision records
-│   ├── tickets/           # Work queue, one file per ticket
+│   ├── agents/            # Config for the engineering skills (issue tracker, labels, domain docs)
 │   └── playtests/         # Fun-check logs
 ├── sim/                   # Pure C# simulation (no Godot)
 │   ├── src/
@@ -32,7 +32,7 @@ a-thousand-goblins-deep/
 ## Setup
 
 1. Install Godot 4 (.NET build) and the .NET SDK. Godot 4.7.2 mono and .NET SDKs 8 and 10 are installed per-user (`~/.local/opt/godot/4.7.2-mono`, `~/.dotnet`). The projects target `net8.0`, pinned by `global.json`.
-2. Install Matt Pocock's skills, then run `setup-supermatt-skills` once and choose **local Markdown tickets** in `docs/tickets/` and the docs layout above.
+2. Install Matt Pocock's skills, then run `setup-matt-pocock-skills` once. This repo uses **GitHub issues** for tickets, so there is nothing to choose; the result is already in `docs/agents/`.
 3. Set `GODOT_PATH` in `.mcp.json` to your Godot **.NET** binary (currently `~/.local/bin/godot-mono`).
 4. Install the recommended skills below.
 5. Start Claude Code in this folder. It reads `CLAUDE.md` → `AGENTS.md`.
