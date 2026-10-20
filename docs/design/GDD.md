@@ -1,0 +1,185 @@
+# A Thousand Goblins Deep — Game Design Doc
+
+Oct 19, 2026 · @Theo
+
+## Pitch and pillars
+
+A top-down, z-level colony sim where you run a goblin warren: dig down, steal what you need, and survive the heroes who come to clean you out. It keeps Dwarf Fortress's emergent stories but cuts the economy to six resources.
+
+**Working title:** A Thousand Goblins Deep.
+
+**Core loop:** dig → haul loot to piles → feed and grog the goblins → defend against invaders → the game writes down what happened → dig deeper.
+
+**Pillars**
+
+1. **Simple economy, deep goblins.** Cut resource depth, keep simulation depth on personalities, grudges, and injuries. Stories come from goblins, not supply chains.
+2. **Horde, not heroes.** Goblins breed fast and die often. Standouts emerge from what they survive, not from the player picking favourites.
+3. **Steal, don't produce.** Raiding and scavenging are the main inputs. Crafting is never more than two steps.
+4. **Chaos is the stress system.** Bored, hungry goblins cause trouble. The Boss keeps order through fear, food, and loot splits.
+5. **Losing is funny.** Failure is entertaining and has real consequences, and it always ends up in the legends.
+
+**Not in scope:** item quality tiers, detailed body-part combat, nobles and mandates, world-gen history, trade caravans, magic systems.
+
+## Tone: Pratchett comedy
+
+Goblins are earnest, not stupid. The comedy comes from them taking absurd things very seriously, the way Discworld treats its characters with affection.
+
+- **Tradition for everything.** A nine-step ritual to bless a cooking pot. A formal process for filing a grudge, with a grudge-keeper who takes it seriously.
+- **Names do work.** Snaggle Wartnose, Third-Best Ugg, Mother Grubb, Kevin.
+- **Deadpan event text.** "Nubbin has invented the wheel. It is square. Nubbin is very proud."
+- **History with footnotes.** Legends read like a pompous historian wrote them, with asides that undercut the claims.
+- **Never mean-spirited.** Goblins are the underdogs. Humans, elves, and dwarves are the snobs, and the joke is usually on them.
+
+Tone rule of thumb: every failure should produce a line of text you would want to screenshot.
+
+## World and z-levels
+
+One embark map, about 96×96 tiles and 16 z-levels, viewed top-down one layer at a time. The level below shows faded through open floor, so depth stays readable.
+
+| Band | Levels | Main materials | Hazards | Role in play |
+| --- | --- | --- | --- | --- |
+| Surface | 0 | Wood, scrap, raid targets | Heroes, daylight, weather | Where enemies arrive and loot comes from |
+| Dirt | 1–3 | Dirt, roots, worms | Cave-ins | Fast, cheap first tunnels |
+| Stone | 4–9 | Stone, fungus caverns | Flooding from aquifers | The main warren |
+| Ore | 10–13 | Scrap ore, shinies | Gas pockets | Rich but risky expansion |
+| The Deep | 14–15 | Rare shinies | Things That Should Not Be Woken | Late-game temptation |
+
+**Key tiles:** floor, wall, open air, up/down stairs, ramp, water, door, trap.
+
+**Digging** is the main verb. The player designates an area and Grunts dig it out tile by tile. Every dug tile drops its material as a hauling job.
+
+**Rooms** are zones painted on dug floor: Sleeping Heap, Grub Pit, Brewery, Pile, Shrine, Boss Throne. A room works once it has its one required item.
+
+## Economy: six resources
+
+Six resources, no quality tiers, and no chain longer than two steps. Items are counted per pile, not tracked one by one.
+
+| Resource | Where it comes from | What it's for | If you run out |
+| --- | --- | --- | --- |
+| Grub | Fungus farms, rat traps, raids | Food | Hunger, then fights over scraps |
+| Grog | Brewed from fungus (1 step) | Morale | Goblins get bored and cause chaos |
+| Scrap | Ore, raids, dead heroes | Weapons, tools, traps (1 step) | Unarmed brutes, no new traps |
+| Stone and wood | Digging, surface trees | Building furniture and walls | Can't build rooms |
+| Shinies | Ore band, raids | Loyalty, Boss status, bribes | Boss authority drops |
+| Trophies | Dead enemies | Shrines, rituals, bragging | Fewer morale boosts |
+
+**Piles, not stockpiles.** Goblins dump things on the nearest pile. Messy piles attract rats, which eat grub and spread disease. Tidiness is a cost you choose to pay, not a sorting minigame.
+
+**Crafting** happens at one workbench: scrap goes in, a weapon, tool, or trap comes out. The Brewery turns fungus into grog. That is the whole production system for the prototype.
+
+## Goblins: roles and chaos
+
+A warren starts with 7 goblins and grows to roughly 30–80. Each goblin has a role, three needs, two quirks, and a grudge list. The full decision-making brain gets its own design pass later.
+
+| Role | Does | Comedy hook |
+| --- | --- | --- |
+| Grunt | Digs and hauls | Takes enormous pride in a perfectly square hole |
+| Brute | Fights, guards | Solves every problem by hitting it |
+| Sneak | Scouts, steals, raids | Steals from the warren when bored |
+| Tinkerer | Crafts weapons and traps | Traps occasionally catch their maker |
+| Shaman | Rituals, healing, buffs | Rituals work, sometimes not as intended |
+| Boss | Gives orders, holds the warren together | Has a throne and a lot of opinions |
+
+**Needs (prototype):** Grub, Grog, Sleep. Each is a 0–100 meter that drains over time.
+
+**Chaos meter.** Unmet needs and grudges raise a goblin's chaos. At high chaos they act out: shirk work, pick fights, steal shinies, or set something on fire.
+
+**The Boss.** Boss authority rises with feasts, shiny handouts, and won fights. It falls with hunger and lost raids. If authority drops low, the strongest Brute challenges the Boss, and the winner takes over with their own quirks.
+
+**Breeding and death.** New goblins appear every few in-game days when grub is plentiful. Deaths are common and every one gets a line in the legends.
+
+## Threats and invasions
+
+The warren is the dungeon. Hero parties come down from the surface to clear you out, so your tunnel layout and traps are the defence game.
+
+| Threat | Arrives | Behaviour | Counter |
+| --- | --- | --- | --- |
+| Adventurer party (3–5) | Surface entrance, more often as the warren grows richer | Heads for shinies and the Boss | Traps, chokepoints, Brutes |
+| Angry villagers | After a raid | Large, weak mob | Doors, numbers |
+| Dwarf expedition | Mid-game, through the stone band | Tough, digs its own tunnels | Flooding, collapses |
+| Deep thing | When you dig into the Deep | One huge monster | Seal it off, or feed it |
+| Internal chaos | Any time | Fights, fires, thefts | Grub, grog, a strong Boss |
+
+**Raids (abstracted).** The player sends a raid party off-map to a target. After a timer, the survivors return with loot and a short story. Raids are not played as maps in this version.
+
+**Raid risk.** Every raid raises surface anger, which brings bigger invasions. That is the core tension: you need loot, and loot brings heroes.
+
+## Legends
+
+The game keeps a running chronicle of notable events, written in a pompous historian's voice with footnotes. It is the main payoff for playing.
+
+**What gets recorded:** deaths, Boss changes, invasions survived or lost, raids, first discoveries (a new band, the Deep), and big chaos events like fires.
+
+**How it's built:** each event fills a text template with names, places, and a cause. Two to four template variants per event type keep it from repeating too quickly.
+
+**Example entry:**
+
+> **The Siege of the Grub Pit.** In the autumn of Year 2, four heroes of Lesser Pumpton came for the shinies. Third-Best Ugg held the stairs alone.¹ The heroes were eventually defeated by a trap Nubbin had forgotten about.
+>
+> ¹ Ugg was asleep on the stairs. It still counts.
+
+**Persistence.** Goblins remember grudges and great deeds. A goblin with a legend entry gets a title, such as "Ugg the Stairholder", which other goblins react to.
+
+## Prototype slice and fun tests
+
+The first prototype answers one question: is it fun to dig a warren and watch goblins mess it up? Grey boxes only, no art. Build it in this order and play after each step.
+
+**Build order**
+
+- [ ] **P1 — Map and digging.** 32×32×3 grid, view one level at a time, designate digging, one goblin digs it out.
+- [ ] **P2 — Hauling and piles.** Dug material drops; goblins carry it to a pile. 5 goblins.
+- [ ] **P3 — Needs.** Grub and Grog meters. Fungus farm and Brewery rooms. Goblins eat, drink, sleep.
+- [ ] **P4 — Chaos.** Chaos meter from unmet needs. At least 3 acting-out behaviours (shirk, fight, steal).
+- [ ] **P5 — One invasion.** A 3-hero party walks in from the surface. One trap type. Brutes fight back.
+- [ ] **P6 — Legends.** Event log with templated entries for deaths, invasion, and chaos.
+
+**Fun tests (answer honestly after each playthrough)**
+
+1. Did I watch the goblins without wanting to speed up time?
+2. Did something happen that I didn't plan and want to tell someone about?
+3. Did a goblin's death or misbehaviour make me laugh or feel something?
+4. Did I want to dig one more level to see what was there?
+5. Would I play a second run with a different warren layout?
+
+**Go / no-go:** if 3 or more are a clear yes after P6, the idea has legs. If questions 2 and 3 are no, the emergence is not working, and more content won't fix it.
+
+## Tech plan in Godot
+
+Keep the simulation separate from Godot. The sim is plain code that runs on fixed ticks; Godot only draws it and sends player commands in. This keeps the game engine-agnostic and makes it easy to test.
+
+| Layer | Responsibility | Language |
+| --- | --- | --- |
+| Sim core | World grid, goblins, needs, jobs, pathfinding, events | C# (plain classes, no Godot types) |
+| Command layer | Player orders in (dig, zone, raid), events out | C# |
+| Renderer | One TileMapLayer per visible z-level, goblin sprites, redraw only changed chunks | GDScript or C# |
+| UI | Job designation, goblin inspector, legends panel | GDScript |
+
+**Decisions for the prototype**
+
+- **World storage:** flat arrays indexed by (x, y, z), split into 16×16 chunks for dirty-flag redraws.
+- **Tick rate:** sim at 10 ticks per second at normal speed, decoupled from frame rate. Speed controls multiply ticks.
+- **Pathfinding:** plain A\* on the 3D grid is fine for P1–P3. Plan for hierarchical paths between chunks before going past about 50 goblins.
+- **Jobs:** a global job list (dig, haul, brew, build) that idle goblins claim. Needs override jobs when low.
+- **Saves:** serialise the sim core to JSON from day one. It also makes bugs reproducible.
+- **Determinism:** seeded random number generator in the sim, so a seed plus a command log replays a run.
+
+## Risks, scope, and open questions
+
+The biggest risk for a solo colony sim is scope, not tech. The prototype is deliberately tiny so you can kill or commit to the idea in weeks, not months.
+
+| Risk | Why it matters | Mitigation |
+| --- | --- | --- |
+| Scope creep | Colony sims invite endless systems | Nothing outside the Not-in-scope list until P6 passes the fun tests |
+| Emergence feels flat | Simple systems can produce boring stories | Judge by fun tests 2 and 3; tune chaos and quirks before adding content |
+| Pathfinding performance | Many agents on a 3D grid | Cap at 30 goblins in the prototype; hierarchical paths later |
+| Comedy needs a lot of writing | Repeated jokes go stale fast | Templates with variants; write jokes after systems work |
+| Readability of z-levels | Players get lost in layers | Faded lower level, clear stair markers, a depth indicator |
+| Comparison to existing games | Players will compare it to DF and Rimworld | Lean hard into goblin identity: theft, chaos, the Boss |
+
+**Open questions**
+
+- [ ] How does the goblin brain choose between needs, jobs, and chaos? (Next design pass.)
+- [ ] Is there a win condition, or is it endless until the warren falls?
+- [ ] Real-time with pause, or a fixed set of speeds?
+- [ ] How much direct control: designations only, or can you order a specific goblin?
+- [ ] Art direction for the visual version: pixel art, hand-drawn, or something else?
