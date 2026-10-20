@@ -8,8 +8,6 @@ public partial class Main : Node
 {
 	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. The Grunt approves of all of it.";
 
-	static readonly string[] BandNames = ["Surface", "Dirt", "Dirt"];
-
 	Simulation _sim = null!;
 	WarrenView _view = null!;
 	Label _depthLabel = null!;
@@ -35,7 +33,8 @@ public partial class Main : Node
 	{
 		if (_sim.Advance(delta) > 0)
 			_view.QueueRedraw();
-		UpdateDepthLabel();
+		if (_sim.DrainEvents().Count > 0)
+			UpdateDepthLabel();
 	}
 
 	public override void _UnhandledKeyInput(InputEvent @event)
@@ -46,9 +45,9 @@ public partial class Main : Node
 		switch (key.Keycode)
 		{
 			case Key.Space: _sim.Apply(new SetPaused(!_sim.State.Paused)); break;
-			case Key.Key1: _sim.Apply(new SetSpeed(1)); break;
-			case Key.Key2: _sim.Apply(new SetSpeed(2)); break;
-			case Key.Key4: _sim.Apply(new SetSpeed(4)); break;
+			case Key.Key1 or Key.Kp1: _sim.Apply(new SetSpeed(1)); break;
+			case Key.Key2 or Key.Kp2: _sim.Apply(new SetSpeed(2)); break;
+			case Key.Key4 or Key.Kp4: _sim.Apply(new SetSpeed(4)); break;
 			case Key.Comma: ChangeLevel(-1); break;
 			case Key.Period: ChangeLevel(1); break;
 			default: return;
@@ -73,6 +72,16 @@ public partial class Main : Node
 	{
 		var s = _sim.State;
 		var pace = s.Paused ? "paused" : $"{s.Speed}×";
-		_depthLabel.Text = $"Depth {_viewZ} · {BandNames[_viewZ]} · {pace}";
+		_depthLabel.Text = $"Depth {_viewZ} · {BandName(_viewZ)} · {pace}";
 	}
+
+	// The bands from the GDD's World and z-levels table.
+	static string BandName(int z) => z switch
+	{
+		0 => "Surface",
+		<= 3 => "Dirt",
+		<= 9 => "Stone",
+		<= 13 => "Ore",
+		_ => "The Deep",
+	};
 }

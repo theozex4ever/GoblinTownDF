@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Goblins.Sim;
 using Xunit;
 
@@ -44,6 +46,62 @@ public class SaveTests
 			Assert.Equal(sim.State.Rng.NextInt(1000), restored.State.Rng.NextInt(1000));
 	}
 
+	[Fact]
+	public void A_save_taken_between_ticks_keeps_the_same_tick_timing()
+	{
+		var sim = Simulation.NewWorld(seed: 42);
+		sim.Advance(0.05);
+		var restored = SimJson.Deserialize(SimJson.Serialize(sim));
+
+		Assert.Equal(sim.Advance(0.05), restored.Advance(0.05));
+		Assert.Equal(1, restored.State.Tick);
+	}
+
+	[Theory]
+	[InlineData("Speed", "1000")]
+	[InlineData("Speed", "-1")]
+	[InlineData("Speed", "0")]
+	[InlineData("GoblinCount", "31")]
+	[InlineData("GoblinCount", "-1")]
+	[InlineData("Width", "33")]
+	[InlineData("Depth", "0")]
+	[InlineData("TickDebt", "-5")]
+	[InlineData("TickDebt", "1e9")]
+	[InlineData("Rng", "null")]
+	[InlineData("TileKinds", "null")]
+	public void A_save_with_impossible_state_is_rejected(string property, string value)
+	{
+		var json = Corrupt(SimJson.Serialize(Simulation.NewWorld(seed: 42)), property, value);
+
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(json));
+	}
+
+	[Fact]
+	public void A_goblin_off_the_map_is_rejected()
+	{
+		var json = SimJson.Serialize(Simulation.NewWorld(seed: 42));
+		var node = JsonNode.Parse(json)!;
+		node["GoblinZ"]![0] = 3;
+
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(node.ToJsonString()));
+	}
+
+	[Fact]
+	public void A_tile_with_an_unknown_kind_is_rejected()
+	{
+		var sim = Simulation.NewWorld(seed: 42);
+		sim.State.TileKinds[0] = 200;
+
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));
+	}
+
+	static string Corrupt(string json, string property, string value)
+	{
+		var node = JsonNode.Parse(json)!;
+		node[property] = JsonNode.Parse(value);
+		return node.ToJsonString();
+	}
+
 	static void AssertIdentical(Simulation expected, Simulation actual)
 	{
 		var e = expected.State;
@@ -52,6 +110,7 @@ public class SaveTests
 		Assert.Equal(e.Tick, a.Tick);
 		Assert.Equal(e.Speed, a.Speed);
 		Assert.Equal(e.Paused, a.Paused);
+		Assert.Equal(e.TickDebt, a.TickDebt);
 		Assert.Equal(e.Rng.State, a.Rng.State);
 		Assert.Equal(e.Width, a.Width);
 		Assert.Equal(e.Height, a.Height);

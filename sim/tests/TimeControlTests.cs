@@ -69,6 +69,18 @@ public class TimeControlTests
 		Assert.True(sim.Advance(60.0) <= 10);
 	}
 
+	[Theory]
+	[InlineData(double.NaN)]
+	[InlineData(-1.0)]
+	[InlineData(0.0)]
+	public void A_frame_time_that_is_not_positive_runs_nothing_and_owes_nothing(double frameSeconds)
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+
+		Assert.Equal(0, sim.Advance(frameSeconds));
+		Assert.Equal(10, RunOneSecond(sim));
+	}
+
 	[Fact]
 	public void Speed_must_be_1_2_or_4()
 	{

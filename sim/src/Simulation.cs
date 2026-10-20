@@ -16,8 +16,8 @@ public sealed class Simulation
 	// Absorbs floating-point drift when frame times add up to a whole tick.
 	const double Epsilon = 1e-9;
 
+	// Not saved: Godot drains events every frame, so a save holds none worth keeping.
 	readonly List<SimEvent> _events = [];
-	double _tickDebt;
 
 	public Simulation(SimState state)
 	{
@@ -25,6 +25,8 @@ public sealed class Simulation
 	}
 
 	public SimState State { get; }
+
+	public static bool IsValidSpeed(int speed) => speed is 1 or 2 or 4;
 
 	/// <summary>The P1 warren: flat and identical for every seed. The seed only seeds <see cref="SimRandom"/>.</summary>
 	public static Simulation NewWorld(int seed)
@@ -70,7 +72,7 @@ public sealed class Simulation
 				}
 				break;
 			case SetSpeed c:
-				if (c.Speed is not (1 or 2 or 4))
+				if (!IsValidSpeed(c.Speed))
 					throw new ArgumentOutOfRangeException(nameof(command), c.Speed, "Speed must be 1, 2 or 4.");
 				if (State.Speed != c.Speed)
 				{
@@ -85,25 +87,29 @@ public sealed class Simulation
 
 	/// <summary>
 	/// Feeds one frame of wall time in and runs whole ticks: 10 per second at 1×, 2× and 4× as many
-	/// at higher speeds. Returns the ticks run. Paused time is not owed afterwards.
+	/// at higher speeds. Returns the ticks run. Paused time is not owed afterwards. A frame time that
+	/// is not a positive number runs nothing.
 	/// </summary>
 	public int Advance(double frameSeconds)
 	{
 		if (State.Paused)
 		{
-			_tickDebt = 0;
+			State.TickDebt = 0;
 			return 0;
 		}
+		if (!(frameSeconds > 0))
+			return 0;
 
-		_tickDebt += Math.Min(frameSeconds, MaxFrameSeconds) * TicksPerSecond * State.Speed;
+		var debt = State.TickDebt + Math.Min(frameSeconds, MaxFrameSeconds) * TicksPerSecond * State.Speed;
 
 		var ticks = 0;
-		while (_tickDebt >= 1.0 - Epsilon)
+		while (debt >= 1.0 - Epsilon)
 		{
-			_tickDebt -= 1.0;
+			debt -= 1.0;
 			Step();
 			ticks++;
 		}
+		State.TickDebt = Math.Max(debt, 0);
 		return ticks;
 	}
 

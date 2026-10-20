@@ -12,6 +12,8 @@ public sealed class SimState
 	public long Tick { get; set; }
 	public int Speed { get; set; } = 1;
 	public bool Paused { get; set; }
+	// Fractional ticks owed from frame time, in [0, 1). Saved so a restored sim ticks on the same frames.
+	public double TickDebt { get; set; }
 	public SimRandom Rng { get; set; } = new();
 
 	public int Width { get; set; }
