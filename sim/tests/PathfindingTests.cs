@@ -87,6 +87,30 @@ public class PathfindingTests
 	}
 
 	[Fact]
+	public void Paths_do_not_wrap_from_one_row_to_the_next()
+	{
+		var s = Simulation.NewWorld(seed: 1).State;
+		var path = new List<int>();
+
+		// (0, 5) and (31, 4) sit next to each other in the tile array but 32 steps apart on the map.
+		Assert.True(Finder.TryFindPath(s, s.TileIndex(0, 5, 0), [s.TileIndex(31, 4, 0)], path, out _));
+		Assert.Equal(32, path.Count);
+		Assert.True(Finder.TryFindPath(s, s.TileIndex(31, 4, 0), [s.TileIndex(0, 5, 0)], path, out _));
+		Assert.Equal(32, path.Count);
+	}
+
+	[Fact]
+	public void Paths_do_not_wrap_from_one_level_to_the_next()
+	{
+		var s = Simulation.NewWorld(seed: 1).State;
+		// The top row of z1 sits right after the bottom row of z0 in the tile array, but no Stairs link them.
+		s.TileKinds[s.TileIndex(5, 0, 1)] = (byte)TileKind.Floor;
+
+		Assert.False(Finder.TryFindPath(s, s.TileIndex(5, 0, 1), [s.TileIndex(5, 31, 0)], new List<int>(), out _));
+		Assert.False(Finder.TryFindPath(s, s.TileIndex(5, 31, 0), [s.TileIndex(5, 0, 1)], new List<int>(), out _));
+	}
+
+	[Fact]
 	public void No_goals_means_no_path()
 	{
 		var s = Simulation.NewWorld(seed: 1).State;

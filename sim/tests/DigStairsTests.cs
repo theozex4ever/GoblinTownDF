@@ -181,6 +181,33 @@ public class DigStairsTests
 	}
 
 	[Fact]
+	public void Two_goblins_never_share_a_designation()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		// (16, 14) is one step from both goblins, so both want it first. The far one is five steps from goblin 1.
+		s.GoblinCount = 2;
+		(s.GoblinX[1], s.GoblinY[1]) = (16, 12);
+		sim.Apply(DigStairsAt(16, 14, 0));
+		sim.Apply(DigStairsAt(20, 14, 0));
+
+		var dug = new List<(long Tick, SimEvent Event)>();
+		for (var i = 0; i < 40; i++)
+		{
+			RunTicks(sim, 1);
+			foreach (var e in sim.DrainEvents())
+				dug.Add((s.Tick, e));
+		}
+
+		// Goblin 0 digs the near one alone: one step, 20 dig ticks. Goblin 1 takes the far one: five steps, 20 dig ticks.
+		Assert.Equal(new (long, SimEvent)[]
+		{
+			(3 + 20, new TileDug(16, 14, 0, Material.Dirt)),
+			(5 * 3 + 20, new TileDug(20, 14, 0, Material.Dirt)),
+		}, dug);
+	}
+
+	[Fact]
 	public void The_goblin_ends_up_beside_the_tile_it_dug_and_takes_no_diagonal_steps()
 	{
 		var sim = Simulation.NewWorld(seed: 1);
@@ -201,6 +228,36 @@ public class DigStairsTests
 		// A neighbour of (20, 20) is 7 orthogonal steps from (16, 16): 7 × 3 walk ticks, then 20 dig ticks.
 		Assert.Equal(7 * 3 + 20, s.Tick);
 		Assert.Equal(1, Math.Abs(s.GoblinX[0] - 20) + Math.Abs(s.GoblinY[0] - 20));
+	}
+
+	[Fact]
+	public void A_tile_on_the_map_edge_is_dug_from_a_real_neighbour_not_from_across_the_map()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		// (31, 4) is next to (0, 5) in the tile array, but 31 steps from either neighbour of it.
+		(s.GoblinX[0], s.GoblinY[0]) = (31, 4);
+		sim.Apply(DigStairsAt(0, 5, 0));
+
+		RunTicks(sim, 31 * 3 + 20 - 1);
+		Assert.Equal(TileKind.Floor, s.KindAt(s.TileIndex(0, 5, 0)));
+		RunTicks(sim, 1);
+		Assert.Equal(TileKind.Stairs, s.KindAt(s.TileIndex(0, 5, 0)));
+		Assert.Equal(1, Math.Abs(s.GoblinX[0] - 0) + Math.Abs(s.GoblinY[0] - 5));
+	}
+
+	[Fact]
+	public void A_tile_on_the_top_row_of_a_level_cannot_be_dug_from_the_level_above()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		// (5, 0, 1) follows (5, 31, 0) in the tile array; z0 Floor there is not a place to dig it from.
+		sim.Apply(DigStairsAt(5, 0, 1));
+
+		RunTicks(sim, 200);
+
+		Assert.Equal(TileKind.Solid, s.KindAt(s.TileIndex(5, 0, 1)));
+		Assert.Empty(sim.DrainEvents());
 	}
 
 	[Fact]
@@ -280,6 +337,24 @@ public class DigStairsTests
 
 		Assert.Equal(SimJson.Serialize(original), SimJson.Serialize(restored));
 		Assert.Single(restored.DrainEvents());
+	}
+
+	[Fact]
+	public void A_world_saved_after_a_dig_loads_and_digs_on_exactly_as_the_original_does()
+	{
+		var original = Simulation.NewWorld(seed: 5);
+		original.Apply(DigStairsAt(16, 15, 0));
+		RunTicks(original, 20);
+		Assert.Equal(TileKind.Stairs, original.State.KindAt(original.State.TileIndex(16, 15, 0)));
+
+		var restored = SimJson.Deserialize(SimJson.Serialize(original));
+		original.Apply(DigStairsAt(16, 13, 0));
+		restored.Apply(DigStairsAt(16, 13, 0));
+		RunTicks(original, 30);
+		RunTicks(restored, 30);
+
+		Assert.Equal(SimJson.Serialize(original), SimJson.Serialize(restored));
+		SimJson.Deserialize(SimJson.Serialize(restored));
 	}
 
 	static Simulation Replay(int seed, (int Tick, Command Command)[] log, int ticks)
