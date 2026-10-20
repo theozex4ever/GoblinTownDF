@@ -109,16 +109,41 @@ public class DigStairsTests
 	}
 
 	[Fact]
-	public void A_rectangle_off_the_map_is_clamped_to_it()
+	public void A_rectangle_partly_off_the_map_designates_only_the_part_on_it()
+	{
+		var corner = Simulation.NewWorld(seed: 1);
+		corner.Apply(new Designate(DesignationKind.DigStairs, 0, -5, -5, 0, 0));
+		Assert.Equal(1, CountDesignated(corner.State));
+		Assert.Equal(DesignationKind.DigStairs, corner.State.DesignationAt(corner.State.TileIndex(0, 0, 0)));
+
+		var everything = Simulation.NewWorld(seed: 1);
+		everything.Apply(new Designate(DesignationKind.DigStairs, 0, int.MinValue, int.MaxValue, int.MaxValue, int.MinValue));
+		Assert.Equal(32 * 32, CountDesignated(everything.State));
+	}
+
+	[Theory]
+	[InlineData(-10, 3, -2, 6)]
+	[InlineData(32, 3, 40, 6)]
+	[InlineData(3, -9, 6, -1)]
+	[InlineData(3, 32, 6, 33)]
+	[InlineData(int.MaxValue, int.MaxValue, int.MaxValue - 1, int.MaxValue)]
+	[InlineData(int.MinValue, int.MinValue, int.MinValue, int.MinValue)]
+	public void A_rectangle_wholly_off_the_map_designates_nothing(int x0, int y0, int x1, int y1)
 	{
 		var sim = Simulation.NewWorld(seed: 1);
-		var s = sim.State;
 
-		sim.Apply(new Designate(DesignationKind.DigStairs, 0, -5, -5, 0, 0));
-		sim.Apply(new Designate(DesignationKind.DigStairs, 0, int.MaxValue, int.MaxValue, int.MaxValue - 1, int.MaxValue));
+		sim.Apply(new Designate(DesignationKind.DigStairs, 0, x0, y0, x1, y1));
 
-		Assert.Equal(DesignationKind.DigStairs, s.DesignationAt(s.TileIndex(0, 0, 0)));
-		Assert.Equal(DesignationKind.DigStairs, s.DesignationAt(s.TileIndex(31, 31, 0)));
+		Assert.Equal(0, CountDesignated(sim.State));
+	}
+
+	static int CountDesignated(SimState s)
+	{
+		var count = 0;
+		for (var tile = 0; tile < s.Designations.Length; tile++)
+			if (s.DesignationAt(tile) != DesignationKind.None)
+				count++;
+		return count;
 	}
 
 	[Fact]

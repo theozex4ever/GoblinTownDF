@@ -27,10 +27,11 @@ public sealed class JobSystem
 		if (command.Z < 0 || command.Z >= s.Depth)
 			throw new ArgumentOutOfRangeException(nameof(command), command.Z, "Level is off the map.");
 
-		var x0 = Math.Clamp(Math.Min(command.X0, command.X1), 0, s.Width - 1);
-		var x1 = Math.Clamp(Math.Max(command.X0, command.X1), 0, s.Width - 1);
-		var y0 = Math.Clamp(Math.Min(command.Y0, command.Y1), 0, s.Height - 1);
-		var y1 = Math.Clamp(Math.Max(command.Y0, command.Y1), 0, s.Height - 1);
+		// Clip the rectangle to the map. One wholly off the map designates nothing, rather than the edge row.
+		var x0 = Math.Max(Math.Min(command.X0, command.X1), 0);
+		var x1 = Math.Min(Math.Max(command.X0, command.X1), s.Width - 1);
+		var y0 = Math.Max(Math.Min(command.Y0, command.Y1), 0);
+		var y1 = Math.Min(Math.Max(command.Y0, command.Y1), s.Height - 1);
 		for (var y = y0; y <= y1; y++)
 		for (var x = x0; x <= x1; x++)
 		{

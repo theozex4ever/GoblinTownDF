@@ -10,7 +10,7 @@ public sealed record SetSpeed(int Speed) : Command;
 
 /// <summary>
 /// Designates every tile in the rectangle from (X0, Y0) to (X1, Y1) on level Z, corners in any order,
-/// clamped to the map. A single click is a 1×1 rectangle. Tiles that cannot take the designation are skipped.
+/// clipped to the map. A single click is a 1×1 rectangle. Tiles that cannot take the designation are skipped.
 /// </summary>
 public sealed record Designate(DesignationKind Kind, int Z, int X0, int Y0, int X1, int Y1) : Command;
 
