@@ -239,6 +239,72 @@ public class SaveTests
 		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));
 	}
 
+	[Fact]
+	public void Any_save_that_loads_runs_on_and_saves_again()
+	{
+		// Three goblins mid-job, digging and walking, with designations on z0 and z1.
+		var start = Simulation.NewWorld(seed: 42);
+		var s0 = start.State;
+		s0.GoblinCount = 3;
+		(s0.GoblinX[1], s0.GoblinY[1]) = (3, 3);
+		(s0.GoblinX[2], s0.GoblinY[2]) = (30, 0);
+		start.Apply(new Designate(DesignationKind.DigStairs, 0, 15, 14, 17, 14));
+		start.Apply(new Designate(DesignationKind.DigStairs, 0, 0, 0, 1, 1));
+		for (var i = 0; i < 30; i++)
+			start.Advance(0.1);
+		start.Apply(new Designate(DesignationKind.DigStairs, 1, 15, 14, 16, 14));
+		for (var i = 0; i < 5; i++)
+			start.Advance(0.1);
+		var save = SimJson.Serialize(start);
+
+		var tiles = s0.TileKinds.Length;
+		int[] hotTiles = [s0.TileIndex(15, 14, 0), s0.TileIndex(16, 14, 0), s0.TileIndex(16, 14, 1), s0.TileIndex(16, 15, 0), s0.TileIndex(0, 0, 0), s0.TileIndex(31, 31, 2)];
+		int[] numbers = [-1, 0, 1, 2, 3, 19, 20, 31, 32, 39, 40, 255, 256, tiles - 1, tiles, int.MaxValue, int.MinValue, hotTiles[0], hotTiles[2]];
+		var rng = new SimRandom(7);
+		var accepted = 0;
+		for (var round = 0; round < 300; round++)
+		{
+			var mutant = SimJson.Deserialize(save);
+			var s = mutant.State;
+			for (var m = 1 + rng.NextInt(3); m > 0; m--)
+			{
+				var n = numbers[rng.NextInt(numbers.Length)];
+				var g = rng.NextInt(4);
+				var tile = hotTiles[rng.NextInt(hotTiles.Length)];
+				switch (rng.NextInt(10))
+				{
+					case 0: s.GoblinCount = n; break;
+					case 1: s.GoblinX[g] = n; break;
+					case 2: s.GoblinY[g] = n; break;
+					case 3: s.GoblinZ[g] = n; break;
+					case 4: s.GoblinTask[g] = (byte)n; break;
+					case 5: s.GoblinJobTile[g] = n; break;
+					case 6: s.GoblinStepTicks[g] = (byte)n; break;
+					case 7: s.TileKinds[tile] = (byte)rng.NextInt(5); break;
+					case 8: s.Designations[tile] = (byte)rng.NextInt(3); break;
+					case 9: s.DigProgress[tile] = (byte)n; break;
+				}
+			}
+
+			Simulation loaded;
+			try
+			{
+				loaded = SimJson.Deserialize(SimJson.Serialize(mutant));
+			}
+			catch (JsonException)
+			{
+				continue;
+			}
+			accepted++;
+			for (var i = 0; i < 100; i++)
+				loaded.Advance(0.1);
+			SimJson.Deserialize(SimJson.Serialize(loaded));
+		}
+
+		// Enough mutants must get through for the run-on half to mean anything.
+		Assert.InRange(accepted, 30, 300);
+	}
+
 	static string Corrupt(string json, string property, string value)
 	{
 		var node = JsonNode.Parse(json)!;
