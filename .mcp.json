@@ -4,7 +4,7 @@
       "command": "npx",
       "args": ["@coding-solo/godot-mcp"],
       "env": {
-        "GODOT_PATH": "/path/to/godot",
+        "GODOT_PATH": "/home/theozex/.local/bin/godot-mono",
         "DEBUG": "false"
       }
     }

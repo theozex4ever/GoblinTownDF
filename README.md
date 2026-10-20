@@ -31,11 +31,20 @@ a-thousand-goblins-deep/
 
 ## Setup
 
-1. Install Godot 4 (.NET build) and the .NET SDK.
+1. Install Godot 4 (.NET build) and the .NET SDK. Godot 4.7.2 mono and .NET SDKs 8 and 10 are installed per-user (`~/.local/opt/godot/4.7.2-mono`, `~/.dotnet`). The projects target `net8.0`, pinned by `global.json`.
 2. Install Matt Pocock's skills, then run `setup-supermatt-skills` once and choose **local Markdown tickets** in `docs/tickets/` and the docs layout above.
-3. Set `GODOT_PATH` in `.mcp.json` to your Godot binary.
+3. Set `GODOT_PATH` in `.mcp.json` to your Godot **.NET** binary (currently `~/.local/bin/godot-mono`).
 4. Install the recommended skills below.
 5. Start Claude Code in this folder. It reads `CLAUDE.md` → `AGENTS.md`.
+6. Run `tools/check.sh`. It runs the sim tests, builds the Godot C# project, and boots the game headless, failing on any console error.
+
+Day to day:
+
+```
+dotnet test sim/tests                          # sim tests
+godot-mono --headless --path game --build-solutions --quit   # build the game's C#
+godot-mono --path game                         # run the game
+```
 
 ## Agent skill stack
 
