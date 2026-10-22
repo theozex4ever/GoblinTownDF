@@ -1,6 +1,6 @@
 # ADR 0004: Derived state is rebuilt on load, not saved
 
-**Status:** Accepted · 2026-10-21
+**Status:** Accepted · 2026-10-21 · Refines [ADR 0003](0003-determinism.md): the saved state is the whole *independent* state, and derived arrays are rebuilt from it.
 
 ## Context
 

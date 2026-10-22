@@ -23,8 +23,15 @@ public class ReachabilityTests
 
 		public int Floods { get; private set; }
 
-		public bool TryFindPath(SimState state, int start, ReadOnlySpan<int> goals, List<int> path, out int goalIndex) =>
-			_inner.TryFindPath(state, start, goals, path, out goalIndex);
+		// Every tile a claim or walk ever asked for a path to.
+		public HashSet<int> GoalsSearched { get; } = [];
+
+		public bool TryFindPath(SimState state, int start, ReadOnlySpan<int> goals, List<int> path, out int goalIndex)
+		{
+			foreach (var goal in goals)
+				GoalsSearched.Add(goal);
+			return _inner.TryFindPath(state, start, goals, path, out goalIndex);
+		}
 
 		public void FloodReachable(SimState state, ReadOnlySpan<int> starts, byte[] reached)
 		{
@@ -56,6 +63,29 @@ public class ReachabilityTests
 		}
 		Assert.Equal(DesignationKind.DigStairs, s.DesignationAt(waiting));
 		Assert.False(s.IsReachable(waiting));
+	}
+
+	[Fact]
+	public void A_designation_with_a_cut_off_stand_tile_never_reaches_the_path_search()
+	{
+		var counting = new CountingPathfinder();
+		var sim = new Simulation(Simulation.NewWorld(seed: 1).State, counting);
+		var s = sim.State;
+		// A Floor tile on z1 walled in by Solid: a place to dig the waiting tile from, but no goblin can get
+		// there. Without the reachability filter it would be offered to the path search as a goal.
+		var island = s.TileIndex(16, 14, 1);
+		var waiting = s.TileIndex(16, 13, 1);
+		var open = s.TileIndex(16, 2, 0);
+		s.TileKinds[island] = (byte)TileKind.Floor;
+		sim.Apply(DigStairsAt(16, 13, 1));
+		sim.Apply(DigStairsAt(16, 2, 0));
+		Assert.False(s.IsReachable(waiting));
+
+		RunTicks(sim, 100);
+
+		Assert.Equal(TileKind.Stairs, s.KindAt(open));
+		Assert.DoesNotContain(island, counting.GoalsSearched);
+		Assert.Equal(DesignationKind.DigStairs, s.DesignationAt(waiting));
 	}
 
 	[Fact]

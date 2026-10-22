@@ -97,7 +97,6 @@ public sealed class GridPathfinder : IPathfinder
 				continue;
 			_queue[tail++] = start;
 			_distance[start] = 0;
-			_parent[start] = -1;
 		}
 		while (head < tail)
 		{
