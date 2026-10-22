@@ -26,7 +26,15 @@ public partial class Main : Node
 
 		_depthLabel = new Label { Position = new Vector2(288, 8) };
 		AddChild(_depthLabel);
-		AddChild(new Label { Text = KeyHint, Position = new Vector2(288, 36 + 32 * WarrenView.CellSize + 6) });
+		// The hint wraps in the margin left of the map: unwrapped it is about 1070 px wide, and two lines
+		// under the map would run past the bottom of the 648 px window.
+		AddChild(new Label
+		{
+			Text = KeyHint,
+			Position = new Vector2(8, 36),
+			Size = new Vector2(272, 0),
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+		});
 
 		Refresh();
 	}
