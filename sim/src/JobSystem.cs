@@ -99,8 +99,7 @@ public sealed class JobSystem
 
 		s.GoblinJobTile[goblin] = _goalJobs[goalIndex];
 		s.GoblinStepTicks[goblin] = 0;
-		s.GoblinWanderTile[goblin] = -1;
-		s.GoblinWanderTicks[goblin] = 0;
+		ClearWander(s, goblin);
 		s.GoblinTask[goblin] = (byte)(_path.Count == 0 ? GoblinTask.Digging : GoblinTask.Walking);
 		return true;
 	}
@@ -225,6 +224,11 @@ public sealed class JobSystem
 		s.GoblinTask[goblin] = (byte)GoblinTask.Idle;
 		s.GoblinJobTile[goblin] = -1;
 		s.GoblinStepTicks[goblin] = 0;
+		ClearWander(s, goblin);
+	}
+
+	static void ClearWander(SimState s, int goblin)
+	{
 		s.GoblinWanderTile[goblin] = -1;
 		s.GoblinWanderTicks[goblin] = 0;
 	}

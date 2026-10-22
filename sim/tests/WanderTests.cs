@@ -172,8 +172,7 @@ public class WanderTests
 			s.TileKinds[s.TileIndex(18, y, 0)] = (byte)TileKind.Solid;
 		s.TileKinds[s.TileIndex(17, 16, 0)] = (byte)TileKind.Stairs;
 		s.TileKinds[s.TileIndex(17, 16, 1)] = (byte)TileKind.Stairs;
-		for (var x = 17; x <= 19; x++)
-			s.TileKinds[s.TileIndex(x, 16, 1)] = (byte)(x == 17 ? TileKind.Stairs : TileKind.Floor);
+		s.TileKinds[s.TileIndex(18, 16, 1)] = (byte)TileKind.Floor;
 		s.TileKinds[s.TileIndex(19, 16, 1)] = (byte)TileKind.Stairs;
 		s.TileKinds[s.TileIndex(19, 16, 0)] = (byte)TileKind.Stairs;
 
@@ -227,18 +226,30 @@ public class WanderTests
 	}
 
 	[Theory]
-	[InlineData("off the map", 999_999)]
-	[InlineData("not walkable", 0)]
-	[InlineData("on another level", 1024 * 2 + 16 + 16 * 32)]
-	[InlineData("the tile it stands on", 16 + 16 * 32)]
-	[InlineData("none at all", -1)]
-	public void A_wandering_goblin_with_a_target_it_could_not_have_picked_is_rejected(string why, int target)
+	[InlineData("off the map")]
+	[InlineData("not walkable")]
+	[InlineData("on another level")]
+	[InlineData("the tile it stands on")]
+	[InlineData("none at all")]
+	public void A_wandering_goblin_with_a_target_it_could_not_have_picked_is_rejected(string why)
 	{
 		var sim = MidWander(seed: 5);
 		var s = sim.State;
-		// Make "not walkable" bite: tile 0 is walkable surface until it is turned into rock.
+		var standing = s.TileIndex(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]);
+		var target = why switch
+		{
+			"off the map" => s.TileKinds.Length,
+			"not walkable" => s.TileIndex(0, 0, 0),
+			"on another level" => s.TileIndex(s.GoblinX[0] + 1, s.GoblinY[0], 1),
+			"the tile it stands on" => standing,
+			_ => -1,
+		};
+		// Rock over the tile, so "not walkable" bites on the walkable surface.
 		if (why == "not walkable")
 			s.TileKinds[target] = (byte)TileKind.Solid;
+		// The "another level" tile is made walkable, so only its level is wrong.
+		if (why == "on another level")
+			s.TileKinds[target] = (byte)TileKind.Floor;
 		s.GoblinWanderTile[0] = target;
 
 		Assert.Throws<System.Text.Json.JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));

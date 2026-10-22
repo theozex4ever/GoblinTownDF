@@ -88,7 +88,7 @@ public static class SimJson
 					&& TileRules.IsWalkable(s.KindAt(wanderTile))
 					&& wanderTile / (s.Width * s.Height) == s.GoblinZ[g]
 					&& wanderTile != s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]),
-					$"Goblin {g} wanders to tile {wanderTile}, which it could not have picked.");
+					$"Goblin {g} wanders to tile {wanderTile}, which is not a walkable tile on its own level.");
 				continue;
 			}
 			Require(wanderTile == -1 && wanderTicks == 0, $"Goblin {g} is working but wanders.");
