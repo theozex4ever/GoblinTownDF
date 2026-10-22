@@ -32,7 +32,7 @@ public partial class Main : Node
 		{
 			Text = KeyHint,
 			Position = new Vector2(8, 36),
-			Size = new Vector2(272, 0),
+			CustomMinimumSize = new Vector2(272, 0),
 			AutowrapMode = TextServer.AutowrapMode.WordSmart,
 		});
 
