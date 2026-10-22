@@ -6,7 +6,7 @@ namespace AThousandGoblinsDeep;
 
 public partial class Main : Node
 {
-	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. S picks stairs; click a spot and the Grunt takes it personally. Right-click a spot and the Grunt was never keen anyway.";
+	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. S picks stairs; click a spot and the Grunt takes it personally. Right-click unsays it.";
 
 	Simulation _sim = null!;
 	WarrenView _view = null!;
