@@ -25,7 +25,7 @@ public class StairsDownTests
 		Assert.Fail("The goblin never finished.");
 	}
 
-	static void DigStairsAt(Simulation sim, int x, int y, int z)
+	static void DigStairsAndWait(Simulation sim, int x, int y, int z)
 	{
 		sim.Apply(new Designate(DesignationKind.DigStairs, z, x, y, x, y));
 		RunUntilIdle(sim);
@@ -43,10 +43,10 @@ public class StairsDownTests
 	{
 		var sim = Simulation.NewWorld(seed: 1);
 		var s = sim.State;
-		DigStairsAt(sim, 16, 15, 0);
+		DigStairsAndWait(sim, 16, 15, 0);
 		sim.DrainEvents();
 
-		DigStairsAt(sim, 16, 15, 1);
+		DigStairsAndWait(sim, 16, 15, 1);
 
 		var upper = s.TileIndex(16, 15, 0);
 		var lower = s.TileIndex(16, 15, 1);
@@ -65,11 +65,11 @@ public class StairsDownTests
 	{
 		var sim = Simulation.NewWorld(seed: 1);
 		var s = sim.State;
-		DigStairsAt(sim, 16, 15, 0);
-		DigStairsAt(sim, 16, 15, 1);
+		DigStairsAndWait(sim, 16, 15, 0);
+		DigStairsAndWait(sim, 16, 15, 1);
 		sim.DrainEvents();
 
-		DigStairsAt(sim, 16, 15, 2);
+		DigStairsAndWait(sim, 16, 15, 2);
 
 		var z0 = s.TileIndex(16, 15, 0);
 		var z1 = s.TileIndex(16, 15, 1);
@@ -87,9 +87,9 @@ public class StairsDownTests
 	{
 		var sim = Simulation.NewWorld(seed: 1);
 		var s = sim.State;
-		DigStairsAt(sim, 16, 15, 0);
-		DigStairsAt(sim, 16, 15, 1);
-		DigStairsAt(sim, 16, 15, 2);
+		DigStairsAndWait(sim, 16, 15, 0);
+		DigStairsAndWait(sim, 16, 15, 1);
+		DigStairsAndWait(sim, 16, 15, 2);
 		var z2 = s.TileIndex(16, 15, 2);
 		// One layer past z2 in the tile array is off the map, not a level below, and the search must not read it.
 		var offMap = z2 + s.Width * s.Height;
@@ -100,32 +100,34 @@ public class StairsDownTests
 	}
 
 	[Theory]
-	[InlineData(true)]
-	[InlineData(false)]
-	public void A_goblin_cannot_move_between_levels_where_only_one_of_the_two_tiles_is_Stairs(bool upperIsStairs)
+	[InlineData(true, true)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	[InlineData(false, false)]
+	public void A_goblin_cannot_move_between_levels_where_only_one_of_the_two_tiles_is_Stairs(bool upperIsStairs, bool goblinOnStairs)
 	{
 		var sim = Simulation.NewWorld(seed: 1);
 		var s = sim.State;
-		var upper = s.TileIndex(16, 15, 0);
-		var lower = s.TileIndex(16, 15, 1);
-		s.TileKinds[upper] = (byte)(upperIsStairs ? TileKind.Stairs : TileKind.Floor);
-		s.TileKinds[lower] = (byte)(upperIsStairs ? TileKind.Floor : TileKind.Stairs);
+		s.TileKinds[s.TileIndex(16, 15, 0)] = (byte)(upperIsStairs ? TileKind.Stairs : TileKind.Floor);
+		s.TileKinds[s.TileIndex(16, 15, 1)] = (byte)(upperIsStairs ? TileKind.Floor : TileKind.Stairs);
 
-		// A tile to dig beside the lone tile on the other level: reachable from there, and only from there.
-		var (gx, gy, gz, targetZ) = upperIsStairs ? (16, 15, 0, 1) : (16, 15, 1, 0);
-		(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (gx, gy, gz);
+		// The goblin stands on the Stairs or on the Floor of the pair. Its work is on the other level, beside
+		// the other tile of the pair: in reach from there, and only from there.
+		var goblinZ = goblinOnStairs == upperIsStairs ? 0 : 1;
+		var targetZ = 1 - goblinZ;
+		(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (16, 15, goblinZ);
 		sim.Apply(new Designate(DesignationKind.DigStairs, targetZ, 16, 14, 16, 14));
 
 		RunTicks(sim, 200);
 
-		Assert.Equal((gx, gy, gz), (s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]));
+		Assert.Equal((16, 15, goblinZ), (s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]));
 		Assert.Equal((byte)GoblinTask.Idle, s.GoblinTask[0]);
 		Assert.Equal(DesignationKind.DigStairs, s.DesignationAt(s.TileIndex(16, 14, targetZ)));
 		Assert.Empty(sim.DrainEvents());
 	}
 
 	[Fact]
-	public void A_stair_shaft_from_z0_to_z2_replays_identically_and_survives_a_save()
+	public void A_column_of_Stairs_from_z0_to_z2_replays_identically_and_survives_a_save()
 	{
 		var log = new (int Tick, Command Command)[]
 		{
