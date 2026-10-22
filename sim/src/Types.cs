@@ -12,9 +12,23 @@ public enum Material : byte
 {
 	None,
 	Dirt,
+	Stone,
 }
 
 public enum Role : byte
 {
 	Grunt,
+}
+
+public enum DesignationKind : byte
+{
+	None,
+	DigStairs,
+}
+
+public enum GoblinTask : byte
+{
+	Idle,
+	Walking,
+	Digging,
 }

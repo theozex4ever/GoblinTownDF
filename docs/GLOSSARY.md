@@ -20,7 +20,7 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Floor | A tile goblins can walk on. |
 | Open air | An empty tile with nothing to stand on. |
 | Stairs | A walkable tile that links to a Stairs tile directly above or below it. |
-| Material | What a Solid tile is made of, such as dirt or stone. |
+| Material | What a tile is made of, such as dirt or stone. Digging a tile yields its material. |
 | Designation | A player order on tiles: Dig or Dig stairs. |
 | Dig | A designation that turns a Solid tile into Floor. |
 | Dig stairs | A designation that turns a Solid or Floor tile into Stairs. |

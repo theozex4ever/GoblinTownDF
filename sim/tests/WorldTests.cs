@@ -18,7 +18,7 @@ public class WorldTests
 	}
 
 	[Fact]
-	public void Z0_is_all_floor_and_z1_z2_are_all_solid_dirt()
+	public void Z0_is_all_dirt_floor_and_z1_z2_are_all_solid_dirt()
 	{
 		var s = Simulation.NewWorld(seed: 7).State;
 
@@ -28,15 +28,10 @@ public class WorldTests
 		{
 			var i = s.TileIndex(x, y, z);
 			if (z == 0)
-			{
 				Assert.Equal(TileKind.Floor, s.KindAt(i));
-				Assert.Equal(Material.None, s.MaterialAt(i));
-			}
 			else
-			{
 				Assert.Equal(TileKind.Solid, s.KindAt(i));
-				Assert.Equal(Material.Dirt, s.MaterialAt(i));
-			}
+			Assert.Equal(Material.Dirt, s.MaterialAt(i));
 		}
 	}
 
