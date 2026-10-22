@@ -13,6 +13,8 @@ public sealed class JobSystem
 	readonly List<int> _path = [];
 	readonly List<int> _goals = [];
 	readonly List<int> _goalJobs = [];
+	readonly List<int> _starts = [];
+	byte[] _reached = [];
 
 	public JobSystem(IPathfinder pathfinder)
 	{
@@ -32,6 +34,7 @@ public sealed class JobSystem
 		var x1 = Math.Min(Math.Max(command.X0, command.X1), s.Width - 1);
 		var y0 = Math.Max(Math.Min(command.Y0, command.Y1), 0);
 		var y1 = Math.Min(Math.Max(command.Y0, command.Y1), s.Height - 1);
+		var designated = false;
 		for (var y = y0; y <= y1; y++)
 		for (var x = x0; x <= x1; x++)
 		{
@@ -39,7 +42,51 @@ public sealed class JobSystem
 			if (s.DesignationAt(tile) == DesignationKind.None
 				&& TileRules.CanDigStairs(s.KindAt(tile))
 				&& MaterialRules.DigTicks(s.MaterialAt(tile)) > 0)
+			{
 				s.Designations[tile] = (byte)command.Kind;
+				designated = true;
+			}
+		}
+
+		if (designated)
+			RecheckReachability(s);
+	}
+
+	/// <summary>
+	/// Rebuilds <see cref="SimState.Reachable"/> from the tiles, designations and goblin positions. Runs once
+	/// when a tile is dug, when a Designation is made, and when a sim is built, and never on a tick that did
+	/// none of those. Anything else that changes a tile or a Designation (cancelling, new tools) calls this
+	/// too, through <see cref="Simulation.RecheckReachability"/>.
+	/// </summary>
+	public void RecheckReachability(SimState s)
+	{
+		var tiles = s.TileKinds.Length;
+		if (s.Reachable.Length != tiles)
+			s.Reachable = new byte[tiles];
+		if (_reached.Length != tiles)
+			_reached = new byte[tiles];
+
+		// Goblins never leave the region they stand in, so what they can reach only changes when a tile does.
+		_starts.Clear();
+		for (var g = 0; g < s.GoblinCount; g++)
+			_starts.Add(s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]));
+		_pathfinder.FloodReachable(s, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_starts), _reached);
+
+		for (var tile = 0; tile < tiles; tile++)
+		{
+			s.Reachable[tile] = 0;
+			if (s.DesignationAt(tile) == DesignationKind.None)
+				continue;
+
+			_goals.Clear();
+			_goalJobs.Clear();
+			AddStandingTiles(s, tile);
+			foreach (var stand in _goals)
+				if (_reached[stand] != 0)
+				{
+					s.Reachable[tile] = 1;
+					break;
+				}
 		}
 	}
 
@@ -76,7 +123,7 @@ public sealed class JobSystem
 		_goalJobs.Clear();
 		for (var tile = 0; tile < s.Designations.Length; tile++)
 		{
-			if (s.DesignationAt(tile) == DesignationKind.None || IsClaimed(s, tile))
+			if (!s.IsReachable(tile) || IsClaimed(s, tile))
 				continue;
 			AddStandingTiles(s, tile);
 		}
@@ -130,6 +177,7 @@ public sealed class JobSystem
 		var layer = s.Width * s.Height;
 		events.Add(new TileDug(job % s.Width, job / s.Width % s.Height, job / layer, material));
 		Release(s, goblin);
+		RecheckReachability(s);
 	}
 
 	static void Release(SimState s, int goblin)

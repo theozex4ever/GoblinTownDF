@@ -25,9 +25,17 @@ public sealed class Simulation
 	{
 		State = state;
 		_jobs = new JobSystem(pathfinder ?? new GridPathfinder());
+		// Reachability is derived, never saved, so every sim builds it from its tiles.
+		RecheckReachability();
 	}
 
 	public SimState State { get; }
+
+	/// <summary>
+	/// The one hook for reachability: call it after changing tiles or Designations outside digging, such as
+	/// cancelling a Designation. Digging a tile and the Designate command already call it.
+	/// </summary>
+	public void RecheckReachability() => _jobs.RecheckReachability(State);
 
 	public static bool IsValidSpeed(int speed) => speed is 1 or 2 or 4;
 

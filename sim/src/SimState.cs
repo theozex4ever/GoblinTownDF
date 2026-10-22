@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Goblins.Sim;
 
 /// <summary>
@@ -24,6 +26,10 @@ public sealed class SimState
 	// A DesignationKind per tile, and ticks spent digging it so far. Cancelling a designation clears the progress.
 	public byte[] Designations { get; set; } = [];
 	public byte[] DigProgress { get; set; } = [];
+	// 1 on a designated tile some goblin can path to a tile it can dig from. Derived from the tiles, the
+	// designations and the goblin positions, so it is not saved: loading rebuilds it (see JobSystem.RecheckReachability).
+	[JsonIgnore]
+	public byte[] Reachable { get; set; } = [];
 
 	public int GoblinCount { get; set; }
 	public int[] GoblinX { get; set; } = new int[MaxGoblins];
@@ -43,6 +49,9 @@ public sealed class SimState
 	public Material MaterialAt(int tile) => (Material)TileMaterials[tile];
 
 	public DesignationKind DesignationAt(int tile) => (DesignationKind)Designations[tile];
+
+	/// <summary>False for an undesignated tile, and for a designated one no goblin can reach yet.</summary>
+	public bool IsReachable(int tile) => Reachable[tile] != 0;
 
 	public static int[] NoJobs()
 	{
