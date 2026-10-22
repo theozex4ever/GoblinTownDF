@@ -89,6 +89,26 @@ public class ReachabilityTests
 	}
 
 	[Fact]
+	public void A_cleared_designation_is_never_reachable_even_before_a_recheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		var near = s.TileIndex(16, 15, 0);
+		var far = s.TileIndex(20, 20, 0);
+		sim.Apply(DigStairsAt(16, 15, 0));
+		sim.Apply(DigStairsAt(20, 20, 0));
+
+		// What a cancel that forgets the hook does: clear the Designation and leave the flag stale.
+		s.Designations[near] = (byte)DesignationKind.None;
+		Assert.False(s.IsReachable(near));
+
+		RunTicks(sim, 7 * 3 + 20);
+
+		Assert.Equal(TileKind.Stairs, s.KindAt(far));
+		Assert.Equal(TileKind.Floor, s.KindAt(near));
+	}
+
+	[Fact]
 	public void Reachable_is_only_ever_set_on_designated_tiles()
 	{
 		var sim = Simulation.NewWorld(seed: 1);

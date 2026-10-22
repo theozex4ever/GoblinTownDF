@@ -50,8 +50,11 @@ public sealed class SimState
 
 	public DesignationKind DesignationAt(int tile) => (DesignationKind)Designations[tile];
 
-	/// <summary>False for an undesignated tile, and for a designated one no goblin can reach yet.</summary>
-	public bool IsReachable(int tile) => Reachable[tile] != 0;
+	/// <summary>
+	/// False for an undesignated tile, and for a designated one no goblin can reach yet. A cleared Designation
+	/// is never reachable, even while its cached flag is stale.
+	/// </summary>
+	public bool IsReachable(int tile) => Designations[tile] != 0 && Reachable[tile] != 0;
 
 	public static int[] NoJobs()
 	{
