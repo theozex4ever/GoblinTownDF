@@ -292,7 +292,7 @@ public class DigStairsTests
 	}
 
 	[Fact]
-	public void A_designation_with_no_way_to_reach_it_waits_and_the_goblin_stays_idle()
+	public void A_designation_with_no_way_to_reach_it_waits_and_the_goblin_takes_no_job()
 	{
 		var sim = Simulation.NewWorld(seed: 1);
 		var s = sim.State;
@@ -301,7 +301,7 @@ public class DigStairsTests
 		RunTicks(sim, 50);
 
 		Assert.Equal(DesignationKind.DigStairs, s.DesignationAt(s.TileIndex(5, 5, 1)));
-		Assert.Equal((byte)GoblinTask.Idle, s.GoblinTask[0]);
+		Assert.Equal(-1, s.GoblinJobTile[0]);
 		Assert.Empty(sim.DrainEvents());
 	}
 

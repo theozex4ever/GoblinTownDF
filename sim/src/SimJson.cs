@@ -56,7 +56,9 @@ public static class SimJson
 			&& s.GoblinRole is { Length: SimState.MaxGoblins }
 			&& s.GoblinTask is { Length: SimState.MaxGoblins }
 			&& s.GoblinJobTile is { Length: SimState.MaxGoblins }
-			&& s.GoblinStepTicks is { Length: SimState.MaxGoblins },
+			&& s.GoblinStepTicks is { Length: SimState.MaxGoblins }
+			&& s.GoblinWanderTile is { Length: SimState.MaxGoblins }
+			&& s.GoblinWanderTicks is { Length: SimState.MaxGoblins },
 			$"Goblin arrays must hold {SimState.MaxGoblins} entries.");
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
@@ -69,11 +71,27 @@ public static class SimJson
 			Require(Enum.IsDefined((GoblinTask)s.GoblinTask[g]), $"Goblin {g} has unknown task {s.GoblinTask[g]}.");
 			Require(s.GoblinStepTicks[g] < JobSystem.WalkTicksPerTile, $"Goblin {g} has step ticks {s.GoblinStepTicks[g]}.");
 			var job = s.GoblinJobTile[g];
-			if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Idle)
+			var wanderTile = s.GoblinWanderTile[g];
+			var wanderTicks = s.GoblinWanderTicks[g];
+			if ((GoblinTask)s.GoblinTask[g] is GoblinTask.Idle or GoblinTask.Wandering)
 			{
-				Require(job == -1, $"Goblin {g} is idle but holds job tile {job}.");
+				Require(job == -1, $"Goblin {g} is not working but holds job tile {job}.");
+				if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Idle)
+				{
+					Require(wanderTile == -1, $"Goblin {g} is idle but has wander tile {wanderTile}.");
+					Require(wanderTicks <= JobSystem.MaxWanderPauseTicks, $"Goblin {g} pauses {wanderTicks} ticks before wandering.");
+					continue;
+				}
+
+				Require(wanderTicks == 0, $"Goblin {g} is wandering but still pauses {wanderTicks} ticks.");
+				Require(wanderTile >= 0 && wanderTile < tiles
+					&& TileRules.IsWalkable(s.KindAt(wanderTile))
+					&& wanderTile / (s.Width * s.Height) == s.GoblinZ[g]
+					&& wanderTile != s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]),
+					$"Goblin {g} wanders to tile {wanderTile}, which it could not have picked.");
 				continue;
 			}
+			Require(wanderTile == -1 && wanderTicks == 0, $"Goblin {g} is working but wanders.");
 			Require(job >= 0 && job < tiles && s.DesignationAt(job) != DesignationKind.None,
 				$"Goblin {g} works tile {job}, which is not designated.");
 			if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Digging)

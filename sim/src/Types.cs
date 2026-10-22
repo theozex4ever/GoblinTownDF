@@ -31,4 +31,5 @@ public enum GoblinTask : byte
 	Idle,
 	Walking,
 	Digging,
+	Wandering,
 }

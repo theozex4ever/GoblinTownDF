@@ -3,11 +3,19 @@ namespace Goblins.Sim;
 /// <summary>
 /// The global job list and the goblins that work it. A designated tile is a Job; an idle goblin claims
 /// the nearest one by path length (ties go to the lowest tile index), walks to a tile it can dig from,
-/// and digs. Loops over the state arrays; the only memory it owns is reused scratch lists.
+/// and digs. A goblin with no reachable Job wanders instead. Loops over the state arrays; the only
+/// memory it owns is reused scratch lists.
 /// </summary>
 public sealed class JobSystem
 {
 	public const int WalkTicksPerTile = 3;
+	/// <summary>An idle goblin pauses this many ticks, drawn from the Rng, before each wander: 3–6 seconds.</summary>
+	public const int MinWanderPauseTicks = 30;
+	public const int MaxWanderPauseTicks = 60;
+	/// <summary>A wander ends at most this many tiles away on each axis.</summary>
+	public const int WanderRadius = 4;
+	// Random targets tried per wander before the goblin gives up and pauses again.
+	const int WanderAttempts = 8;
 
 	readonly IPathfinder _pathfinder;
 	readonly List<int> _path = [];
@@ -47,8 +55,12 @@ public sealed class JobSystem
 	{
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
-			if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Idle && !TryClaim(s, g))
+			// An idle or wandering goblin takes any Job it can reach; with none, it wanders on.
+			if ((GoblinTask)s.GoblinTask[g] is GoblinTask.Idle or GoblinTask.Wandering && !TryClaim(s, g))
+			{
+				Wander(s, g);
 				continue;
+			}
 
 			var job = s.GoblinJobTile[g];
 			if (s.DesignationAt(job) == DesignationKind.None)
@@ -87,7 +99,83 @@ public sealed class JobSystem
 
 		s.GoblinJobTile[goblin] = _goalJobs[goalIndex];
 		s.GoblinStepTicks[goblin] = 0;
+		s.GoblinWanderTile[goblin] = -1;
+		s.GoblinWanderTicks[goblin] = 0;
 		s.GoblinTask[goblin] = (byte)(_path.Count == 0 ? GoblinTask.Digging : GoblinTask.Walking);
+		return true;
+	}
+
+	void Wander(SimState s, int goblin)
+	{
+		if ((GoblinTask)s.GoblinTask[goblin] == GoblinTask.Wandering)
+		{
+			WalkToWanderTile(s, goblin);
+			return;
+		}
+
+		if (s.GoblinWanderTicks[goblin] == 0)
+			s.GoblinWanderTicks[goblin] = (byte)(MinWanderPauseTicks + s.Rng.NextInt(MaxWanderPauseTicks - MinWanderPauseTicks + 1));
+		if (--s.GoblinWanderTicks[goblin] == 0)
+			StartWander(s, goblin);
+	}
+
+	void StartWander(SimState s, int goblin)
+	{
+		var x = s.GoblinX[goblin];
+		var y = s.GoblinY[goblin];
+		var z = s.GoblinZ[goblin];
+		var start = s.TileIndex(x, y, z);
+		for (var attempt = 0; attempt < WanderAttempts; attempt++)
+		{
+			var tx = x + s.Rng.NextInt(2 * WanderRadius + 1) - WanderRadius;
+			var ty = y + s.Rng.NextInt(2 * WanderRadius + 1) - WanderRadius;
+			if ((tx == x && ty == y) || tx < 0 || ty < 0 || tx >= s.Width || ty >= s.Height)
+				continue;
+
+			var target = s.TileIndex(tx, ty, z);
+			if (!TileRules.IsWalkable(s.KindAt(target)) || !TryFindWanderPath(s, start, target))
+				continue;
+
+			s.GoblinTask[goblin] = (byte)GoblinTask.Wandering;
+			s.GoblinWanderTile[goblin] = target;
+			s.GoblinStepTicks[goblin] = 0;
+			return;
+		}
+	}
+
+	void WalkToWanderTile(SimState s, int goblin)
+	{
+		if (++s.GoblinStepTicks[goblin] < WalkTicksPerTile)
+			return;
+		s.GoblinStepTicks[goblin] = 0;
+
+		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
+		if (!TryFindWanderPath(s, start, s.GoblinWanderTile[goblin]) || _path.Count == 0)
+		{
+			Release(s, goblin);
+			return;
+		}
+
+		var next = _path[0];
+		s.GoblinX[goblin] = next % s.Width;
+		s.GoblinY[goblin] = next / s.Width % s.Height;
+		if (_path.Count == 1)
+			Release(s, goblin);
+	}
+
+	// Finds the way to a wander target into _path. A wander stays on one level, so a route that
+	// leaves the goblin's level (over Stairs) does not count.
+	bool TryFindWanderPath(SimState s, int start, int target)
+	{
+		_goals.Clear();
+		_goals.Add(target);
+		if (!_pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _))
+			return false;
+
+		var layer = s.Width * s.Height;
+		foreach (var tile in _path)
+			if (tile / layer != start / layer)
+				return false;
 		return true;
 	}
 
@@ -137,6 +225,8 @@ public sealed class JobSystem
 		s.GoblinTask[goblin] = (byte)GoblinTask.Idle;
 		s.GoblinJobTile[goblin] = -1;
 		s.GoblinStepTicks[goblin] = 0;
+		s.GoblinWanderTile[goblin] = -1;
+		s.GoblinWanderTicks[goblin] = 0;
 	}
 
 	static bool IsClaimed(SimState s, int tile)

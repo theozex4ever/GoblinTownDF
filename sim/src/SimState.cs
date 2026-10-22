@@ -35,6 +35,10 @@ public sealed class SimState
 	public int[] GoblinJobTile { get; set; } = NoJobs();
 	// Ticks spent on the current step of a walk.
 	public byte[] GoblinStepTicks { get; set; } = new byte[MaxGoblins];
+	// The tile a wandering goblin is walking to, or -1 while it is not wandering.
+	public int[] GoblinWanderTile { get; set; } = NoJobs();
+	// Ticks an idle goblin still pauses before it wanders; 0 until the pause is drawn from the Rng.
+	public byte[] GoblinWanderTicks { get; set; } = new byte[MaxGoblins];
 
 	public int TileIndex(int x, int y, int z) => x + y * Width + z * Width * Height;
 

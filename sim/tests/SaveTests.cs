@@ -271,7 +271,7 @@ public class SaveTests
 				var n = numbers[rng.NextInt(numbers.Length)];
 				var g = rng.NextInt(4);
 				var tile = hotTiles[rng.NextInt(hotTiles.Length)];
-				switch (rng.NextInt(10))
+				switch (rng.NextInt(12))
 				{
 					case 0: s.GoblinCount = n; break;
 					case 1: s.GoblinX[g] = n; break;
@@ -283,6 +283,8 @@ public class SaveTests
 					case 7: s.TileKinds[tile] = (byte)rng.NextInt(5); break;
 					case 8: s.Designations[tile] = (byte)rng.NextInt(3); break;
 					case 9: s.DigProgress[tile] = (byte)n; break;
+					case 10: s.GoblinWanderTile[g] = n; break;
+					case 11: s.GoblinWanderTicks[g] = (byte)n; break;
 				}
 			}
 
@@ -337,6 +339,8 @@ public class SaveTests
 		Assert.Equal(e.GoblinTask, a.GoblinTask);
 		Assert.Equal(e.GoblinJobTile, a.GoblinJobTile);
 		Assert.Equal(e.GoblinStepTicks, a.GoblinStepTicks);
+		Assert.Equal(e.GoblinWanderTile, a.GoblinWanderTile);
+		Assert.Equal(e.GoblinWanderTicks, a.GoblinWanderTicks);
 		Assert.Equal(SimJson.Serialize(expected), SimJson.Serialize(actual));
 	}
 }
