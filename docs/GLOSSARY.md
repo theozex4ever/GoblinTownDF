@@ -25,6 +25,7 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Dig | A designation that turns a Solid tile into Floor. |
 | Dig stairs | A designation that turns a Solid or Floor tile into Stairs. |
 | Job | A unit of work in the global job list (dig, haul, brew, build) that an idle goblin claims. |
+| Wander | What an idle goblin does when it has no reachable Job: after a 3–6 second pause it walks to a random walkable tile within 4 tiles on its own z-level, then pauses again. A reachable Designation cuts it short. |
 | Pile | A floor zone where goblins dump items; counted per resource, not per item. |
 | Room | A painted zone that works once it holds its required item: Sleeping Heap, Grub Pit, Brewery, Pile, Shrine, Boss Throne. |
 | Raid | An abstracted off-map trip that returns loot and a story after a timer. |
