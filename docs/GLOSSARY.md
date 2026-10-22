@@ -24,6 +24,8 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Designation | A player order on tiles: Dig or Dig stairs. |
 | Dig | A designation that turns a Solid tile into Floor. |
 | Dig stairs | A designation that turns a Solid or Floor tile into Stairs. |
+| Selection | A click-drag on the viewed level that picks a rectangle of tiles; a single click is a 1×1 rectangle. It does not know what the active tool will do with it. |
+| Tool | The action a selection applies, picked by a key: Dig or Dig stairs. |
 | Job | A unit of work in the global job list (dig, haul, brew, build) that an idle goblin claims. |
 | Pile | A floor zone where goblins dump items; counted per resource, not per item. |
 | Room | A painted zone that works once it holds its required item: Sleeping Heap, Grub Pit, Brewery, Pile, Shrine, Boss Throne. |

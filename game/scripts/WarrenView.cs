@@ -16,11 +16,16 @@ public partial class WarrenView : Node2D
 	static readonly Color StairsMarkColor = new(0.25f, 0.22f, 0.15f);
 	static readonly Color DesignationColor = new(1f, 0.85f, 0.2f);
 	static readonly Color ProgressColor = new(1f, 0.85f, 0.2f, 0.55f);
+	static readonly Color SelectionColor = new(1f, 1f, 1f, 0.9f);
+	static readonly Color SelectionFillColor = new(1f, 1f, 1f, 0.15f);
 	static readonly Color GoblinColor = new(0.35f, 0.75f, 0.30f);
 	static readonly Color FaintGoblinColor = new(0.35f, 0.75f, 0.30f, 0.35f);
 
 	public Simulation? Sim { get; set; }
 	public int ViewZ { get; set; }
+
+	/// <summary>The cells a drag in progress has swept (corners in any order), outlined as it goes.</summary>
+	public (Vector2I From, Vector2I To)? Selection { get; set; }
 
 	public override void _Draw()
 	{
@@ -77,6 +82,15 @@ public partial class WarrenView : Node2D
 				CellSize - 2 * inset,
 				CellSize - 2 * inset);
 			DrawRect(rect, dz == 0 ? GoblinColor : FaintGoblinColor);
+		}
+
+		if (Selection is { } sel)
+		{
+			var min = new Vector2I(Math.Min(sel.From.X, sel.To.X), Math.Min(sel.From.Y, sel.To.Y));
+			var max = new Vector2I(Math.Max(sel.From.X, sel.To.X), Math.Max(sel.From.Y, sel.To.Y));
+			var box = new Rect2(min.X * CellSize, min.Y * CellSize, (max.X - min.X + 1) * CellSize, (max.Y - min.Y + 1) * CellSize);
+			DrawRect(box, SelectionFillColor);
+			DrawRect(box, SelectionColor, filled: false, width: 2);
 		}
 	}
 }
