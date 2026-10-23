@@ -56,6 +56,8 @@ public sealed class SelectionGesture
 				return true;
 
 			case InputEventMouseButton { Pressed: false } release when Dragging && release.ButtonIndex == _button:
+				var end = _cellAt(release.Position);
+				_current = new Vector2I(Math.Clamp(end.X, 0, _mapSize.X - 1), Math.Clamp(end.Y, 0, _mapSize.Y - 1));
 				var (from, to) = Rectangle;
 				Dragging = false;
 				Changed?.Invoke();
