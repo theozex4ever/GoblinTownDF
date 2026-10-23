@@ -6,7 +6,7 @@ namespace AThousandGoblinsDeep;
 
 public partial class Main : Node
 {
-	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. S picks stairs; click a spot and the Grunt takes it personally.";
+	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. S picks stairs; click a spot and the Grunt takes it personally. Right-click unsays it.";
 
 	Simulation _sim = null!;
 	WarrenView _view = null!;
@@ -26,7 +26,15 @@ public partial class Main : Node
 
 		_depthLabel = new Label { Position = new Vector2(288, 8) };
 		AddChild(_depthLabel);
-		AddChild(new Label { Text = KeyHint, Position = new Vector2(288, 36 + 32 * WarrenView.CellSize + 6) });
+		// The hint wraps in the margin left of the map: unwrapped it is about 1070 px wide, and two lines
+		// under the map would run past the bottom of the 648 px window.
+		AddChild(new Label
+		{
+			Text = KeyHint,
+			Position = new Vector2(8, 36),
+			CustomMinimumSize = new Vector2(272, 0),
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+		});
 
 		Refresh();
 	}
@@ -41,18 +49,35 @@ public partial class Main : Node
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
-		if (!_stairsTool || @event is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } click)
+		if (@event is not InputEventMouseButton { Pressed: true } click)
 			return;
 
-		var cell = (click.Position - _view.Position) / WarrenView.CellSize;
-		var x = Mathf.FloorToInt(cell.X);
-		var y = Mathf.FloorToInt(cell.Y);
-		if (x < 0 || y < 0 || x >= _sim.State.Width || y >= _sim.State.Height)
+		// Right-click cancels whatever tool is up; left-click designates only while the stairs tool is.
+		if (click.ButtonIndex == MouseButton.Right)
+		{
+			if (!TryCellAt(click.Position, out var cx, out var cy))
+				return;
+			_sim.Apply(new CancelDesignation(_viewZ, cx, cy, cx, cy));
+		}
+		else if (click.ButtonIndex == MouseButton.Left && _stairsTool)
+		{
+			if (!TryCellAt(click.Position, out var cx, out var cy))
+				return;
+			_sim.Apply(new Designate(DesignationKind.DigStairs, _viewZ, cx, cy, cx, cy));
+		}
+		else
 			return;
 
-		_sim.Apply(new Designate(DesignationKind.DigStairs, _viewZ, x, y, x, y));
 		_view.QueueRedraw();
 		GetViewport().SetInputAsHandled();
+	}
+
+	bool TryCellAt(Vector2 position, out int x, out int y)
+	{
+		var cell = (position - _view.Position) / WarrenView.CellSize;
+		x = Mathf.FloorToInt(cell.X);
+		y = Mathf.FloorToInt(cell.Y);
+		return x >= 0 && y >= 0 && x < _sim.State.Width && y < _sim.State.Height;
 	}
 
 	public override void _UnhandledKeyInput(InputEvent @event)
