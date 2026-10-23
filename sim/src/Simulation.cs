@@ -32,8 +32,9 @@ public sealed class Simulation
 	public SimState State { get; }
 
 	/// <summary>
-	/// The one hook for reachability: call it after changing tiles or Designations outside digging, such as
-	/// cancelling a Designation. Digging a tile and the Designate command already call it.
+	/// The one hook for reachability: call it after opening paths or adding Designations outside digging.
+	/// Digging a tile and the Designate command already call it. Cancellation needs no recheck because
+	/// IsReachable also checks that the Designation still exists.
 	/// </summary>
 	public void RecheckReachability() => _jobs.RecheckReachability(State);
 
@@ -95,6 +96,9 @@ public sealed class Simulation
 				break;
 			case Designate c:
 				_jobs.Designate(State, c);
+				break;
+			case CancelDesignation c:
+				_jobs.Cancel(State, c);
 				break;
 			default:
 				throw new ArgumentException($"Unknown command {command.GetType().Name}.", nameof(command));

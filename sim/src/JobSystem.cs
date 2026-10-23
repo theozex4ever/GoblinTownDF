@@ -26,14 +26,8 @@ public sealed class JobSystem
 	{
 		if (command.Kind != DesignationKind.DigStairs)
 			throw new ArgumentOutOfRangeException(nameof(command), command.Kind, "Only Dig stairs can be designated.");
-		if (command.Z < 0 || command.Z >= s.Depth)
-			throw new ArgumentOutOfRangeException(nameof(command), command.Z, "Level is off the map.");
-
-		// Clip the rectangle to the map. One wholly off the map designates nothing, rather than the edge row.
-		var x0 = Math.Max(Math.Min(command.X0, command.X1), 0);
-		var x1 = Math.Min(Math.Max(command.X0, command.X1), s.Width - 1);
-		var y0 = Math.Max(Math.Min(command.Y0, command.Y1), 0);
-		var y1 = Math.Min(Math.Max(command.Y0, command.Y1), s.Height - 1);
+		if (!TryClip(s, command.Z, command.X0, command.Y0, command.X1, command.Y1, out var x0, out var y0, out var x1, out var y1))
+			return;
 		var designated = false;
 		for (var y = y0; y <= y1; y++)
 		for (var x = x0; x <= x1; x++)
@@ -55,8 +49,9 @@ public sealed class JobSystem
 	/// <summary>
 	/// Rebuilds <see cref="SimState.Reachable"/> from the tiles, designations and goblin positions. Runs once
 	/// when a tile is dug, when a Designation is made, and when a sim is built, and never on a tick that did
-	/// none of those. Anything else that changes a tile or a Designation (cancelling, new tools) calls this
-	/// too, through <see cref="Simulation.RecheckReachability"/>.
+	/// none of those. Anything else that opens a path or adds a Designation calls this too, through
+	/// <see cref="Simulation.RecheckReachability"/>. Cancellation needs no flood: IsReachable checks that
+	/// the Designation still exists.
 	/// </summary>
 	public void RecheckReachability(SimState s)
 	{
@@ -88,6 +83,45 @@ public sealed class JobSystem
 					break;
 				}
 		}
+	}
+
+	/// <summary>
+	/// Cancels the Designations in the rectangle, skipping tiles that have none. A cancelled tile loses its
+	/// dig progress, and a goblin working it is freed to claim its next Job.
+	/// </summary>
+	public void Cancel(SimState s, CancelDesignation command)
+	{
+		if (!TryClip(s, command.Z, command.X0, command.Y0, command.X1, command.Y1, out var x0, out var y0, out var x1, out var y1))
+			return;
+		for (var y = y0; y <= y1; y++)
+		for (var x = x0; x <= x1; x++)
+		{
+			var tile = s.TileIndex(x, y, command.Z);
+			if (s.DesignationAt(tile) == DesignationKind.None)
+				continue;
+
+			s.Designations[tile] = (byte)DesignationKind.None;
+			s.DigProgress[tile] = 0;
+			for (var g = 0; g < s.GoblinCount; g++)
+				if (s.GoblinJobTile[g] == tile)
+					Release(s, g);
+		}
+	}
+
+	/// <summary>
+	/// Clips the rectangle to the map, corners in any order. False when it lies wholly off the map, which
+	/// covers nothing rather than the edge row. Throws if the level is off the map.
+	/// </summary>
+	static bool TryClip(SimState s, int z, int cx0, int cy0, int cx1, int cy1, out int x0, out int y0, out int x1, out int y1)
+	{
+		if (z < 0 || z >= s.Depth)
+			throw new ArgumentOutOfRangeException(nameof(z), z, "Level is off the map.");
+
+		x0 = Math.Max(Math.Min(cx0, cx1), 0);
+		x1 = Math.Min(Math.Max(cx0, cx1), s.Width - 1);
+		y0 = Math.Max(Math.Min(cy0, cy1), 0);
+		y1 = Math.Min(Math.Max(cy0, cy1), s.Height - 1);
+		return x0 <= x1 && y0 <= y1;
 	}
 
 	public void Step(SimState s, List<SimEvent> events)
