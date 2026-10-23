@@ -116,14 +116,23 @@ public class StairsDownTests
 		var goblinZ = goblinOnStairs == upperIsStairs ? 0 : 1;
 		var targetZ = 1 - goblinZ;
 		(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (16, 15, goblinZ);
+		var target = s.TileIndex(16, 14, targetZ);
+		var kindBefore = s.KindAt(target);
+		var materialBefore = s.MaterialAt(target);
 		sim.Apply(new Designate(DesignationKind.DigStairs, targetZ, 16, 14, 16, 14));
 
-		RunTicks(sim, 200);
-
-		Assert.Equal((16, 15, goblinZ), (s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]));
-		Assert.Equal((byte)GoblinTask.Idle, s.GoblinTask[0]);
-		Assert.Equal(DesignationKind.DigStairs, s.DesignationAt(s.TileIndex(16, 14, targetZ)));
-		Assert.Empty(sim.DrainEvents());
+		// Wandering may change x/y, but neither wandering nor claiming work can cross this pair.
+		for (var tick = 0; tick < 200; tick++)
+		{
+			RunTicks(sim, 1);
+			Assert.Equal(goblinZ, s.GoblinZ[0]);
+			Assert.Equal(-1, s.GoblinJobTile[0]);
+			Assert.Equal(DesignationKind.DigStairs, s.DesignationAt(target));
+			Assert.Equal(0, s.DigProgress[target]);
+			Assert.Equal(kindBefore, s.KindAt(target));
+			Assert.Equal(materialBefore, s.MaterialAt(target));
+			Assert.Empty(sim.DrainEvents());
+		}
 	}
 
 	[Fact]

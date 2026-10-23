@@ -41,10 +41,13 @@ public class CancelDesignationTests
 		Assert.Equal(kindBefore, s.KindAt(target));
 		Assert.Equal(materialBefore, s.MaterialAt(target));
 
-		// Nothing is left to claim, so the goblin stays idle and nothing is ever dug.
+		// Nothing is left to claim, so the goblin may wander but nothing is ever dug.
 		RunTicks(sim, 60);
-		Assert.Equal((byte)GoblinTask.Idle, s.GoblinTask[0]);
+		Assert.Equal(-1, s.GoblinJobTile[0]);
+		Assert.Equal(DesignationKind.None, s.DesignationAt(target));
+		Assert.Equal(0, s.DigProgress[target]);
 		Assert.Equal(kindBefore, s.KindAt(target));
+		Assert.Equal(materialBefore, s.MaterialAt(target));
 		Assert.Empty(sim.DrainEvents());
 	}
 
