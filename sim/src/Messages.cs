@@ -14,6 +14,13 @@ public sealed record SetSpeed(int Speed) : Command;
 /// </summary>
 public sealed record Designate(DesignationKind Kind, int Z, int X0, int Y0, int X1, int Y1) : Command;
 
+/// <summary>
+/// Cancels every Designation in the rectangle from (X0, Y0) to (X1, Y1) on level Z, corners in any order,
+/// clipped to the map. A single click is a 1×1 rectangle. Cancelling a tile mid-dig throws its progress away.
+/// Tiles with no Designation are skipped.
+/// </summary>
+public sealed record CancelDesignation(int Z, int X0, int Y0, int X1, int Y1) : Command;
+
 /// <summary>An output from the sim to Godot.</summary>
 public abstract record SimEvent;
 
