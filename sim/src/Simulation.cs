@@ -88,6 +88,9 @@ public sealed class Simulation
 			case Designate c:
 				_jobs.Designate(State, c);
 				break;
+			case CancelDesignation c:
+				_jobs.Cancel(State, c);
+				break;
 			default:
 				throw new ArgumentException($"Unknown command {command.GetType().Name}.", nameof(command));
 		}

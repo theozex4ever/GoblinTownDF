@@ -24,6 +24,7 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Designation | A player order on tiles: Dig or Dig stairs. |
 | Dig | A designation that turns a Solid tile into Floor. |
 | Dig stairs | A designation that turns a Solid or Floor tile into Stairs. |
+| Cancel designation | The `CancelDesignation` Command: removes Designations from a rectangle of tiles. A tile mid-dig loses its progress and stays as it was. |
 | Job | A unit of work in the global job list (dig, haul, brew, build) that an idle goblin claims. |
 | Wander | What an idle goblin does when it has no reachable Job: after a 3–6 second pause it walks to a random walkable tile within 4 tiles on its own z-level, then pauses again. A goblin mid-walk is Wandering. A reachable Designation cuts it short. |
 | Pile | A floor zone where goblins dump items; counted per resource, not per item. |
