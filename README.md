@@ -1,85 +1,77 @@
 # A Thousand Goblins Deep
 
-A top-down, z-level goblin colony sim inspired by Dwarf Fortress: simpler economy, more chaos, Pratchett-style comedy. Solo project, Godot 4 + C#.
+A top-down, z-level goblin colony sim inspired by Dwarf Fortress. Dig a warren, steal what you need, and survive the heroes who come to clean you out.
 
-**Status:** pre-prototype. Next step is P1 (map and digging). See `docs/design/GDD.md`.
+The economy is small. The goblins have needs, grudges, and opinions. The aim is a colony sim where stories come from the inhabitants: a hungry Grunt picking a fight, a Sneak stealing the Boss's shinies, or a forgotten trap saving the warren.
 
-## Folder structure
+Built solo in Godot 4 and C#, with affectionate, Pratchett-inspired comedy.
 
-```
-a-thousand-goblins-deep/
-├── AGENTS.md              # How agents work on this project (start here)
-├── CLAUDE.md              # Points Claude Code at AGENTS.md
-├── README.md              # This file: overview, setup, skill stack
-├── .mcp.json              # Godot MCP server config
-├── .claude/skills/        # Project-specific skills
-│   ├── sim-architecture/  # Hard rules for the sim core
-│   ├── goblin-voice/      # Tone for all player-facing text
-│   └── fun-check/         # Post-playtest verdict
-├── docs/
-│   ├── design/GDD.md      # Game design doc (source of truth)
-│   ├── GLOSSARY.md        # Domain vocabulary
-│   ├── adr/               # Architecture decision records
-│   ├── agents/            # Config for the engineering skills (issue tracker, labels, domain docs)
-│   └── playtests/         # Fun-check logs
-├── sim/                   # Pure C# simulation (no Godot)
-│   ├── src/
-│   └── tests/
-├── game/                  # Godot project: rendering, input, UI
-└── tools/                 # Scripts, throwaway prototypes
-```
+## The game
 
-## Setup
+The planned core loop is **dig → haul loot to piles → feed and grog the goblins → defend the warren → record the legends → dig deeper**.
 
-1. Install Godot 4 (.NET build) and the .NET SDK. Godot 4.7.2 mono and .NET SDKs 8 and 10 are installed per-user (`~/.local/opt/godot/4.7.2-mono`, `~/.dotnet`). The projects target `net8.0`, pinned by `global.json`.
-2. Install Matt Pocock's skills, then run `setup-matt-pocock-skills` once. This repo uses **GitHub issues** for tickets, so there is nothing to choose; the result is already in `docs/agents/`.
-3. Set `GODOT_PATH` in `.mcp.json` to your Godot **.NET** binary (currently `~/.local/bin/godot-mono`).
-4. Install the recommended skills below.
-5. Start Claude Code in this folder. It reads `CLAUDE.md` → `AGENTS.md`.
-6. Run `tools/check.sh`. It runs the sim tests, builds the Godot C# project, and boots the game headless, failing on any console error.
+- **Build downward.** Carve tunnels and rooms across z-levels, from surface dirt to stone, ore, and the hazards of the Deep. Your layout becomes your defence.
+- **Keep the horde fed.** Manage six resources with short production chains. Raiding and scavenging supply the warren, but stolen loot brings angrier neighbours and stronger invasions.
+- **Manage goblin chaos.** Grub, Grog, and Sleep keep goblins working. Unmet needs and grudges lead to shirking, fights, theft, and fires. The Boss holds things together for as long as their authority lasts.
+- **Be the dungeon.** Heroes arrive looking for shinies and the Boss. Meet them with traps, chokepoints, and Brutes.
+- **Leave a legend.** Deaths, raids, invasions, and disasters become a chronicle of the warren, complete with grand claims and undermining footnotes.
 
-Day to day:
+Goblins are earnest underdogs who take absurd traditions seriously. Failure should have consequences—and leave you with a story worth sharing.
 
-```
-dotnet test sim/tests                          # sim tests
-godot-mono --headless --path game --build-solutions --quit   # build the game's C#
-godot-mono --path game                         # run the game
+## Development status
+
+**Early grey-box prototype, working toward P1: map and digging.** The current build has a 32×32 map across three z-levels with one Grunt who digs designated tunnels and stairs and wanders when idle. You can switch levels, pause, and change speed. The wider colony systems are still to come.
+
+The first prototype asks: **is it fun to dig a warren and watch goblins mess it up?** It will grow through six playable milestones:
+
+1. **P1 — Map and digging:** designate tunnels and stairs; one goblin digs them out.
+2. **P2 — Hauling and piles:** five goblins carry dug material to piles.
+3. **P3 — Needs:** food, drink, sleep, fungus farming, and a Brewery.
+4. **P4 — Chaos:** unmet needs lead to shirking, fights, and theft.
+5. **P5 — One invasion:** three heroes, one trap type, and Brutes fighting back.
+6. **P6 — Legends:** a running event log for deaths, invasions, and chaos.
+
+The focus is on testing the fun before adding art or expanding the systems. See the [game design document](docs/design/GDD.md) for the full design and playtest questions.
+
+## Run locally
+
+Use Godot's **.NET build** and the .NET 8 SDK. The Godot C# project currently uses `Godot.NET.Sdk/4.7.2`; [global.json](global.json) selects .NET SDK 8.0.400 or a later 8.0 feature band.
+
+From the repository root, with `dotnet` and `godot-mono` on your `PATH`:
+
+```bash
+godot-mono --headless --path game --build-solutions --quit
+godot-mono --path game
 ```
 
-## Agent skill stack
+You can also open `game/project.godot` in the Godot .NET editor and build and run it there.
 
-### Recommended (install these)
+Current controls: **Space** pauses; **1**, **2**, and **4** select speed; **,** and **.** move up and down a z-level.
 
-| Skill | Source | What it does here | Notes |
-| --- | --- | --- | --- |
-| Matt Pocock's skills | [mattpocock/skills](https://github.com/mattpocock/skills) | Planning, tickets, TDD, review, PRs | The backbone of the workflow in `AGENTS.md`. Most useful: `grill-with-docs`, `domain-modeling`, `to-tickets`, `tdd`, `prototype`, `code-review`, `codebase-design`. |
-| Godot MCP | [Coding-Solo/godot-mcp](https://github.com/Coding-Solo/godot-mcp) | Agent launches the editor, runs the game, reads debug output | MCP server, not a skill. Biggest single win: the agent sees its own runtime errors. Configured in `.mcp.json`. |
-| Godot skill | [Randroids-Dojo/Godot-Claude-Skills](https://github.com/Randroids-Dojo/Godot-Claude-Skills) | Godot conventions, GdUnit4 tests, headless runs, PlayGodot automation | Use for the `game/` side. The sim is tested with plain C# tests instead. |
-| game-ai | [gamedev-skills/awesome-gamedev-agent-skills](https://github.com/gamedev-skills/awesome-gamedev-agent-skills) | State machines, behavior trees, steering, A* (engine-neutral) | Install this one skill, not the full 70-skill set. Feeds the goblin brain design pass. |
-| sim-architecture | `.claude/skills/` (this repo) | Hard rules: headless sim, data in arrays, seeded RNG, fixed ticks | Written for this project. Edit it when an ADR changes the rules. |
-| goblin-voice | `.claude/skills/` (this repo) | Pratchett tone for event lines, legends, names | Written for this project. |
-| fun-check | `.claude/skills/` (this repo) | Turns a playtest into a logged go / tune / rethink verdict | Written for this project. Run after every milestone. |
+Press **D** for Dig or **S** for Dig stairs, then click a tile or left-drag a rectangle to designate it. Right-drag cancels designations. **Escape** clears the selected tool and any active drag.
 
-### Worth cherry-picking later
+## Development
 
-| Skill | Source | When to reach for it | Notes |
-| --- | --- | --- | --- |
-| Godot performance, pathfinding, save/load, procedural generation | [thedivergentai/gd-agentic-skills](https://github.com/thedivergentai/gd-agentic-skills) ([listing](https://claudemarketplaces.com/skills/thedivergentai/gd-agentic-skills/godot-project-foundations)) | When scaling past 30 goblins, or building saves and world-gen | 51 skills; pick 3–4. Many assume node-based Godot patterns, so check them against `sim-architecture`. |
-| Godot economy and inventory | [thedivergentai/gd-agentic-skills](https://claudemarketplaces.com/skills/thedivergentai/gd-agentic-skills/godot-inventory-system) | If piles or crafting grow beyond six resources | Probably overkill for the planned economy. |
-| Procedural generation, performance (router set) | [gamedev-skills/awesome-gamedev-agent-skills](https://github.com/gamedev-skills/awesome-gamedev-agent-skills) | World generation, profiling | A router auto-loads skills by engine and task; install only what you need. |
+The simulation is a pure C# library that runs without Godot. Godot renders the world and sends player commands to it. Fixed ticks and a seeded random number generator keep runs reproducible.
 
-### Reference only (read for patterns, don't install)
+- [`sim/src/`](sim/src/) — simulation state and logic.
+- [`sim/tests/`](sim/tests/) — headless simulation tests using xUnit.
+- [`game/`](game/) — Godot rendering, input, and UI.
+- [`docs/design/GDD.md`](docs/design/GDD.md) — game design and prototype milestones.
+- [`docs/GLOSSARY.md`](docs/GLOSSARY.md) — game and simulation vocabulary.
+- [`docs/adr/`](docs/adr/) — architecture decisions.
+- [`docs/playtests/`](docs/playtests/) — playtest records.
 
-| Skill | Source | Why it's relevant | Notes |
-| --- | --- | --- | --- |
-| unity-ecs-patterns | [wshobson/agents](https://supercode.sh/en/skills/wshobson/agents/unity-ecs-patterns) | Data-oriented design for thousands of entities | Unity-specific. Good ideas for the array-based goblin layout. |
-| bitecs | [kadajett/bitecs-agent-skill](https://www.skills.sh/kadajett/bitecs-agent-skill/bitecs) | Structure-of-arrays component layouts, ECS serialisation | TypeScript-specific. |
+Run the simulation tests with:
 
-### Skipped
+```bash
+dotnet test sim/tests
+```
 
-| Skill | Source | Why skipped |
-| --- | --- | --- |
-| Claude-Code-Game-Studios | [pixel-cellar (overview)](https://www.sourcepulse.org/projects/31857564) | A simulated multi-agent studio (37 skills, hooks, rules). Too heavy for a solo prototype and overlaps with Pocock's workflow. |
-| Generic game-design skills | [sickn33/agentic-awesome-skills](https://claudeskills.info/zh/skills/sickn33/agentic-awesome-skills/game-design/) | Core-loop and GDD basics the design doc already covers. |
+For the full local check—simulation tests, Godot C# build, a headless boot that checks for console errors, and selection input checks—run:
 
-Skill quality varies a lot across registries. Before installing any third-party skill, read its `SKILL.md`, and vet any package it pulls in.
+```bash
+bash tools/check.sh
+```
+
+If your Godot executable has another name or location, set `GODOT_PATH` when running the check script.
