@@ -38,10 +38,10 @@ public static class SimJson
 		{
 			var designation = s.Designations[tile];
 			Require(Enum.IsDefined((DesignationKind)designation), $"Unknown designation {designation}.");
-			if (designation == (byte)DesignationKind.DigStairs)
+			if (designation != (byte)DesignationKind.None)
 			{
 				var digTicks = MaterialRules.DigTicks(s.MaterialAt(tile));
-				Require(TileRules.CanDigStairs(s.KindAt(tile)) && digTicks > 0,
+				Require(TileRules.CanDesignate((DesignationKind)designation, s.KindAt(tile)) && digTicks > 0,
 					$"Tile {tile} is designated but cannot be dug.");
 				Require(s.DigProgress![tile] < digTicks, $"Tile {tile} has dig progress {s.DigProgress![tile]}, past its dig time.");
 			}
@@ -77,7 +77,7 @@ public static class SimJson
 			Require(job >= 0 && job < tiles && s.DesignationAt(job) != DesignationKind.None,
 				$"Goblin {g} works tile {job}, which is not designated.");
 			if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Digging)
-				Require(JobSystem.CanDigFrom(s, s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]), job),
+				Require(JobSystem.CanDigFrom(s, s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]), job, s.DesignationAt(job)),
 					$"Goblin {g} is digging tile {job} from where it cannot dig it.");
 			for (var other = 0; other < g; other++)
 				Require(s.GoblinJobTile[other] != job, $"Goblins {other} and {g} both claim tile {job}.");

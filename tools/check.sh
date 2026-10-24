@@ -22,3 +22,7 @@ if grep -qE "ERROR|SCRIPT ERROR|Unhandled exception" <<<"$OUT"; then
 	echo "console errors found" >&2
 	exit 1
 fi
+
+# Exercise the bridge with real Godot input events; the scene exits nonzero on a failed check.
+echo "== selection input checks"
+"$GODOT" --headless --path "$ROOT/game" res://tests/SelectionInputChecks.tscn

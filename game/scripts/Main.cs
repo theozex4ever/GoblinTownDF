@@ -6,14 +6,16 @@ namespace AThousandGoblinsDeep;
 
 public partial class Main : Node
 {
-	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. S picks stairs; click a spot and the Grunt takes it personally. Right-click unsays it.";
+	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. D digs, S makes stairs; drag a box. Right-drag unsays it. The Grunt takes it personally.";
 
 	Simulation _sim = null!;
 	WarrenView _view = null!;
 	Label _depthLabel = null!;
+	SelectionGesture _selection = null!;
+	SelectionGesture _cancellation = null!;
 	int _viewZ;
-	// The Dig stairs tool is on until Escape or a second S puts it away.
-	bool _stairsTool;
+	// The tool stays picked until Escape or its own key puts it away.
+	DesignationKind _tool = DesignationKind.None;
 
 	public override void _Ready()
 	{
@@ -23,6 +25,18 @@ public partial class Main : Node
 
 		_view = new WarrenView { Sim = _sim, Position = new Vector2(288, 36) };
 		AddChild(_view);
+
+		var s = _sim.State;
+		_selection = new SelectionGesture(MouseButton.Left, new Vector2I(s.Width, s.Height), CellAt);
+		_cancellation = new SelectionGesture(MouseButton.Right, new Vector2I(s.Width, s.Height), CellAt);
+		_selection.Selected += OnSelected;
+		_cancellation.Selected += (from, to) =>
+		{
+			_sim.Apply(new CancelDesignation(_viewZ, from.X, from.Y, to.X, to.Y));
+			_view.QueueRedraw();
+		};
+		_selection.Changed += UpdateSelection;
+		_cancellation.Changed += UpdateSelection;
 
 		_depthLabel = new Label { Position = new Vector2(288, 8) };
 		AddChild(_depthLabel);
@@ -49,35 +63,52 @@ public partial class Main : Node
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
-		if (@event is not InputEventMouseButton { Pressed: true } click)
-			return;
-
-		// Right-click cancels whatever tool is up; left-click designates only while the stairs tool is.
-		if (click.ButtonIndex == MouseButton.Right)
+		// Only one button owns a drag; cancellation is available with no tool picked.
+		if (_selection.Dragging)
 		{
-			if (!TryCellAt(click.Position, out var cx, out var cy))
-				return;
-			_sim.Apply(new CancelDesignation(_viewZ, cx, cy, cx, cy));
+			if (_selection.Handle(@event))
+				GetViewport().SetInputAsHandled();
 		}
-		else if (click.ButtonIndex == MouseButton.Left && _stairsTool)
+		else if (_cancellation.Dragging)
 		{
-			if (!TryCellAt(click.Position, out var cx, out var cy))
-				return;
-			_sim.Apply(new Designate(DesignationKind.DigStairs, _viewZ, cx, cy, cx, cy));
+			if (_cancellation.Handle(@event))
+				GetViewport().SetInputAsHandled();
 		}
-		else
-			return;
-
-		_view.QueueRedraw();
-		GetViewport().SetInputAsHandled();
+		else if (_cancellation.Handle(@event) || (_tool != DesignationKind.None && _selection.Handle(@event)))
+			GetViewport().SetInputAsHandled();
 	}
 
-	bool TryCellAt(Vector2 position, out int x, out int y)
+	void UpdateSelection()
+	{
+		_view.Selection = _cancellation.Dragging ? _cancellation.Rectangle
+			: _selection.Dragging ? _selection.Rectangle : null;
+		_view.QueueRedraw();
+	}
+
+	void CancelSelection()
+	{
+		_selection.Cancel();
+		_cancellation.Cancel();
+	}
+
+	Vector2I CellAt(Vector2 position)
 	{
 		var cell = (position - _view.Position) / WarrenView.CellSize;
-		x = Mathf.FloorToInt(cell.X);
-		y = Mathf.FloorToInt(cell.Y);
-		return x >= 0 && y >= 0 && x < _sim.State.Width && y < _sim.State.Height;
+		return new Vector2I(Mathf.FloorToInt(cell.X), Mathf.FloorToInt(cell.Y));
+	}
+
+	// The sim clips the rectangle to the map, so a drag that ran off the edge still lands.
+	void OnSelected(Vector2I from, Vector2I to)
+	{
+		_sim.Apply(new Designate(_tool, _viewZ, from.X, from.Y, to.X, to.Y));
+		_view.QueueRedraw();
+	}
+
+	void PickTool(DesignationKind tool)
+	{
+		CancelSelection();
+		_tool = _tool == tool ? DesignationKind.None : tool;
+		UpdateDepthLabel();
 	}
 
 	public override void _UnhandledKeyInput(InputEvent @event)
@@ -91,8 +122,9 @@ public partial class Main : Node
 			case Key.Key1 or Key.Kp1: _sim.Apply(new SetSpeed(1)); break;
 			case Key.Key2 or Key.Kp2: _sim.Apply(new SetSpeed(2)); break;
 			case Key.Key4 or Key.Kp4: _sim.Apply(new SetSpeed(4)); break;
-			case Key.S: _stairsTool = !_stairsTool; UpdateDepthLabel(); break;
-			case Key.Escape: _stairsTool = false; UpdateDepthLabel(); break;
+			case Key.D: PickTool(DesignationKind.Dig); break;
+			case Key.S: PickTool(DesignationKind.DigStairs); break;
+			case Key.Escape: CancelSelection(); _tool = DesignationKind.None; UpdateDepthLabel(); break;
 			case Key.Comma: ChangeLevel(-1); break;
 			case Key.Period: ChangeLevel(1); break;
 			default: return;
@@ -102,6 +134,8 @@ public partial class Main : Node
 
 	void ChangeLevel(int dz)
 	{
+		// A drag belongs to the level it started on.
+		CancelSelection();
 		_viewZ = Math.Clamp(_viewZ + dz, 0, _sim.State.Depth - 1);
 		Refresh();
 	}
@@ -117,7 +151,12 @@ public partial class Main : Node
 	{
 		var s = _sim.State;
 		var pace = s.Paused ? "paused" : $"{s.Speed}×";
-		var tool = _stairsTool ? " · stairs" : "";
+		var tool = _tool switch
+		{
+			DesignationKind.Dig => " · dig",
+			DesignationKind.DigStairs => " · stairs",
+			_ => "",
+		};
 		_depthLabel.Text = $"Depth {_viewZ} · {BandName(_viewZ)} · {pace}{tool}";
 	}
 

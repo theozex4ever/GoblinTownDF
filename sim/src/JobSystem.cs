@@ -24,8 +24,8 @@ public sealed class JobSystem
 	/// <summary>Designates the rectangle, skipping tiles that cannot take it or are already designated.</summary>
 	public void Designate(SimState s, Designate command)
 	{
-		if (command.Kind != DesignationKind.DigStairs)
-			throw new ArgumentOutOfRangeException(nameof(command), command.Kind, "Only Dig stairs can be designated.");
+		if (command.Kind is not (DesignationKind.Dig or DesignationKind.DigStairs))
+			throw new ArgumentOutOfRangeException(nameof(command), command.Kind, "Only Dig and Dig stairs can be designated.");
 		if (!TryClip(s, command.Z, command.X0, command.Y0, command.X1, command.Y1, out var x0, out var y0, out var x1, out var y1))
 			return;
 		var designated = false;
@@ -34,7 +34,7 @@ public sealed class JobSystem
 		{
 			var tile = s.TileIndex(x, y, command.Z);
 			if (s.DesignationAt(tile) == DesignationKind.None
-				&& TileRules.CanDigStairs(s.KindAt(tile))
+				&& TileRules.CanDesignate(command.Kind, s.KindAt(tile))
 				&& MaterialRules.DigTicks(s.MaterialAt(tile)) > 0)
 			{
 				s.Designations[tile] = (byte)command.Kind;
@@ -205,7 +205,7 @@ public sealed class JobSystem
 		if (progress < MaterialRules.DigTicks(material))
 			return;
 
-		s.TileKinds[job] = (byte)TileKind.Stairs;
+		s.TileKinds[job] = (byte)TileRules.DugKind(s.DesignationAt(job));
 		s.Designations[job] = (byte)DesignationKind.None;
 		s.DigProgress[job] = 0;
 		var layer = s.Width * s.Height;
@@ -231,9 +231,9 @@ public sealed class JobSystem
 
 	/// <summary>
 	/// Whether a goblin on <paramref name="stand"/> can dig <paramref name="tile"/>: from a walkable
-	/// orthogonal neighbour on its level, or from Stairs directly above or below it.
+	/// orthogonal neighbour on its level, or, for Dig stairs only, from Stairs directly above or below it.
 	/// </summary>
-	public static bool CanDigFrom(SimState s, int stand, int tile)
+	public static bool CanDigFrom(SimState s, int stand, int tile, DesignationKind designation)
 	{
 		var layer = s.Width * s.Height;
 		var dx = Math.Abs(stand % s.Width - tile % s.Width);
@@ -242,28 +242,29 @@ public sealed class JobSystem
 		var kind = s.KindAt(stand);
 		return dz == 0
 			? dx + dy == 1 && TileRules.IsWalkable(kind)
-			: dz == 1 && dx == 0 && dy == 0 && kind == TileKind.Stairs;
+			: designation == DesignationKind.DigStairs && dz == 1 && dx == 0 && dy == 0 && kind == TileKind.Stairs;
 	}
 
 	/// <summary>Appends the tiles a goblin can dig <paramref name="tile"/> from (see <see cref="CanDigFrom"/>).</summary>
 	void AddStandingTiles(SimState s, int tile)
 	{
+		var designation = s.DesignationAt(tile);
 		var width = s.Width;
 		var layer = s.Width * s.Height;
 		var x = tile % width;
 		var y = tile / width % s.Height;
 		var z = tile / layer;
-		if (x > 0) AddIfStanding(s, tile - 1, tile);
-		if (x < width - 1) AddIfStanding(s, tile + 1, tile);
-		if (y > 0) AddIfStanding(s, tile - width, tile);
-		if (y < s.Height - 1) AddIfStanding(s, tile + width, tile);
-		if (z > 0) AddIfStanding(s, tile - layer, tile);
-		if (z < s.Depth - 1) AddIfStanding(s, tile + layer, tile);
+		if (x > 0) AddIfStanding(s, tile - 1, tile, designation);
+		if (x < width - 1) AddIfStanding(s, tile + 1, tile, designation);
+		if (y > 0) AddIfStanding(s, tile - width, tile, designation);
+		if (y < s.Height - 1) AddIfStanding(s, tile + width, tile, designation);
+		if (z > 0) AddIfStanding(s, tile - layer, tile, designation);
+		if (z < s.Depth - 1) AddIfStanding(s, tile + layer, tile, designation);
 	}
 
-	void AddIfStanding(SimState s, int stand, int job)
+	void AddIfStanding(SimState s, int stand, int job, DesignationKind designation)
 	{
-		if (CanDigFrom(s, stand, job))
+		if (CanDigFrom(s, stand, job, designation))
 		{
 			_goals.Add(stand);
 			_goalJobs.Add(job);

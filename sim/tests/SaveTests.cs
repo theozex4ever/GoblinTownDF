@@ -140,6 +140,30 @@ public class SaveTests
 	}
 
 	[Fact]
+	public void A_Dig_designation_round_trips_but_is_rejected_on_a_tile_that_is_not_Solid()
+	{
+		var sim = Simulation.NewWorld(seed: 42);
+		var s = sim.State;
+		var solid = s.TileIndex(1, 1, 1);
+		s.Designations[solid] = (byte)DesignationKind.Dig;
+		AssertIdentical(sim, SimJson.Deserialize(SimJson.Serialize(sim)));
+
+		var onFloor = Simulation.NewWorld(seed: 42);
+		onFloor.State.Designations[onFloor.State.TileIndex(1, 1, 0)] = (byte)DesignationKind.Dig;
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(onFloor)));
+	}
+
+	[Fact]
+	public void A_goblin_digging_a_Dig_tile_from_Stairs_above_is_rejected()
+	{
+		var sim = DiggingAt(0, 5, 0, jobZ: 1);
+		sim.State.TileKinds[sim.State.TileIndex(0, 5, 0)] = (byte)TileKind.Stairs;
+		sim.State.Designations[sim.State.TileIndex(0, 5, 1)] = (byte)DesignationKind.Dig;
+
+		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));
+	}
+
+	[Fact]
 	public void A_goblin_job_that_points_nowhere_is_rejected()
 	{
 		var offMap = Simulation.NewWorld(seed: 42);
