@@ -12,6 +12,13 @@ public interface IPathfinder
 	/// tiles to step onto, in order, excluding the start (empty when the start is itself a goal).
 	/// </summary>
 	bool TryFindPath(SimState state, int start, ReadOnlySpan<int> goals, List<int> path, out int goalIndex);
+
+	/// <summary>
+	/// Sets <paramref name="reached"/>[tile] to 1 for every tile a goblin standing on any of
+	/// <paramref name="starts"/> can walk to (the starts included), and to 0 for every other tile.
+	/// <paramref name="reached"/> must hold one entry per tile.
+	/// </summary>
+	void FloodReachable(SimState state, ReadOnlySpan<int> starts, byte[] reached);
 }
 
 /// <summary>
@@ -33,21 +40,12 @@ public sealed class GridPathfinder : IPathfinder
 		if (goals.IsEmpty)
 			return false;
 
-		var tiles = state.TileKinds.Length;
-		if (_parent.Length != tiles)
-		{
-			_parent = new int[tiles];
-			_distance = new int[tiles];
-			_goalRank = new int[tiles];
-			_queue = new int[tiles];
-		}
+		EnsureScratch(state.TileKinds.Length);
 		Array.Fill(_distance, -1);
 		Array.Fill(_goalRank, -1);
 		for (var i = goals.Length - 1; i >= 0; i--)
 			_goalRank[goals[i]] = i;
 
-		var width = state.Width;
-		var layer = state.Width * state.Height;
 		var head = 0;
 		var tail = 0;
 		_queue[tail++] = start;
@@ -72,20 +70,7 @@ public sealed class GridPathfinder : IPathfinder
 				bestDistance = distance;
 			}
 
-			var x = tile % width;
-			var y = tile / width % state.Height;
-			var z = tile / layer;
-			if (x > 0) Visit(state, tile - 1, tile, distance, ref tail);
-			if (x < width - 1) Visit(state, tile + 1, tile, distance, ref tail);
-			if (y > 0) Visit(state, tile - width, tile, distance, ref tail);
-			if (y < state.Height - 1) Visit(state, tile + width, tile, distance, ref tail);
-			if (state.KindAt(tile) == TileKind.Stairs)
-			{
-				if (z > 0 && state.KindAt(tile - layer) == TileKind.Stairs)
-					Visit(state, tile - layer, tile, distance, ref tail);
-				if (z < state.Depth - 1 && state.KindAt(tile + layer) == TileKind.Stairs)
-					Visit(state, tile + layer, tile, distance, ref tail);
-			}
+			Expand(state, tile, distance, ref tail);
 		}
 
 		if (bestTile < 0)
@@ -96,6 +81,62 @@ public sealed class GridPathfinder : IPathfinder
 		path.Reverse();
 		goalIndex = bestRank;
 		return true;
+	}
+
+	public void FloodReachable(SimState state, ReadOnlySpan<int> starts, byte[] reached)
+	{
+		var tiles = state.TileKinds.Length;
+		EnsureScratch(tiles);
+		Array.Fill(_distance, -1);
+
+		var head = 0;
+		var tail = 0;
+		foreach (var start in starts)
+		{
+			if (_distance[start] >= 0)
+				continue;
+			_queue[tail++] = start;
+			_distance[start] = 0;
+		}
+		while (head < tail)
+		{
+			var tile = _queue[head++];
+			Expand(state, tile, _distance[tile], ref tail);
+		}
+
+		for (var tile = 0; tile < tiles; tile++)
+			reached[tile] = (byte)(_distance[tile] >= 0 ? 1 : 0);
+	}
+
+	void EnsureScratch(int tiles)
+	{
+		if (_parent.Length == tiles)
+			return;
+		_parent = new int[tiles];
+		_distance = new int[tiles];
+		_goalRank = new int[tiles];
+		_queue = new int[tiles];
+	}
+
+	/// <summary>Queues every tile one step from <paramref name="tile"/> that has not been reached yet.</summary>
+	void Expand(SimState state, int tile, int distance, ref int tail)
+	{
+		var width = state.Width;
+		var layer = state.Width * state.Height;
+		var x = tile % width;
+		var y = tile / width % state.Height;
+		var z = tile / layer;
+		if (x > 0) Visit(state, tile - 1, tile, distance, ref tail);
+		if (x < width - 1) Visit(state, tile + 1, tile, distance, ref tail);
+		if (y > 0) Visit(state, tile - width, tile, distance, ref tail);
+		if (y < state.Height - 1) Visit(state, tile + width, tile, distance, ref tail);
+		if (state.KindAt(tile) == TileKind.Stairs)
+		{
+			if (z > 0 && state.KindAt(tile - layer) == TileKind.Stairs)
+				Visit(state, tile - layer, tile, distance, ref tail);
+			if (z < state.Depth - 1 && state.KindAt(tile + layer) == TileKind.Stairs)
+				Visit(state, tile + layer, tile, distance, ref tail);
+		}
 	}
 
 	void Visit(SimState state, int next, int from, int distance, ref int tail)

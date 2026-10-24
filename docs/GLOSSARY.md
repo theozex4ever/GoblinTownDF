@@ -24,6 +24,7 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Designation | A player order on tiles: Dig or Dig stairs. |
 | Dig | A designation that turns a Solid tile into Floor. |
 | Dig stairs | A designation that turns a Solid or Floor tile into Stairs. |
+| Reachable | A Designation is reachable when some goblin can path to a tile it can dig from. An unreachable Designation waits: it stays designated, is skipped when goblins claim a Job, and shows greyed out until a dug tile opens a path. |
 | Selection | A click-drag on the viewed level that picks a rectangle of tiles; a single click is a 1×1 rectangle. It does not know what the active tool will do with it. |
 | Tool | The action a selection applies, picked by a key: Dig or Dig stairs. |
 | Cancel designation | The `CancelDesignation` Command: removes Designations from a rectangle of tiles. A tile mid-dig loses its progress and stays as it was. |

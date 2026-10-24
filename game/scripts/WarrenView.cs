@@ -15,6 +15,7 @@ public partial class WarrenView : Node2D
 	static readonly Color StairsColor = new(0.78f, 0.74f, 0.58f);
 	static readonly Color StairsMarkColor = new(0.25f, 0.22f, 0.15f);
 	static readonly Color DesignationColor = new(1f, 0.85f, 0.2f);
+	static readonly Color UnreachableColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color ProgressColor = new(1f, 0.85f, 0.2f, 0.55f);
 	static readonly Color SelectionColor = new(1f, 1f, 1f, 0.9f);
 	static readonly Color SelectionFillColor = new(1f, 1f, 1f, 0.15f);
@@ -66,7 +67,8 @@ public partial class WarrenView : Node2D
 				var height = rect.Size.Y * fill;
 				DrawRect(new Rect2(rect.Position.X, rect.End.Y - height, rect.Size.X, height), ProgressColor);
 			}
-			DrawRect(rect.Grow(-1), DesignationColor, filled: false, width: 2);
+			// A Designation no goblin can reach yet waits greyed out, and lights up when a dug tile opens a path.
+			DrawRect(rect.Grow(-1), s.IsReachable(tile) ? DesignationColor : UnreachableColor, filled: false, width: 2);
 		}
 
 		for (var g = 0; g < s.GoblinCount; g++)

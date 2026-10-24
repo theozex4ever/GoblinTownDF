@@ -232,6 +232,7 @@ public class SaveTests
 	{
 		var sim = DiggingAt(0, 5, 0, jobZ: 1);
 		sim.State.TileKinds[sim.State.TileIndex(0, 5, 0)] = (byte)TileKind.Stairs;
+		sim.RecheckReachability();
 
 		AssertIdentical(sim, SimJson.Deserialize(SimJson.Serialize(sim)));
 	}
@@ -246,6 +247,7 @@ public class SaveTests
 		(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (x, y, z);
 		s.GoblinTask[0] = (byte)GoblinTask.Digging;
 		s.GoblinJobTile[0] = job;
+		sim.RecheckReachability();
 		return sim;
 	}
 
@@ -353,6 +355,7 @@ public class SaveTests
 		Assert.Equal(e.TileMaterials, a.TileMaterials);
 		Assert.Equal(e.Designations, a.Designations);
 		Assert.Equal(e.DigProgress, a.DigProgress);
+		Assert.Equal(e.Reachable, a.Reachable);
 		Assert.Equal(e.GoblinCount, a.GoblinCount);
 		Assert.Equal(e.GoblinX, a.GoblinX);
 		Assert.Equal(e.GoblinY, a.GoblinY);
