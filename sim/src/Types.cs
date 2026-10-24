@@ -24,6 +24,7 @@ public enum DesignationKind : byte
 {
 	None,
 	DigStairs,
+	Dig,
 }
 
 public enum GoblinTask : byte
