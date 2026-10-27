@@ -23,11 +23,11 @@ public partial class ArchitectureTests
 	const string TaskFields = "GoblinTask|GoblinJobTile|GoblinWanderTile|GoblinWanderTicks|GoblinStepTicks";
 
 	// `x.Field[i] = v`, `+=`, `++`, `--` on an element, and Array.Fill/Clear/Copy or `x.Field = ...` on a whole array.
-	// `==` is a comparison, not an assignment.
-	[GeneratedRegex($@"\.(?<field>{TaskFields})\s*\[[^\]]*\]\s*(=(?!=)|[-+*/%&|^]=|\+\+|--)"
+	// `==` is a comparison and `=>` a lambda, not assignments.
+	[GeneratedRegex($@"\.(?<field>{TaskFields})\s*\[[^\]]*\]\s*(=(?![=>])|[-+*/%&|^]=|\+\+|--)"
 		+ $@"|(\+\+|--)\s*\w+\.(?<field>{TaskFields})\s*\["
 		+ $@"|\bArray\.(Fill|Clear|Copy|Reverse|Sort)\s*\(\s*\w+\.(?<field>{TaskFields})\b"
-		+ $@"|\.(?<field>{TaskFields})\s*=(?!=)")]
+		+ $@"|\.(?<field>{TaskFields})\s*=(?![=>])")]
 	private static partial Regex TaskFieldWrite();
 
 	// Fields each file may write besides GoblinTasks.cs: JobSystem's movement counts step ticks,
