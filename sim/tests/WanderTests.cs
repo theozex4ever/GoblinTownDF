@@ -1,19 +1,11 @@
 using Goblins.Sim;
 using Xunit;
+using static Goblins.Sim.Tests.SimTestHelpers;
 
 namespace Goblins.Sim.Tests;
 
 public class WanderTests
 {
-	// One tick of wall time at 1×.
-	const double OneTick = 0.1;
-
-	static void RunTicks(Simulation sim, int ticks)
-	{
-		for (var i = 0; i < ticks; i++)
-			Assert.Equal(1, sim.Advance(OneTick));
-	}
-
 	// The goblin's (x, y, z) after each of `ticks` ticks.
 	static List<(int X, int Y, int Z)> Path(int seed, int ticks)
 	{
@@ -216,7 +208,7 @@ public class WanderTests
 	{
 		var original = Simulation.NewWorld(seed: 5);
 		RunTicks(original, 10);
-		Assert.InRange(original.State.GoblinWanderTicks[0], 1, JobSystem.MaxWanderPauseTicks);
+		Assert.InRange(original.State.GoblinWanderTicks[0], 1, GoblinTasks.MaxWanderPauseTicks);
 		var restored = SimJson.Deserialize(SimJson.Serialize(original));
 
 		RunTicks(original, 400);
@@ -276,7 +268,7 @@ public class WanderTests
 		Assert.Throws<System.Text.Json.JsonException>(() => SimJson.Deserialize(SimJson.Serialize(withTarget)));
 
 		var tooLong = Simulation.NewWorld(seed: 5);
-		tooLong.State.GoblinWanderTicks[0] = JobSystem.MaxWanderPauseTicks + 1;
+		tooLong.State.GoblinWanderTicks[0] = GoblinTasks.MaxWanderPauseTicks + 1;
 		Assert.Throws<System.Text.Json.JsonException>(() => SimJson.Deserialize(SimJson.Serialize(tooLong)));
 	}
 

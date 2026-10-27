@@ -1,17 +1,12 @@
 using Goblins.Sim;
 using Xunit;
+using static Goblins.Sim.Tests.SimTestHelpers;
 
 namespace Goblins.Sim.Tests;
 
 public class StairsDownTests
 {
 	const double OneTick = 0.1;
-
-	static void RunTicks(Simulation sim, int ticks)
-	{
-		for (var i = 0; i < ticks; i++)
-			Assert.Equal(1, sim.Advance(OneTick));
-	}
 
 	// Runs until the goblin has nothing left to do, so a test does not hard-code walk times.
 	static void RunUntilIdle(Simulation sim, int limit = 500)

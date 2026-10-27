@@ -1,5 +1,6 @@
 using Goblins.Sim;
 using Xunit;
+using static Goblins.Sim.Tests.SimTestHelpers;
 
 namespace Goblins.Sim.Tests;
 
@@ -7,12 +8,6 @@ public class ReachabilityTests
 {
 	// One tick of wall time at 1×.
 	const double OneTick = 0.1;
-
-	static void RunTicks(Simulation sim, int ticks)
-	{
-		for (var i = 0; i < ticks; i++)
-			Assert.Equal(1, sim.Advance(OneTick));
-	}
 
 	static Designate DigStairsAt(int x, int y, int z) => new(DesignationKind.DigStairs, z, x, y, x, y);
 

@@ -16,6 +16,22 @@ public static class TileRules
 	/// <summary>What a tile becomes once the designation is dug out.</summary>
 	public static TileKind DugKind(DesignationKind designation) =>
 		designation == DesignationKind.Dig ? TileKind.Floor : TileKind.Stairs;
+
+	/// <summary>
+	/// Whether a goblin on <paramref name="stand"/> can dig <paramref name="tile"/>: from a walkable
+	/// orthogonal neighbour on its level, or, for Dig stairs only, from Stairs directly above or below it.
+	/// </summary>
+	public static bool CanDigFrom(SimState s, int stand, int tile, DesignationKind designation)
+	{
+		var layer = s.Width * s.Height;
+		var dx = Math.Abs(stand % s.Width - tile % s.Width);
+		var dy = Math.Abs(stand / s.Width % s.Height - tile / s.Width % s.Height);
+		var dz = Math.Abs(stand / layer - tile / layer);
+		var kind = s.KindAt(stand);
+		return dz == 0
+			? dx + dy == 1 && IsWalkable(kind)
+			: designation == DesignationKind.DigStairs && dz == 1 && dx == 0 && dy == 0 && kind == TileKind.Stairs;
+	}
 }
 
 /// <summary>Per-material numbers. Dig logic reads them from here and never hard-codes them.</summary>
