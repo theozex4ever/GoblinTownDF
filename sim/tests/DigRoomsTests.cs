@@ -1,19 +1,11 @@
 using Goblins.Sim;
 using Xunit;
+using static Goblins.Sim.Tests.SimTestHelpers;
 
 namespace Goblins.Sim.Tests;
 
 public class DigRoomsTests
 {
-	// One tick of wall time at 1×.
-	const double OneTick = 0.1;
-
-	static void RunTicks(Simulation sim, int ticks)
-	{
-		for (var i = 0; i < ticks; i++)
-			Assert.Equal(1, sim.Advance(OneTick));
-	}
-
 	static Designate DigRect(int z, int x0, int y0, int x1, int y1) => new(DesignationKind.Dig, z, x0, y0, x1, y1);
 
 	// A stair shaft at (x, y) linking z0 and z1, with the Grunt standing on its z1 end.

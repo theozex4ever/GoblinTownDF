@@ -36,14 +36,21 @@ public sealed class SimState
 	public int[] GoblinY { get; set; } = new int[MaxGoblins];
 	public int[] GoblinZ { get; set; } = new int[MaxGoblins];
 	public byte[] GoblinRole { get; set; } = new byte[MaxGoblins];
+	/// <summary>A <see cref="Goblins.Sim.GoblinTask"/> per goblin. Change through <see cref="GoblinTasks"/> only.</summary>
 	public byte[] GoblinTask { get; set; } = new byte[MaxGoblins];
-	// The designated tile a goblin has claimed, or -1 while it has none.
+	/// <summary>The designated tile a goblin has claimed, or -1 while it has none. Change through <see cref="GoblinTasks"/> only.</summary>
 	public int[] GoblinJobTile { get; set; } = NoJobs();
-	// Ticks spent on the current step of a walk.
+	/// <summary>
+	/// Ticks spent on the current step of a walk. Change through <see cref="GoblinTasks"/> only; the one
+	/// exception is <see cref="JobSystem"/>'s movement, which counts the ticks and resets them after each step.
+	/// </summary>
 	public byte[] GoblinStepTicks { get; set; } = new byte[MaxGoblins];
-	// The tile a wandering goblin is walking to, or -1 while it is not wandering.
+	/// <summary>The tile a wandering goblin is walking to, or -1 while it is not wandering. Change through <see cref="GoblinTasks"/> only.</summary>
 	public int[] GoblinWanderTile { get; set; } = NoJobs();
-	// Ticks an idle goblin still pauses before it wanders; 0 until the pause is drawn from the Rng.
+	/// <summary>
+	/// Ticks an idle goblin still pauses before it wanders; 0 until the pause is drawn from the Rng.
+	/// Change through <see cref="GoblinTasks"/> only.
+	/// </summary>
 	public byte[] GoblinWanderTicks { get; set; } = new byte[MaxGoblins];
 
 	public int TileIndex(int x, int y, int z) => x + y * Width + z * Width * Height;

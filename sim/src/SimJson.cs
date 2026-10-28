@@ -67,39 +67,11 @@ public static class SimJson
 				&& s.GoblinZ[g] >= 0 && s.GoblinZ[g] < s.Depth,
 				$"Goblin {g} is off the map.");
 			Require(Enum.IsDefined((Role)s.GoblinRole[g]), $"Goblin {g} has unknown role {s.GoblinRole[g]}.");
-
-			Require(Enum.IsDefined((GoblinTask)s.GoblinTask[g]), $"Goblin {g} has unknown task {s.GoblinTask[g]}.");
-			Require(s.GoblinStepTicks[g] < JobSystem.WalkTicksPerTile, $"Goblin {g} has step ticks {s.GoblinStepTicks[g]}.");
-			var job = s.GoblinJobTile[g];
-			var wanderTile = s.GoblinWanderTile[g];
-			var wanderTicks = s.GoblinWanderTicks[g];
-			if ((GoblinTask)s.GoblinTask[g] is GoblinTask.Idle or GoblinTask.Wandering)
-			{
-				Require(job == -1, $"Goblin {g} is not working but holds job tile {job}.");
-				if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Idle)
-				{
-					Require(wanderTile == -1, $"Goblin {g} is idle but has wander tile {wanderTile}.");
-					Require(wanderTicks <= JobSystem.MaxWanderPauseTicks, $"Goblin {g} pauses {wanderTicks} ticks before wandering.");
-					continue;
-				}
-
-				Require(wanderTicks == 0, $"Goblin {g} is wandering but still pauses {wanderTicks} ticks.");
-				Require(wanderTile >= 0 && wanderTile < tiles
-					&& TileRules.IsWalkable(s.KindAt(wanderTile))
-					&& wanderTile / (s.Width * s.Height) == s.GoblinZ[g]
-					&& wanderTile != s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]),
-					$"Goblin {g} wanders to tile {wanderTile}, which is not a walkable tile on its own level.");
-				continue;
-			}
-			Require(wanderTile == -1 && wanderTicks == 0, $"Goblin {g} is working but wanders.");
-			Require(job >= 0 && job < tiles && s.DesignationAt(job) != DesignationKind.None,
-				$"Goblin {g} works tile {job}, which is not designated.");
-			if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Digging)
-				Require(JobSystem.CanDigFrom(s, s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]), job, s.DesignationAt(job)),
-					$"Goblin {g} is digging tile {job} from where it cannot dig it.");
-			for (var other = 0; other < g; other++)
-				Require(s.GoblinJobTile[other] != job, $"Goblins {other} and {g} both claim tile {job}.");
 		}
+
+		// The structure is sound, so the Task rules can read it.
+		if (GoblinTasks.FindViolation(s) is { } violation)
+			Require(false, violation);
 	}
 
 	static void Require(bool condition, string message)

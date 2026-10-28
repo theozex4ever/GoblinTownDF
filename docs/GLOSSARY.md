@@ -29,6 +29,7 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Tool | The action a selection applies, picked by a key: Dig or Dig stairs. |
 | Cancel designation | The `CancelDesignation` Command: removes Designations from a rectangle of tiles. A tile mid-dig loses its progress and stays as it was. |
 | Job | A unit of work in the global job list (dig, haul, brew, build) that an idle goblin claims. |
+| Task | What one goblin is doing right now: Idle, Wandering, Walking, or Digging. Walking to a claimed Job and Digging it are Tasks; the Job is the work itself, and stays on the job list until it is done or cancelled. |
 | Wander | What an idle goblin does when it has no reachable Job: after a 3–6 second pause it walks to a random walkable tile within 4 tiles on its own z-level, then pauses again. A goblin mid-walk is Wandering. A reachable Designation cuts it short. |
 | Pile | A floor zone where goblins dump items; counted per resource, not per item. |
 | Room | A painted zone that works once it holds its required item: Sleeping Heap, Grub Pit, Brewery, Pile, Shrine, Boss Throne. |
