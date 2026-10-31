@@ -6,16 +6,24 @@ namespace AThousandGoblinsDeep;
 
 public partial class Main : Node
 {
-	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. D digs, S makes stairs; drag a box. Right-drag unsays it. The Grunt takes it personally.";
+	enum Tool
+	{
+		None,
+		Dig,
+		DigStairs,
+		Pile,
+	}
+
+	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. D digs, S makes stairs, P heaps things in a pile; drag a box. Right-drag unsays it. The Grunt takes it personally.";
 
 	Simulation _sim = null!;
 	WarrenView _view = null!;
 	Label _depthLabel = null!;
 	SelectionGesture _selection = null!;
-	SelectionGesture _cancellation = null!;
+	SelectionGesture _removal = null!;
 	int _viewZ;
 	// The tool stays picked until Escape or its own key puts it away.
-	DesignationKind _tool = DesignationKind.None;
+	Tool _tool = Tool.None;
 
 	public override void _Ready()
 	{
@@ -28,15 +36,11 @@ public partial class Main : Node
 
 		var s = _sim.State;
 		_selection = new SelectionGesture(MouseButton.Left, new Vector2I(s.Width, s.Height), CellAt);
-		_cancellation = new SelectionGesture(MouseButton.Right, new Vector2I(s.Width, s.Height), CellAt);
+		_removal = new SelectionGesture(MouseButton.Right, new Vector2I(s.Width, s.Height), CellAt);
 		_selection.Selected += OnSelected;
-		_cancellation.Selected += (from, to) =>
-		{
-			_sim.Apply(new CancelDesignation(_viewZ, from.X, from.Y, to.X, to.Y));
-			_view.QueueRedraw();
-		};
+		_removal.Selected += OnRemoved;
 		_selection.Changed += UpdateSelection;
-		_cancellation.Changed += UpdateSelection;
+		_removal.Changed += UpdateSelection;
 
 		_depthLabel = new Label { Position = new Vector2(288, 8) };
 		AddChild(_depthLabel);
@@ -63,24 +67,24 @@ public partial class Main : Node
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
-		// Only one button owns a drag; cancellation is available with no tool picked.
+		// Only one button owns a drag; removal is available with no tool picked.
 		if (_selection.Dragging)
 		{
 			if (_selection.Handle(@event))
 				GetViewport().SetInputAsHandled();
 		}
-		else if (_cancellation.Dragging)
+		else if (_removal.Dragging)
 		{
-			if (_cancellation.Handle(@event))
+			if (_removal.Handle(@event))
 				GetViewport().SetInputAsHandled();
 		}
-		else if (_cancellation.Handle(@event) || (_tool != DesignationKind.None && _selection.Handle(@event)))
+		else if (_removal.Handle(@event) || (_tool != Tool.None && _selection.Handle(@event)))
 			GetViewport().SetInputAsHandled();
 	}
 
 	void UpdateSelection()
 	{
-		_view.Selection = _cancellation.Dragging ? _cancellation.Rectangle
+		_view.Selection = _removal.Dragging ? _removal.Rectangle
 			: _selection.Dragging ? _selection.Rectangle : null;
 		_view.QueueRedraw();
 	}
@@ -88,7 +92,7 @@ public partial class Main : Node
 	void CancelSelection()
 	{
 		_selection.Cancel();
-		_cancellation.Cancel();
+		_removal.Cancel();
 	}
 
 	Vector2I CellAt(Vector2 position)
@@ -100,14 +104,31 @@ public partial class Main : Node
 	// The sim clips the rectangle to the map, so a drag that ran off the edge still lands.
 	void OnSelected(Vector2I from, Vector2I to)
 	{
-		_sim.Apply(new Designate(_tool, _viewZ, from.X, from.Y, to.X, to.Y));
+		Command command = _tool switch
+		{
+			Tool.Dig => new Designate(DesignationKind.Dig, _viewZ, from.X, from.Y, to.X, to.Y),
+			Tool.DigStairs => new Designate(DesignationKind.DigStairs, _viewZ, from.X, from.Y, to.X, to.Y),
+			Tool.Pile => new PaintPile(_viewZ, from.X, from.Y, to.X, to.Y),
+			_ => throw new InvalidOperationException("A selection needs a tool."),
+		};
+		_sim.Apply(command);
 		_view.QueueRedraw();
 	}
 
-	void PickTool(DesignationKind tool)
+	// Right-drag removes what the active Tool makes: Designations for Dig and Dig stairs (and with no Tool), Piles for Pile.
+	void OnRemoved(Vector2I from, Vector2I to)
+	{
+		Command command = _tool == Tool.Pile
+			? new RemovePile(_viewZ, from.X, from.Y, to.X, to.Y)
+			: new CancelDesignation(_viewZ, from.X, from.Y, to.X, to.Y);
+		_sim.Apply(command);
+		_view.QueueRedraw();
+	}
+
+	void PickTool(Tool tool)
 	{
 		CancelSelection();
-		_tool = _tool == tool ? DesignationKind.None : tool;
+		_tool = _tool == tool ? Tool.None : tool;
 		UpdateDepthLabel();
 	}
 
@@ -122,9 +143,10 @@ public partial class Main : Node
 			case Key.Key1 or Key.Kp1: _sim.Apply(new SetSpeed(1)); break;
 			case Key.Key2 or Key.Kp2: _sim.Apply(new SetSpeed(2)); break;
 			case Key.Key4 or Key.Kp4: _sim.Apply(new SetSpeed(4)); break;
-			case Key.D: PickTool(DesignationKind.Dig); break;
-			case Key.S: PickTool(DesignationKind.DigStairs); break;
-			case Key.Escape: CancelSelection(); _tool = DesignationKind.None; UpdateDepthLabel(); break;
+			case Key.D: PickTool(Tool.Dig); break;
+			case Key.S: PickTool(Tool.DigStairs); break;
+			case Key.P: PickTool(Tool.Pile); break;
+			case Key.Escape: CancelSelection(); _tool = Tool.None; UpdateDepthLabel(); break;
 			case Key.Comma: ChangeLevel(-1); break;
 			case Key.Period: ChangeLevel(1); break;
 			default: return;
@@ -153,8 +175,9 @@ public partial class Main : Node
 		var pace = s.Paused ? "paused" : $"{s.Speed}×";
 		var tool = _tool switch
 		{
-			DesignationKind.Dig => " · dig",
-			DesignationKind.DigStairs => " · stairs",
+			Tool.Dig => " · dig",
+			Tool.DigStairs => " · stairs",
+			Tool.Pile => " · pile",
 			_ => "",
 		};
 		_depthLabel.Text = $"Depth {_viewZ} · {BandName(_viewZ)} · {pace}{tool}";

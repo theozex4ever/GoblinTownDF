@@ -21,6 +21,20 @@ public sealed record Designate(DesignationKind Kind, int Z, int X0, int Y0, int 
 /// </summary>
 public sealed record CancelDesignation(int Z, int X0, int Y0, int X1, int Y1) : Command;
 
+/// <summary>
+/// Paints a Pile on every Floor tile in the rectangle from (X0, Y0) to (X1, Y1) on level Z, corners in any order,
+/// clipped to the map. A single click is a 1×1 rectangle. Stairs, Solid and Open air tiles are skipped. Loose
+/// items on a painted tile are stored on the spot.
+/// </summary>
+public sealed record PaintPile(int Z, int X0, int Y0, int X1, int Y1) : Command;
+
+/// <summary>
+/// Removes the Pile from every Pile tile in the rectangle from (X0, Y0) to (X1, Y1) on level Z, corners in any
+/// order, clipped to the map. A single click is a 1×1 rectangle. The stock stays on the tile as loose items.
+/// Tiles with no Pile are skipped.
+/// </summary>
+public sealed record RemovePile(int Z, int X0, int Y0, int X1, int Y1) : Command;
+
 /// <summary>An output from the sim to Godot.</summary>
 public abstract record SimEvent;
 

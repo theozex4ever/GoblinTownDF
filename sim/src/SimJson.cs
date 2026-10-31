@@ -30,6 +30,12 @@ public static class SimJson
 		Require(s.Designations is not null && s.Designations.LongLength == tiles, "Designations does not match the map size.");
 		Require(s.DigProgress is not null && s.DigProgress.LongLength == tiles, "DigProgress does not match the map size.");
 		Require(s.TileItems is not null && s.TileItems.LongLength == tiles * SimState.CountedMaterials, "TileItems does not match the map size.");
+		Require(s.Piles is not null && s.Piles.LongLength == tiles, "Piles does not match the map size.");
+		for (var tile = 0; tile < s.Piles!.Length; tile++)
+		{
+			Require(s.Piles[tile] <= 1, $"Tile {tile} has Pile flag {s.Piles[tile]}.");
+			Require(s.Piles[tile] == 0 || s.KindAt(tile) == TileKind.Floor, $"Tile {tile} is a Pile but not Floor.");
+		}
 		foreach (var count in s.TileItems!)
 			Require(count >= 0, $"Item count {count} is negative.");
 		foreach (var kind in s.TileKinds!)
