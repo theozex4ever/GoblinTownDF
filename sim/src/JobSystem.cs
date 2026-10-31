@@ -391,23 +391,26 @@ public sealed class JobSystem
 		}
 	}
 
+	// Dropping on a Pile tile stores the unit.
 	void Drop(SimState s, int goblin)
 	{
-		if (!GoblinTasks.WorkTick(s, goblin))
-			return;
-
-		var tile = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
-		s.AddItems(tile, (Material)s.GoblinCarry[goblin], 1);
-		GoblinTasks.Release(s, goblin);
+		if (GoblinTasks.WorkTick(s, goblin))
+			PutDown(s, goblin);
 	}
 
+	// With no Pile in reach, the unit is loose again and its Haul waits for a Pile.
 	void DropWhereStanding(SimState s, int goblin)
+	{
+		PutDown(s, goblin);
+		RecheckReachability(s);
+	}
+
+	// Puts the carried unit on the goblin's own tile and frees the goblin.
+	static void PutDown(SimState s, int goblin)
 	{
 		var tile = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
 		s.AddItems(tile, (Material)s.GoblinCarry[goblin], 1);
 		GoblinTasks.Release(s, goblin);
-		// The unit is loose again, and its Haul waits for a Pile.
-		RecheckReachability(s);
 	}
 
 	void Dig(SimState s, int goblin, int job, List<SimEvent> events)
@@ -421,12 +424,14 @@ public sealed class JobSystem
 		s.Designations[job] = (byte)DesignationKind.None;
 		s.DigProgress[job] = 0;
 		// Only Floor can hold a Pile; its stock stays on the tile, loose.
+		var wasPile = s.Piles[job] != 0;
 		s.Piles[job] = 0;
 		s.AddItems(job, material, 1);
 		var layer = s.Width * s.Height;
 		events.Add(new TileDug(job % s.Width, job / s.Width % s.Height, job / layer, material));
 		GoblinTasks.Release(s, goblin);
-		PileRules.Settle(s);
+		if (wasPile)
+			PileRules.Settle(s);
 		RecheckReachability(s);
 	}
 

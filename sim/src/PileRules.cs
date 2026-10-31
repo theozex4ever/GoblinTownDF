@@ -34,7 +34,7 @@ public static class PileRules
 	/// <summary>
 	/// Brings the goblins' hauls in line after a Pile appeared or went: a goblin fetching a unit that is now stored is
 	/// freed, and a goblin dropping a unit on a tile that is no longer a Pile carries it on to the next nearest Pile.
-	/// Run after anything that changes a Pile flag, so <see cref="GoblinTasks.FindViolation"/> holds between ticks.
+	/// Run after anything that clears or sets a Pile flag (painting, removing, digging stairs on a Pile), so <see cref="GoblinTasks.FindViolation"/> holds between ticks.
 	/// </summary>
 	public static void Settle(SimState s)
 	{
