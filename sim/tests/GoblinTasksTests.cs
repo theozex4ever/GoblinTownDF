@@ -311,16 +311,35 @@ public class GoblinTasksTests
 	}
 
 	[Fact]
-	public void Release_drops_the_carry_fields_too()
+	public void FinishDrop_stores_the_unit_on_the_Pile_under_the_goblin_and_clears_the_carry_fields()
 	{
 		var s = Simulation.NewWorld(seed: 7).State;
+		var tile = s.TileIndex(16, 16, 0);
+		s.Piles[tile] = 1;
 		GoblinTasks.FinishPickUp(s, 0, Material.Dirt);
+		GoblinTasks.StartDropping(s, 0);
 
-		GoblinTasks.Release(s, 0);
+		GoblinTasks.FinishDrop(s, 0);
 
 		AssertIdle(s);
 		Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
 		Assert.Equal(0, s.GoblinWorkTicks[0]);
+		Assert.Equal(1, s.StoredCount(tile, Material.Dirt));
+	}
+
+	[Fact]
+	public void FinishDrop_refuses_a_Pile_with_no_room_for_the_material_and_Release_refuses_a_goblin_holding_a_unit()
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		var tile = s.TileIndex(16, 16, 0);
+		s.Piles[tile] = 1;
+		s.AddItems(tile, Material.Dirt, SimState.PileCapacity);
+		GoblinTasks.FinishPickUp(s, 0, Material.Dirt);
+
+		Assert.Throws<InvalidOperationException>(() => GoblinTasks.FinishDrop(s, 0));
+		Assert.Throws<InvalidOperationException>(() => GoblinTasks.Release(s, 0));
+		Assert.Equal(SimState.PileCapacity, s.StoredCount(tile, Material.Dirt));
+		Assert.Equal((byte)Material.Dirt, s.GoblinCarry[0]);
 	}
 
 	[Fact]

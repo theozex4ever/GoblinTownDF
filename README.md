@@ -50,6 +50,8 @@ Current controls: **Space** pauses; **1**, **2**, and **4** select speed; **,** 
 
 Press **D** for Dig, **S** for Dig stairs or **P** for Pile, then click a tile or left-drag a rectangle to designate it or paint a Pile on its Floor tiles. Right-drag removes what the active tool makes: Dig and Dig stairs cancel designations, Pile removes Piles (their stock stays as loose items), and with no tool picked right-drag cancels designations. **Escape** clears the selected tool and any active drag.
 
+Each Pile tile holds up to 30 units of each material; a Pile that is full of one material shows its count highlighted, and goblins carry to the nearest Pile with room, or wait holding the unit until one appears. Painting skips any tile holding more than 30 of a material.
+
 ## Development
 
 The simulation is a pure C# library that runs without Godot. Godot renders the world and sends player commands to it. Fixed ticks and a seeded random number generator keep runs reproducible.

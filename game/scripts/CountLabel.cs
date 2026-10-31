@@ -1,7 +1,8 @@
 namespace AThousandGoblinsDeep;
 
 /// <summary>
-/// The text a Pile tile shows for one material's stored count. Piles have no cap, so a big count is
+/// The text a Pile tile shows for one material's stored count. A Pile tile holds at most
+/// <see cref="Goblins.Sim.SimState.PileCapacity"/> of a material, so counts stay short; a big count is still
 /// abbreviated to at most three characters to stay inside its cell.
 /// </summary>
 public static class CountLabel

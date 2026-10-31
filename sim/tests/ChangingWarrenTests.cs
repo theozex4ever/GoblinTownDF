@@ -41,7 +41,7 @@ public class ChangingWarrenTests
 	}
 
 	[Fact]
-	public void Removing_every_Pile_while_fetching_picking_up_or_carrying_leaves_the_unit_loose_with_a_waiting_Haul()
+	public void Removing_every_Pile_while_fetching_or_picking_up_frees_the_goblin_and_while_carrying_leaves_it_waiting_with_the_unit()
 	{
 		foreach (var ticks in new[] { 3, 8, 15, 20 })
 		{
@@ -51,26 +51,35 @@ public class ChangingWarrenTests
 			s.AddItems(unit, Material.Stone, 1);
 			Paint(sim, 20, 14);
 			RunTicks(sim, ticks);
+			var carrying = TaskOf(s, 0) == GoblinTask.Carrying;
 
 			Remove(sim, 20, 14);
 			RunTicks(sim, 120);
 
 			Assert.Equal(1, Units(s));
-			Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
-			Assert.True(TaskOf(s, 0) is GoblinTask.Idle or GoblinTask.Wandering);
-			Assert.Equal(1, Enumerable.Range(0, s.TileKinds.Length).Sum(t => s.LooseCount(t, Material.Stone)));
-			var loose = Enumerable.Range(0, s.TileKinds.Length).Single(t => s.LooseCount(t, Material.Stone) == 1);
-			// A Pile makes the Haul claimable again, and the unit then reaches it.
-			Assert.False(s.IsHaulReachable(loose));
+			if (carrying)
+			{
+				// A carrier keeps its unit and waits for storage; it does not put it down.
+				Assert.Equal(GoblinTask.Carrying, TaskOf(s, 0));
+				Assert.Equal((byte)Material.Stone, s.GoblinCarry[0]);
+				Assert.Equal(0, s.TileItems.Sum());
+			}
+			else
+			{
+				Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
+				Assert.True(TaskOf(s, 0) is GoblinTask.Idle or GoblinTask.Wandering);
+				Assert.Equal(1, s.LooseCount(unit, Material.Stone));
+				// A Pile makes the Haul claimable again.
+				Assert.False(s.IsHaulReachable(unit));
+			}
 			Paint(sim, 25, 25);
-			Assert.True(s.IsHaulReachable(loose));
 			RunTicks(sim, 200);
 			Assert.Equal(1, Stored(s, 25, 25, Material.Stone));
 		}
 	}
 
 	[Fact]
-	public void Removing_the_last_Pile_under_a_dropping_goblin_puts_the_unit_down_loose_where_it_stands()
+	public void Removing_the_last_Pile_under_a_dropping_goblin_leaves_it_carrying_and_waiting_for_storage()
 	{
 		var sim = NewWorldWithOneGrunt(seed: 1);
 		var s = sim.State;
@@ -80,10 +89,11 @@ public class ChangingWarrenTests
 		Assert.Equal(GoblinTask.Dropping, TaskOf(s, 0));
 
 		Remove(sim, 20, 14);
-		RunTicks(sim, 3);
+		RunTicks(sim, 60);
 
-		Assert.Equal(GoblinTask.Idle, TaskOf(s, 0));
-		Assert.Equal(1, s.LooseCount(s.TileIndex(20, 14, 0), Material.Dirt));
+		Assert.Equal(GoblinTask.Carrying, TaskOf(s, 0));
+		Assert.Equal((byte)Material.Dirt, s.GoblinCarry[0]);
+		Assert.Equal(0, s.TileItems.Sum());
 		Assert.Equal(1, Units(s));
 		Paint(sim, 25, 25);
 		RunTicks(sim, 200);
@@ -196,21 +206,6 @@ public class ChangingWarrenTests
 	}
 
 	[Fact]
-	public void Release_puts_a_carried_unit_down_on_the_goblins_tile_instead_of_destroying_it()
-	{
-		var sim = NewWorldWithOneGrunt(seed: 1);
-		var s = sim.State;
-		GoblinTasks.FinishPickUp(s, 0, Material.Stone);
-		Assert.Equal(0, s.TileItems.Sum());
-
-		GoblinTasks.Release(s, 0);
-
-		Assert.Equal(GoblinTask.Idle, TaskOf(s, 0));
-		Assert.Equal(1, s.LooseCount(s.TileIndex(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]), Material.Stone));
-		Assert.Null(GoblinTasks.FindViolation(s));
-	}
-
-	[Fact]
 	public void FindViolation_allows_one_claim_per_loose_unit_and_flags_more()
 	{
 		var sim = Simulation.NewWorld(seed: 1);
@@ -229,9 +224,9 @@ public class ChangingWarrenTests
 	}
 
 	[Fact]
-	public void A_long_run_of_random_Commands_loses_and_invents_no_units()
+	public void A_long_run_of_random_Commands_loses_and_invents_no_units_and_never_overfills_a_Pile()
 	{
-		var putDowns = 0;
+		var waits = 0;
 		foreach (var seed in new[] { 1, 2, 3 })
 		{
 			var sim = Simulation.NewWorld(seed);
@@ -242,7 +237,6 @@ public class ChangingWarrenTests
 			var rng = new Random(seed);
 			var dug = 0;
 			var start = Units(s);
-			var previous = new byte[s.GoblinCount];
 
 			for (var tick = 0; tick < 3000; tick++)
 			{
@@ -252,20 +246,20 @@ public class ChangingWarrenTests
 				dug += sim.DrainEvents().OfType<TileDug>().Count();
 				Assert.True(GoblinTasks.FindViolation(s) is null, $"Seed {seed} tick {s.Tick}: {GoblinTasks.FindViolation(s)}");
 				Assert.True(Units(s) == start + dug, $"Seed {seed} tick {s.Tick}: {Units(s)} units, expected {start + dug}.");
+				for (var tile = 0; tile < s.Piles.Length; tile++)
+					if (s.IsPile(tile))
+						Assert.True(s.ItemCount(tile, Material.Dirt) <= SimState.PileCapacity && s.ItemCount(tile, Material.Stone) <= SimState.PileCapacity, $"Seed {seed} tick {s.Tick}: Pile tile {tile} is overfull.");
 				for (var g = 0; g < s.GoblinCount; g++)
-				{
-					// A carrier that goes Idle with no Pile to drop on put its unit down loose.
-					if (previous[g] == (byte)GoblinTask.Carrying && TaskOf(s, g) == GoblinTask.Idle)
-						putDowns++;
-					previous[g] = s.GoblinTask[g];
-				}
+					// A carrier with no Pile to take its unit keeps it and waits.
+					if (TaskOf(s, g) == GoblinTask.Carrying && !s.HasStorageRoom((Material)s.GoblinCarry[g]))
+						waits++;
 			}
 
 			Assert.True(dug > 0, "The run dug nothing.");
 			SimJson.Deserialize(SimJson.Serialize(sim));
 		}
 
-		Assert.True(putDowns > 0, "No carrier lost its Pile mid-haul, so the run never reached the put-down path.");
+		Assert.True(waits > 0, "No carrier ever waited for storage, so the run never reached the waiting path.");
 	}
 
 	[Fact]

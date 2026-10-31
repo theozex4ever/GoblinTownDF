@@ -145,7 +145,7 @@ The first prototype answers one question: is it fun to dig a warren and watch go
 
   **P2 decisions**
 
-  **Pile capacity implementation status:** the capacity rules below are agreed but not implemented. The current build still allows uncapped Piles.
+  **Pile capacity implementation status:** implemented. The rules below are what the build does.
 
   - **Map:** as P1, but z2 is Solid stone. This bends the band table (Stone is z4–9) because the prototype has only three levels. Stone digs in 40 ticks, dirt in 20.
   - **Goblins:** five Grunts start in a fixed cluster on z0 around the map centre. No other Roles yet.

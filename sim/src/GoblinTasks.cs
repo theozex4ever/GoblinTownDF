@@ -7,7 +7,8 @@ namespace Goblins.Sim;
 /// <see cref="SimState.GoblinCarry"/> and <see cref="SimState.GoblinWorkTicks"/>;
 /// <see cref="FindViolation"/> states the rules they keep.
 /// A goblin works one of two Jobs. A dig: Walking to a designated tile, then Digging it. A Haul: Fetching a loose unit,
-/// PickingUp, Carrying it to a Pile tile, and Dropping it there.
+/// PickingUp, Carrying it to a Pile tile with room for its material (or waiting, still Carrying, while there is none),
+/// and Dropping it there.
 /// A new Task is added here and nowhere else. Movement along a path stays in <see cref="JobSystem"/>,
 /// which only counts <see cref="SimState.GoblinStepTicks"/>.
 /// </summary>
@@ -96,7 +97,7 @@ public static class GoblinTasks
 		s.GoblinTask[g] = (byte)GoblinTask.Dropping;
 	}
 
-	/// <summary>Dropping → Carrying again, when the Pile under the goblin is gone.</summary>
+	/// <summary>Dropping → Carrying again, when the Pile under the goblin is gone or has no room left for its unit.</summary>
 	public static void ResumeCarrying(SimState s, int g)
 	{
 		s.GoblinStepTicks[g] = 0;
@@ -105,17 +106,30 @@ public static class GoblinTasks
 	}
 
 	/// <summary>
-	/// Any Task → Idle, with no Job and no wander. The Job, if any, stays on the job list. A Carrying or Dropping goblin
-	/// puts its unit down on the tile it stands on first, so no release loses a unit: the unit is stored on a Pile tile
-	/// and loose anywhere else. When it lands loose its Haul is only offered once <see cref="JobSystem.RecheckReachability"/> runs.
+	/// Dropping → Idle, storing the carried unit on the Pile tile the goblin stands on. The caller has checked the tile
+	/// is a Pile with room for the unit, so no drop can take a material past <see cref="SimState.PileCapacity"/>.
+	/// </summary>
+	public static void FinishDrop(SimState s, int g)
+	{
+		var tile = s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]);
+		if (!s.PileHasRoom(tile, (Material)s.GoblinCarry[g]))
+			throw new InvalidOperationException($"Goblin {g} cannot drop {(Material)s.GoblinCarry[g]} on tile {tile}: no Pile with room.");
+		s.AddItems(tile, (Material)s.GoblinCarry[g], 1);
+		s.GoblinCarry[g] = (byte)Material.None;
+		Release(s, g);
+	}
+
+	/// <summary>
+	/// Any Task → Idle, with no Job and no wander. The Job, if any, stays on the job list. A goblin holding a unit never
+	/// goes through here: it keeps the unit until <see cref="FinishDrop"/> stores it, so a release cannot lose a unit
+	/// or put one down past a Pile's capacity.
 	/// </summary>
 	public static void Release(SimState s, int g)
 	{
 		if ((Material)s.GoblinCarry[g] != Material.None)
-			s.AddItems(s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]), (Material)s.GoblinCarry[g], 1);
+			throw new InvalidOperationException($"Goblin {g} holds {(Material)s.GoblinCarry[g]} and can only let go of it by dropping it on a Pile.");
 		s.GoblinTask[g] = (byte)GoblinTask.Idle;
 		s.GoblinJobTile[g] = -1;
-		s.GoblinCarry[g] = (byte)Material.None;
 		s.GoblinWorkTicks[g] = 0;
 		s.GoblinStepTicks[g] = 0;
 		s.GoblinWanderTile[g] = -1;
