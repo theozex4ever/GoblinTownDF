@@ -121,7 +121,7 @@ public class ReachabilityTests
 	[Fact]
 	public void A_waiting_designation_becomes_reachable_once_a_dug_tile_opens_a_path_and_then_gets_dug()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithOneGrunt(seed: 1);
 		var s = sim.State;
 		var top = s.TileIndex(16, 15, 0);
 		var middle = s.TileIndex(16, 15, 1);
@@ -147,8 +147,8 @@ public class ReachabilityTests
 		Assert.Equal(TileKind.Stairs, s.KindAt(middle));
 		Assert.True(s.IsReachable(bottom));
 
-		// One step down onto the z1 Stairs, then 20 dig ticks from above.
-		RunTicks(sim, 3 + 20);
+		// One step down onto the z1 Stairs, then 40 dig ticks from above: z2 is stone.
+		RunTicks(sim, 3 + 40);
 		Assert.Equal(TileKind.Stairs, s.KindAt(bottom));
 		Assert.Equal(DesignationKind.None, s.DesignationAt(bottom));
 		Assert.Equal(
@@ -156,7 +156,7 @@ public class ReachabilityTests
 			{
 				new TileDug(16, 15, 0, Material.Dirt),
 				new TileDug(16, 15, 1, Material.Dirt),
-				new TileDug(16, 15, 2, Material.Dirt),
+				new TileDug(16, 15, 2, Material.Stone),
 			},
 			sim.DrainEvents());
 	}

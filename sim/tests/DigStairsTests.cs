@@ -154,7 +154,7 @@ public class DigStairsTests
 	[Fact]
 	public void The_goblin_takes_the_nearest_designation_by_path_length_and_ties_go_to_the_lowest_tile_index()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithOneGrunt(seed: 1);
 		var s = sim.State;
 		// The north and east targets are each one step from a standing tile, so they tie and the lower
 		// tile index (north) goes first. The far one comes last.

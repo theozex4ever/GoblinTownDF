@@ -40,7 +40,10 @@ public sealed class Simulation
 
 	public static bool IsValidSpeed(int speed) => speed is 1 or 2 or 4;
 
-	/// <summary>The P1 warren: flat and identical for every seed. The seed only seeds <see cref="SimRandom"/>.</summary>
+	// The starting cluster on z0: a plus around the map centre, as (dx, dy) from the centre tile.
+	static readonly (int Dx, int Dy)[] StartingCluster = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)];
+
+	/// <summary>The P2 warren: flat and identical for every seed. The seed only seeds <see cref="SimRandom"/>.</summary>
 	public static Simulation NewWorld(int seed)
 	{
 		var s = new SimState
@@ -57,19 +60,23 @@ public sealed class Simulation
 		s.TileMaterials = new byte[layer * MapDepth];
 		s.Designations = new byte[layer * MapDepth];
 		s.DigProgress = new byte[layer * MapDepth];
-		// The surface is dirt ground, so digging into it yields dirt.
-		Array.Fill(s.TileMaterials, (byte)Material.Dirt);
+		// The surface and z1 are dirt, so digging into them yields dirt; z2 is stone.
 		for (var z = 0; z < MapDepth; z++)
 		{
 			var kind = z == 0 ? TileKind.Floor : TileKind.Solid;
+			var material = z == MapDepth - 1 ? Material.Stone : Material.Dirt;
 			Array.Fill(s.TileKinds, (byte)kind, z * layer, layer);
+			Array.Fill(s.TileMaterials, (byte)material, z * layer, layer);
 		}
 
-		s.GoblinCount = 1;
-		s.GoblinRole[0] = (byte)Role.Grunt;
-		s.GoblinX[0] = 16;
-		s.GoblinY[0] = 16;
-		s.GoblinZ[0] = 0;
+		s.GoblinCount = StartingCluster.Length;
+		for (var g = 0; g < s.GoblinCount; g++)
+		{
+			s.GoblinRole[g] = (byte)Role.Grunt;
+			s.GoblinX[g] = MapWidth / 2 + StartingCluster[g].Dx;
+			s.GoblinY[g] = MapHeight / 2 + StartingCluster[g].Dy;
+			s.GoblinZ[g] = 0;
+		}
 
 		return new Simulation(s);
 	}
