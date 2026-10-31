@@ -29,6 +29,9 @@ public static class SimJson
 		Require(s.TileMaterials is not null && s.TileMaterials.LongLength == tiles, "TileMaterials does not match the map size.");
 		Require(s.Designations is not null && s.Designations.LongLength == tiles, "Designations does not match the map size.");
 		Require(s.DigProgress is not null && s.DigProgress.LongLength == tiles, "DigProgress does not match the map size.");
+		Require(s.TileItems is not null && s.TileItems.LongLength == tiles * SimState.CountedMaterials, "TileItems does not match the map size.");
+		foreach (var count in s.TileItems!)
+			Require(count >= 0, $"Item count {count} is negative.");
 		foreach (var kind in s.TileKinds!)
 			Require(Enum.IsDefined((TileKind)kind), $"Unknown tile kind {kind}.");
 		foreach (var material in s.TileMaterials!)

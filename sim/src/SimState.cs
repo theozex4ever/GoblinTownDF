@@ -26,6 +26,11 @@ public sealed class SimState
 	// A DesignationKind per tile, and ticks spent digging it so far. Cancelling a designation clears the progress.
 	public byte[] Designations { get; set; } = [];
 	public byte[] DigProgress { get; set; } = [];
+	/// <summary>
+	/// Units of each material on each tile: <see cref="CountedMaterials"/> counts per tile, Dirt then Stone, at
+	/// tile * CountedMaterials + (material - 1). Read through <see cref="ItemCount"/>, add through <see cref="AddItems"/>.
+	/// </summary>
+	public int[] TileItems { get; set; } = [];
 	// 1 on a designated tile some goblin can path to a tile it can dig from. Derived from the tiles, the
 	// designations and the goblin positions, so it is not saved: loading rebuilds it (see JobSystem.RecheckReachability).
 	[JsonIgnore]
@@ -53,7 +58,14 @@ public sealed class SimState
 	/// </summary>
 	public byte[] GoblinWanderTicks { get; set; } = new byte[MaxGoblins];
 
+	/// <summary>The materials a tile keeps a count for: Dirt and Stone (every Material but None).</summary>
+	public const int CountedMaterials = 2;
+
 	public int TileIndex(int x, int y, int z) => x + y * Width + z * Width * Height;
+
+	public int ItemCount(int tile, Material material) => TileItems[tile * CountedMaterials + (int)material - 1];
+
+	public void AddItems(int tile, Material material, int units) => TileItems[tile * CountedMaterials + (int)material - 1] += units;
 
 	public TileKind KindAt(int tile) => (TileKind)TileKinds[tile];
 

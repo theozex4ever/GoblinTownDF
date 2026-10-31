@@ -22,6 +22,7 @@ public partial class WarrenView : Node2D
 	static readonly Color SelectionFillColor = new(1f, 1f, 1f, 0.15f);
 	static readonly Color GoblinColor = new(0.35f, 0.75f, 0.30f);
 	static readonly Color FaintGoblinColor = new(0.35f, 0.75f, 0.30f, 0.35f);
+	static readonly Color LooseDirtColor = new(0.55f, 0.36f, 0.18f);
 
 	public Simulation? Sim { get; set; }
 	public int ViewZ { get; set; }
@@ -57,6 +58,12 @@ public partial class WarrenView : Node2D
 					var ry = rect.Position.Y + rung * CellSize / 4f;
 					DrawLine(new Vector2(rect.Position.X + 3, ry), new Vector2(rect.End.X - 3, ry), StairsMarkColor, 2);
 				}
+
+			// A loose item is a small square in its material's colour (stone matches solid stone); the sim keeps no pile-or-loose split yet.
+			if (s.ItemCount(tile, Goblins.Sim.Material.Dirt) > 0)
+				DrawRect(new Rect2(rect.Position.X + 3, rect.Position.Y + 3, 6, 6), LooseDirtColor);
+			if (s.ItemCount(tile, Goblins.Sim.Material.Stone) > 0)
+				DrawRect(new Rect2(rect.End.X - 9, rect.End.Y - 9, 6, 6), StoneColor);
 
 			if (s.DesignationAt(tile) == DesignationKind.None)
 				continue;
