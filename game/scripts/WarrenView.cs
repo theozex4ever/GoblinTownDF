@@ -109,13 +109,19 @@ public partial class WarrenView : Node2D
 			if (s.GoblinZ[g] != ViewZ || carried == Goblins.Sim.Material.None)
 				continue;
 
-			// Carriers on one tile show side by side, each in its own slot, in goblin order.
+			// Carriers on one tile share its marker, a grid slot each in goblin order.
 			var slot = 0;
-			for (var other = 0; other < g; other++)
-				if (s.GoblinCarry[other] != (byte)Goblins.Sim.Material.None
-					&& s.GoblinX[other] == s.GoblinX[g] && s.GoblinY[other] == s.GoblinY[g] && s.GoblinZ[other] == s.GoblinZ[g])
+			var carriers = 1;
+			for (var other = 0; other < s.GoblinCount; other++)
+			{
+				if (other == g || s.GoblinCarry[other] == (byte)Goblins.Sim.Material.None
+					|| s.GoblinX[other] != s.GoblinX[g] || s.GoblinY[other] != s.GoblinY[g] || s.GoblinZ[other] != s.GoblinZ[g])
+					continue;
+				carriers++;
+				if (other < g)
 					slot++;
-			DrawRect(CarriedRect(MarkerRect(s, g, 0), slot), carried == Goblins.Sim.Material.Stone ? StoneColor : LooseDirtColor);
+			}
+			DrawRect(CarriedRect(MarkerRect(s, g, 0), slot, carriers), carried == Goblins.Sim.Material.Stone ? StoneColor : LooseDirtColor);
 		}
 
 		if (Selection is { } sel)
@@ -139,16 +145,20 @@ public partial class WarrenView : Node2D
 	}
 
 	/// <summary>
-	/// The small square of material on a carrier's marker. Slot 0 is the marker's centre; later carriers on the same
-	/// tile take the slots to its right, then left, then further right, one square apart, so no two squares overlap.
-	/// A fourth carrier on one tile spills past the cell edge, which five Grunts rarely cause.
+	/// The small square of material for carrier number <paramref name="slot"/> of <paramref name="carriers"/> on one tile.
+	/// The squares form a centred grid of whole pixels inside the goblin <paramref name="marker"/>, one pixel apart: a
+	/// lone carrier gets one <see cref="CarriedSize"/> square, and the squares shrink as more carriers share the tile,
+	/// so any number up to the goblin cap fits and none overlap.
 	/// </summary>
-	public static Rect2 CarriedRect(Rect2 marker, int slot)
+	public static Rect2 CarriedRect(Rect2 marker, int slot, int carriers)
 	{
-		var center = marker.GetCenter();
-		var steps = (slot + 1) / 2;
-		var shift = (slot % 2 == 1 ? steps : -steps) * CarriedSize;
-		return new Rect2(center.X + shift - CarriedSize / 2f, center.Y - CarriedSize / 2f, CarriedSize, CarriedSize);
+		var side = (int)Math.Min(marker.Size.X, marker.Size.Y);
+		var columns = (int)Math.Ceiling(Math.Sqrt(carriers));
+		var rows = (carriers + columns - 1) / columns;
+		var size = Math.Max(1, Math.Min(CarriedSize, (side - (columns - 1)) / columns));
+		var left = marker.Position.X + ((int)marker.Size.X - (columns * size + columns - 1)) / 2;
+		var top = marker.Position.Y + ((int)marker.Size.Y - (rows * size + rows - 1)) / 2;
+		return new Rect2(left + slot % columns * (size + 1), top + slot / columns * (size + 1), size, size);
 	}
 
 	// A zero count draws nothing, so an empty Pile is only its tint.
