@@ -26,6 +26,7 @@ public partial class WarrenView : Node2D
 	static readonly Color WaitingHaulColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
 	public const int CountFontSize = 9;
+	public const int CarriedSize = 6;
 
 	public Simulation? Sim { get; set; }
 	public int ViewZ { get; set; }
@@ -94,27 +95,27 @@ public partial class WarrenView : Node2D
 			DrawRect(rect.Grow(-1), s.IsReachable(tile) ? DesignationColor : UnreachableColor, filled: false, width: 2);
 		}
 
+		// Every body first, then every carried square, so a goblin standing on a carrier's tile cannot cover it.
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			var dz = s.GoblinZ[g] - ViewZ;
-			if (Math.Abs(dz) > 1)
+			if (Math.Abs(dz) <= 1)
+				DrawRect(MarkerRect(s, g, dz), dz == 0 ? GoblinColor : FaintGoblinColor);
+		}
+
+		for (var g = 0; g < s.GoblinCount; g++)
+		{
+			var carried = (Goblins.Sim.Material)s.GoblinCarry[g];
+			if (s.GoblinZ[g] != ViewZ || carried == Goblins.Sim.Material.None)
 				continue;
 
-			var inset = dz == 0 ? 3 : 6;
-			var rect = new Rect2(
-				s.GoblinX[g] * CellSize + inset,
-				s.GoblinY[g] * CellSize + inset,
-				CellSize - 2 * inset,
-				CellSize - 2 * inset);
-			DrawRect(rect, dz == 0 ? GoblinColor : FaintGoblinColor);
-
-			// A carrying goblin shows a small square of its material on its marker.
-			var carried = (Goblins.Sim.Material)s.GoblinCarry[g];
-			if (dz == 0 && carried != Goblins.Sim.Material.None)
-			{
-				var center = rect.GetCenter();
-				DrawRect(new Rect2(center.X - 3, center.Y - 3, 6, 6), carried == Goblins.Sim.Material.Stone ? StoneColor : LooseDirtColor);
-			}
+			// Carriers on one tile show side by side, each in its own slot, in goblin order.
+			var slot = 0;
+			for (var other = 0; other < g; other++)
+				if (s.GoblinCarry[other] != (byte)Goblins.Sim.Material.None
+					&& s.GoblinX[other] == s.GoblinX[g] && s.GoblinY[other] == s.GoblinY[g] && s.GoblinZ[other] == s.GoblinZ[g])
+					slot++;
+			DrawRect(CarriedRect(MarkerRect(s, g, 0), slot), carried == Goblins.Sim.Material.Stone ? StoneColor : LooseDirtColor);
 		}
 
 		if (Selection is { } sel)
@@ -125,6 +126,29 @@ public partial class WarrenView : Node2D
 			DrawRect(box, SelectionFillColor);
 			DrawRect(box, SelectionColor, filled: false, width: 2);
 		}
+	}
+
+	static Rect2 MarkerRect(SimState s, int goblin, int dz)
+	{
+		var inset = dz == 0 ? 3 : 6;
+		return new Rect2(
+			s.GoblinX[goblin] * CellSize + inset,
+			s.GoblinY[goblin] * CellSize + inset,
+			CellSize - 2 * inset,
+			CellSize - 2 * inset);
+	}
+
+	/// <summary>
+	/// The small square of material on a carrier's marker. Slot 0 is the marker's centre; later carriers on the same
+	/// tile take the slots to its right, then left, then further right, one square apart, so no two squares overlap.
+	/// A fourth carrier on one tile spills past the cell edge, which five Grunts rarely cause.
+	/// </summary>
+	public static Rect2 CarriedRect(Rect2 marker, int slot)
+	{
+		var center = marker.GetCenter();
+		var steps = (slot + 1) / 2;
+		var shift = (slot % 2 == 1 ? steps : -steps) * CarriedSize;
+		return new Rect2(center.X + shift - CarriedSize / 2f, center.Y - CarriedSize / 2f, CarriedSize, CarriedSize);
 	}
 
 	// A zero count draws nothing, so an empty Pile is only its tint.

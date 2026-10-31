@@ -106,7 +106,8 @@ public static class GoblinTasks
 
 	/// <summary>
 	/// Any Task → Idle, with no Job, no wander and nothing carried. The Job, if any, stays on the job list. A carried
-	/// unit is not put back: whoever releases a Carrying or Dropping goblin first puts the unit down.
+	/// unit is not put back, so releasing a Carrying or Dropping goblin destroys the unit it holds: put the unit
+	/// down first (see JobSystem.PutDown). No caller releases a carrier today.
 	/// </summary>
 	public static void Release(SimState s, int g)
 	{
