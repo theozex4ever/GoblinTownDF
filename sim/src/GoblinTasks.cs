@@ -3,8 +3,11 @@ namespace Goblins.Sim;
 /// <summary>
 /// The one owner of every goblin Task and what it requires of the per-goblin arrays (ADR 0002). The
 /// transitions are the only code that changes <see cref="SimState.GoblinTask"/>,
-/// <see cref="SimState.GoblinJobTile"/>, <see cref="SimState.GoblinWanderTile"/> and
-/// <see cref="SimState.GoblinWanderTicks"/>; <see cref="FindViolation"/> states the rules they keep.
+/// <see cref="SimState.GoblinJobTile"/>, <see cref="SimState.GoblinWanderTile"/>, <see cref="SimState.GoblinWanderTicks"/>,
+/// <see cref="SimState.GoblinCarry"/> and <see cref="SimState.GoblinWorkTicks"/>;
+/// <see cref="FindViolation"/> states the rules they keep.
+/// A goblin works one of two Jobs. A dig: Walking to a designated tile, then Digging it. A Haul: Fetching a loose unit,
+/// PickingUp, Carrying it to a Pile tile, and Dropping it there.
 /// A new Task is added here and nowhere else. Movement along a path stays in <see cref="JobSystem"/>,
 /// which only counts <see cref="SimState.GoblinStepTicks"/>.
 /// </summary>
@@ -15,6 +18,8 @@ public static class GoblinTasks
 	/// <summary>An idle goblin pauses this many ticks, drawn from the Rng, before each wander: 3–6 seconds.</summary>
 	public const int MinWanderPauseTicks = 30;
 	public const int MaxWanderPauseTicks = 60;
+	/// <summary>Ticks a goblin spends picking a unit up, and again dropping it off.</summary>
+	public const int HaulActionTicks = 5;
 
 	/// <summary>
 	/// Idle or Wandering → Walking to the claimed Job tile, or Digging when the goblin already stands where
@@ -45,11 +50,70 @@ public static class GoblinTasks
 		s.GoblinTask[g] = (byte)GoblinTask.Wandering;
 	}
 
-	/// <summary>Any Task → Idle, with no Job and no wander. The Job, if any, stays on the job list.</summary>
+	/// <summary>
+	/// Idle or Wandering → Fetching a loose unit at <paramref name="unitTile"/>, or PickingUp when the goblin already
+	/// stands on it. Drops any wander.
+	/// </summary>
+	public static void BeginFetch(SimState s, int g, int unitTile, bool pickingUp)
+	{
+		s.GoblinJobTile[g] = unitTile;
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinWanderTile[g] = -1;
+		s.GoblinWanderTicks[g] = 0;
+		s.GoblinTask[g] = (byte)(pickingUp ? GoblinTask.PickingUp : GoblinTask.Fetching);
+	}
+
+	/// <summary>Fetching → PickingUp, on arrival at the unit.</summary>
+	public static void StartPickingUp(SimState s, int g)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.PickingUp;
+	}
+
+	/// <summary>
+	/// Counts one tick of a pick-up or drop-off. True on the tick the <see cref="HaulActionTicks"/>th tick is
+	/// counted, when the caller must finish the action with <see cref="FinishPickUp"/> or by releasing the goblin.
+	/// </summary>
+	public static bool WorkTick(SimState s, int g) => ++s.GoblinWorkTicks[g] >= HaulActionTicks;
+
+	/// <summary>PickingUp → Carrying one unit of <paramref name="material"/>. The unit has just left its tile.</summary>
+	public static void FinishPickUp(SimState s, int g, Material material)
+	{
+		s.GoblinCarry[g] = (byte)material;
+		s.GoblinJobTile[g] = -1;
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.Carrying;
+	}
+
+	/// <summary>Carrying → Dropping, once the goblin stands on a Pile tile.</summary>
+	public static void StartDropping(SimState s, int g)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.Dropping;
+	}
+
+	/// <summary>Dropping → Carrying again, when the Pile under the goblin is gone.</summary>
+	public static void ResumeCarrying(SimState s, int g)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.Carrying;
+	}
+
+	/// <summary>
+	/// Any Task → Idle, with no Job, no wander and nothing carried. The Job, if any, stays on the job list. A carried
+	/// unit is not put back: whoever releases a Carrying or Dropping goblin first puts the unit down.
+	/// </summary>
 	public static void Release(SimState s, int g)
 	{
 		s.GoblinTask[g] = (byte)GoblinTask.Idle;
 		s.GoblinJobTile[g] = -1;
+		s.GoblinCarry[g] = (byte)Material.None;
+		s.GoblinWorkTicks[g] = 0;
 		s.GoblinStepTicks[g] = 0;
 		s.GoblinWanderTile[g] = -1;
 		s.GoblinWanderTicks[g] = 0;
@@ -68,11 +132,23 @@ public static class GoblinTasks
 	}
 
 	/// <summary>
+	/// True for the Tasks that work a Designation (Walking, Digging), false for the Tasks that work a loose unit
+	/// (Fetching, PickingUp). Two goblins never claim one tile for the same kind of Job; a dig and a Haul may
+	/// share a tile.
+	/// </summary>
+	public static bool IsDigTask(GoblinTask task) => task is GoblinTask.Walking or GoblinTask.Digging;
+
+	/// <summary>True for Fetching and PickingUp: the Tasks that hold a claim on a loose unit.</summary>
+	public static bool IsFetchTask(GoblinTask task) => task is GoblinTask.Fetching or GoblinTask.PickingUp;
+
+	/// <summary>
 	/// The first broken Task rule, or null when every goblin's Task fits its fields and the world: the field
-	/// shape of each Task, and the world rules (a claimed tile is designated, a Digging goblin stands where it
-	/// can dig, a wander target is walkable on the goblin's own level and not its own tile, no two goblins
-	/// claim one tile, step ticks are below <see cref="WalkTicksPerTile"/>, an idle pause is at most
-	/// <see cref="MaxWanderPauseTicks"/>).
+	/// shape of each Task, and the world rules (a claimed tile is designated or holds a loose unit, a Digging goblin
+	/// stands where it can dig, a PickingUp goblin stands on its unit, a Dropping goblin stands on a Pile tile, a
+	/// goblin carries a unit exactly while Carrying or Dropping, a wander target is walkable on the goblin's own
+	/// level and not its own tile, no two goblins claim one tile for the same kind of Job, step ticks are below
+	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> and only count while
+	/// PickingUp or Dropping, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
 	/// Precondition: the state is structurally sound: array lengths match the map and goblin cap, tile, material
 	/// and designation values are defined, and every goblin stands on the map.
 	/// </summary>
@@ -88,9 +164,23 @@ public static class GoblinTasks
 			if (s.GoblinStepTicks[g] >= WalkTicksPerTile)
 				return $"Goblin {g} has step ticks {s.GoblinStepTicks[g]}.";
 
+			var carry = (Material)s.GoblinCarry[g];
+			if (!Enum.IsDefined(carry))
+				return $"Goblin {g} carries unknown material {s.GoblinCarry[g]}.";
+			var carrying = task is GoblinTask.Carrying or GoblinTask.Dropping;
+			if (carrying && carry == Material.None)
+				return $"Goblin {g} is {task} with nothing to carry.";
+			if (!carrying && carry != Material.None)
+				return $"Goblin {g} is {task} but carries {carry}.";
+			if (s.GoblinWorkTicks[g] >= HaulActionTicks)
+				return $"Goblin {g} has work ticks {s.GoblinWorkTicks[g]}.";
+			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping))
+				return $"Goblin {g} is {task} but has work ticks {s.GoblinWorkTicks[g]}.";
+
 			var job = s.GoblinJobTile[g];
 			var wanderTile = s.GoblinWanderTile[g];
 			var wanderTicks = s.GoblinWanderTicks[g];
+			var here = s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]);
 			switch (task)
 			{
 				case GoblinTask.Idle:
@@ -110,7 +200,7 @@ public static class GoblinTasks
 					if (!(wanderTile >= 0 && wanderTile < tiles
 						&& TileRules.IsWalkable(s.KindAt(wanderTile))
 						&& wanderTile / layer == s.GoblinZ[g]
-						&& wanderTile != s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g])))
+						&& wanderTile != here))
 						return $"Goblin {g} wanders to tile {wanderTile}, which is not a walkable tile on its own level.";
 					break;
 
@@ -121,13 +211,47 @@ public static class GoblinTasks
 					if (!(job >= 0 && job < tiles && s.DesignationAt(job) != DesignationKind.None))
 						return $"Goblin {g} works tile {job}, which is not designated.";
 					if (task == GoblinTask.Digging
-						&& !TileRules.CanDigFrom(s, s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]), job, s.DesignationAt(job)))
+						&& !TileRules.CanDigFrom(s, here, job, s.DesignationAt(job)))
 						return $"Goblin {g} is digging tile {job} from where it cannot dig it.";
-					for (var other = 0; other < g; other++)
-						if (s.GoblinJobTile[other] == job)
-							return $"Goblins {other} and {g} both claim tile {job}.";
+					if (FindOtherClaim(s, g, job) is { } digRival)
+						return $"Goblins {digRival} and {g} both claim tile {job}.";
+					break;
+
+				case GoblinTask.Fetching:
+				case GoblinTask.PickingUp:
+					if (wanderTile != -1 || wanderTicks != 0)
+						return $"Goblin {g} is working but wanders.";
+					if (!(job >= 0 && job < tiles && s.LooseMaterial(job) != Material.None))
+						return $"Goblin {g} fetches tile {job}, which holds no loose unit.";
+					if (task == GoblinTask.PickingUp && job != here)
+						return $"Goblin {g} is picking up tile {job} from tile {here}.";
+					if (FindOtherClaim(s, g, job) is { } fetchRival)
+						return $"Goblins {fetchRival} and {g} both claim the unit on tile {job}.";
+					break;
+
+				case GoblinTask.Carrying:
+				case GoblinTask.Dropping:
+					if (job != -1)
+						return $"Goblin {g} is carrying but holds job tile {job}.";
+					if (wanderTile != -1 || wanderTicks != 0)
+						return $"Goblin {g} is carrying but wanders.";
+					if (task == GoblinTask.Dropping && !s.IsPile(here))
+						return $"Goblin {g} is dropping a unit on tile {here}, which is not a Pile.";
 					break;
 			}
+		}
+		return null;
+	}
+
+	// The lower-numbered goblin that claims the same tile as goblin g for the same kind of Job, or null.
+	static int? FindOtherClaim(SimState s, int g, int job)
+	{
+		var dig = IsDigTask((GoblinTask)s.GoblinTask[g]);
+		for (var other = 0; other < g; other++)
+		{
+			var task = (GoblinTask)s.GoblinTask[other];
+			if (s.GoblinJobTile[other] == job && (dig ? IsDigTask(task) : IsFetchTask(task)))
+				return other;
 		}
 		return null;
 	}

@@ -165,6 +165,55 @@ public class LooseItemsTests
 		Assert.Equal(SimJson.Serialize(first), SimJson.Serialize(second));
 	}
 
+	[Fact]
+	public void Looking_up_the_count_of_no_material_is_rejected()
+	{
+		var s = Simulation.NewWorld(seed: 1).State;
+
+		Assert.Throws<ArgumentOutOfRangeException>(() => s.ItemCount(0, Material.None));
+		Assert.Throws<ArgumentOutOfRangeException>(() => s.AddItems(0, Material.None, 1));
+	}
+
+	[Fact]
+	public void Adding_a_negative_number_of_units_is_rejected()
+	{
+		var s = Simulation.NewWorld(seed: 1).State;
+
+		Assert.Throws<ArgumentOutOfRangeException>(() => s.AddItems(0, Material.Dirt, -1));
+		Assert.Equal(0, s.ItemCount(0, Material.Dirt));
+	}
+
+	[Fact]
+	public void RemoveItems_takes_units_off_a_tile_and_never_goes_below_zero()
+	{
+		var s = Simulation.NewWorld(seed: 1).State;
+		s.AddItems(7, Material.Stone, 2);
+
+		s.RemoveItems(7, Material.Stone, 1);
+		Assert.Equal(1, s.ItemCount(7, Material.Stone));
+
+		Assert.Throws<InvalidOperationException>(() => s.RemoveItems(7, Material.Stone, 2));
+		Assert.Throws<ArgumentOutOfRangeException>(() => s.RemoveItems(7, Material.Stone, -1));
+		Assert.Throws<InvalidOperationException>(() => s.RemoveItems(7, Material.Dirt, 1));
+		Assert.Equal(1, s.ItemCount(7, Material.Stone));
+	}
+
+	[Fact]
+	public void LooseMaterial_names_the_first_loose_material_on_a_tile_and_none_on_a_Pile()
+	{
+		var s = Simulation.NewWorld(seed: 1).State;
+		Assert.Equal(Material.None, s.LooseMaterial(7));
+
+		s.AddItems(7, Material.Stone, 1);
+		Assert.Equal(Material.Stone, s.LooseMaterial(7));
+
+		s.AddItems(7, Material.Dirt, 1);
+		Assert.Equal(Material.Dirt, s.LooseMaterial(7));
+
+		s.Piles[7] = 1;
+		Assert.Equal(Material.None, s.LooseMaterial(7));
+	}
+
 	static Simulation WorldWithShaftAt(int x, int y)
 	{
 		var sim = Simulation.NewWorld(seed: 1);

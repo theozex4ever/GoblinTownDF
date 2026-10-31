@@ -33,4 +33,8 @@ public enum GoblinTask : byte
 	Walking,
 	Digging,
 	Wandering,
+	Fetching,
+	PickingUp,
+	Carrying,
+	Dropping,
 }

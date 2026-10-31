@@ -23,6 +23,7 @@ public partial class WarrenView : Node2D
 	static readonly Color GoblinColor = new(0.35f, 0.75f, 0.30f);
 	static readonly Color FaintGoblinColor = new(0.35f, 0.75f, 0.30f, 0.35f);
 	static readonly Color LooseDirtColor = new(0.55f, 0.36f, 0.18f);
+	static readonly Color WaitingHaulColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
 	public const int CountFontSize = 9;
 
@@ -62,7 +63,8 @@ public partial class WarrenView : Node2D
 				}
 
 			// A Pile tile is tinted and shows its stored count per material, in that material's colour (dirt top
-			// left, stone bottom right). A loose item is a small square in the same colour (stone matches solid stone).
+			// left, stone bottom right). A loose item is a small square in the same colour (stone matches solid stone),
+			// greyed while its Haul waits for a Pile it can be carried to.
 			if (s.IsPile(tile))
 			{
 				DrawRect(rect, PileTint);
@@ -71,10 +73,11 @@ public partial class WarrenView : Node2D
 			}
 			else
 			{
+				var waiting = !s.IsHaulReachable(tile);
 				if (s.LooseCount(tile, Goblins.Sim.Material.Dirt) > 0)
-					DrawRect(new Rect2(rect.Position.X + 3, rect.Position.Y + 3, 6, 6), LooseDirtColor);
+					DrawRect(new Rect2(rect.Position.X + 3, rect.Position.Y + 3, 6, 6), waiting ? WaitingHaulColor : LooseDirtColor);
 				if (s.LooseCount(tile, Goblins.Sim.Material.Stone) > 0)
-					DrawRect(new Rect2(rect.End.X - 9, rect.End.Y - 9, 6, 6), StoneColor);
+					DrawRect(new Rect2(rect.End.X - 9, rect.End.Y - 9, 6, 6), waiting ? WaitingHaulColor : StoneColor);
 			}
 
 			if (s.DesignationAt(tile) == DesignationKind.None)
@@ -104,6 +107,14 @@ public partial class WarrenView : Node2D
 				CellSize - 2 * inset,
 				CellSize - 2 * inset);
 			DrawRect(rect, dz == 0 ? GoblinColor : FaintGoblinColor);
+
+			// A carrying goblin shows a small square of its material on its marker.
+			var carried = (Goblins.Sim.Material)s.GoblinCarry[g];
+			if (dz == 0 && carried != Goblins.Sim.Material.None)
+			{
+				var center = rect.GetCenter();
+				DrawRect(new Rect2(center.X - 3, center.Y - 3, 6, 6), carried == Goblins.Sim.Material.Stone ? StoneColor : LooseDirtColor);
+			}
 		}
 
 		if (Selection is { } sel)

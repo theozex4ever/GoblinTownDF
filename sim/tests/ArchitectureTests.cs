@@ -19,8 +19,8 @@ public partial class ArchitectureTests
 		Assert.Empty(godotRefs);
 	}
 
-	// The five goblin Task arrays: only GoblinTasks changes them (see the sim-architecture skill).
-	const string TaskFields = "GoblinTask|GoblinJobTile|GoblinWanderTile|GoblinWanderTicks|GoblinStepTicks";
+	// The seven goblin Task arrays: only GoblinTasks changes them (see the sim-architecture skill).
+	const string TaskFields = "GoblinTask|GoblinJobTile|GoblinWanderTile|GoblinWanderTicks|GoblinStepTicks|GoblinCarry|GoblinWorkTicks";
 
 	// `x.Field[i] = v`, `+=`, `++`, `--` on an element, and Array.Fill/Clear/Copy or `x.Field = ...` on a whole array.
 	// `==` is a comparison and `=>` a lambda, not assignments.
@@ -87,6 +87,8 @@ public partial class ArchitectureTests
 	[InlineData("s.GoblinWanderTicks[g] -= 1;")]
 	[InlineData("if (--s.GoblinWanderTicks[g] == 0) Go();")]
 	[InlineData("s.GoblinStepTicks[g]++;")]
+	[InlineData("s.GoblinCarry[g] = (byte)Material.Dirt;")]
+	[InlineData("s.GoblinWorkTicks[g]++;")]
 	[InlineData("Array.Fill(s.GoblinTask, (byte)0);")]
 	[InlineData("s.GoblinJobTile = new int[30];")]
 	public void The_scan_flags_a_stray_write_outside_GoblinTasks(string line)

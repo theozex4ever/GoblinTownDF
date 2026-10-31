@@ -17,6 +17,7 @@ public static class PileRules
 			if (CanPaint(s.KindAt(tile)))
 				s.Piles[tile] = 1;
 		}
+		Settle(s);
 	}
 
 	/// <summary>Clears the flag on every Pile tile in the rectangle. Their counts stay, now loose.</summary>
@@ -27,5 +28,30 @@ public static class PileRules
 		for (var y = y0; y <= y1; y++)
 		for (var x = x0; x <= x1; x++)
 			s.Piles[s.TileIndex(x, y, command.Z)] = 0;
+		Settle(s);
+	}
+
+	/// <summary>
+	/// Brings the goblins' hauls in line after a Pile appeared or went: a goblin fetching a unit that is now stored is
+	/// freed, and a goblin dropping a unit on a tile that is no longer a Pile carries it on to the next nearest Pile.
+	/// Run after anything that changes a Pile flag, so <see cref="GoblinTasks.FindViolation"/> holds between ticks.
+	/// </summary>
+	public static void Settle(SimState s)
+	{
+		for (var g = 0; g < s.GoblinCount; g++)
+		{
+			switch ((GoblinTask)s.GoblinTask[g])
+			{
+				case GoblinTask.Fetching:
+				case GoblinTask.PickingUp:
+					if (s.LooseMaterial(s.GoblinJobTile[g]) == Material.None)
+						GoblinTasks.Release(s, g);
+					break;
+				case GoblinTask.Dropping:
+					if (!s.IsPile(s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g])))
+						GoblinTasks.ResumeCarrying(s, g);
+					break;
+			}
+		}
 	}
 }

@@ -67,7 +67,9 @@ public static class SimJson
 			&& s.GoblinJobTile is { Length: SimState.MaxGoblins }
 			&& s.GoblinStepTicks is { Length: SimState.MaxGoblins }
 			&& s.GoblinWanderTile is { Length: SimState.MaxGoblins }
-			&& s.GoblinWanderTicks is { Length: SimState.MaxGoblins },
+			&& s.GoblinWanderTicks is { Length: SimState.MaxGoblins }
+			&& s.GoblinCarry is { Length: SimState.MaxGoblins }
+			&& s.GoblinWorkTicks is { Length: SimState.MaxGoblins },
 			$"Goblin arrays must hold {SimState.MaxGoblins} entries.");
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
