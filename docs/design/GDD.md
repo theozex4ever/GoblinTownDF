@@ -126,7 +126,7 @@ The first prototype answers one question: is it fun to dig a warren and watch go
 
 **Build order**
 
-- [ ] **P1 — Map and digging.** 32×32×3 grid, view one level at a time, designate digging, one goblin digs it out.
+- [x] **P1 — Map and digging.** 32×32×3 grid, view one level at a time, designate digging, one goblin digs it out.
 
   **P1 decisions**
 

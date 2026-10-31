@@ -20,7 +20,7 @@ Goblins are earnest underdogs who take absurd traditions seriously. Failure shou
 
 ## Development status
 
-**Early grey-box prototype, working toward P1: map and digging.** The current build has a 32×32 map across three z-levels with one Grunt who digs designated tunnels and stairs and wanders when idle. You can switch levels, pause, and change speed. The wider colony systems are still to come.
+**Early grey-box prototype. P1 (map and digging) is done and passed its [playtest](docs/playtests/2026-10-30-P1.md); next up is P2: hauling and piles.** The current build has a 32×32 map across three z-levels with one Grunt who digs designated tunnels and stairs and wanders when idle. You can switch levels, pause, and change speed. The wider colony systems are still to come.
 
 The first prototype asks: **is it fun to dig a warren and watch goblins mess it up?** It will grow through six playable milestones:
 
