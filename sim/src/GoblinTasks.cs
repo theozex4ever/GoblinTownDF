@@ -144,7 +144,11 @@ public static class GoblinTasks
 	/// <summary>True for Fetching and PickingUp: the Tasks that hold a claim on a loose unit.</summary>
 	public static bool IsFetchTask(GoblinTask task) => task is GoblinTask.Fetching or GoblinTask.PickingUp;
 
-	/// <summary>How many goblins numbered below <paramref name="below"/> hold a claim on a loose unit of <paramref name="tile"/>.</summary>
+	/// <summary>
+	/// How many goblins numbered below <paramref name="below"/> hold a claim on a loose unit of <paramref name="tile"/>.
+	/// Pass the goblin count for every claim; pass a goblin's own number to ask whether its claim has a unit to itself,
+	/// which is true while the count is under <see cref="SimState.LooseTotal"/>.
+	/// </summary>
 	public static int FetchClaims(SimState s, int tile, int below)
 	{
 		var claims = 0;
@@ -226,7 +230,7 @@ public static class GoblinTasks
 					if (task == GoblinTask.Digging
 						&& !TileRules.CanDigFrom(s, here, job, s.DesignationAt(job)))
 						return $"Goblin {g} is digging tile {job} from where it cannot dig it.";
-					if (FindOtherClaim(s, g, job) is { } digRival)
+					if (FindOtherDigger(s, g, job) is { } digRival)
 						return $"Goblins {digRival} and {g} both claim tile {job}.";
 					break;
 
@@ -257,7 +261,7 @@ public static class GoblinTasks
 	}
 
 	// The lower-numbered goblin that is digging the same tile as goblin g, or null.
-	static int? FindOtherClaim(SimState s, int g, int job)
+	static int? FindOtherDigger(SimState s, int g, int job)
 	{
 		for (var other = 0; other < g; other++)
 			if (s.GoblinJobTile[other] == job && IsDigTask((GoblinTask)s.GoblinTask[other]))

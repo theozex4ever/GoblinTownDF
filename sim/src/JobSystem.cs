@@ -391,22 +391,19 @@ public sealed class JobSystem
 		}
 	}
 
-	// Dropping on a Pile tile stores the unit.
+	// Releasing a dropping goblin on a Pile tile stores the unit.
 	void Drop(SimState s, int goblin)
 	{
 		if (GoblinTasks.WorkTick(s, goblin))
-			PutDown(s, goblin);
+			GoblinTasks.Release(s, goblin);
 	}
 
-	// With no Pile in reach, the unit is loose again and its Haul waits for a Pile.
+	// With no Pile in reach, releasing the goblin puts the unit down on its tile: it is loose again and its Haul waits for a Pile.
 	void DropWhereStanding(SimState s, int goblin)
 	{
-		PutDown(s, goblin);
+		GoblinTasks.Release(s, goblin);
 		RecheckReachability(s);
 	}
-
-	// Frees the goblin, which puts the unit it carries down on its own tile.
-	static void PutDown(SimState s, int goblin) => GoblinTasks.Release(s, goblin);
 
 	void Dig(SimState s, int goblin, int job, List<SimEvent> events)
 	{

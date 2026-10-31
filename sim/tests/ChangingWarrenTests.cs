@@ -70,6 +70,27 @@ public class ChangingWarrenTests
 	}
 
 	[Fact]
+	public void Removing_the_last_Pile_under_a_dropping_goblin_puts_the_unit_down_loose_where_it_stands()
+	{
+		var sim = NewWorldWithOneGrunt(seed: 1);
+		var s = sim.State;
+		s.AddItems(s.TileIndex(16, 14, 0), Material.Dirt, 1);
+		Paint(sim, 20, 14);
+		RunTicks(sim, 25);
+		Assert.Equal(GoblinTask.Dropping, TaskOf(s, 0));
+
+		Remove(sim, 20, 14);
+		RunTicks(sim, 3);
+
+		Assert.Equal(GoblinTask.Idle, TaskOf(s, 0));
+		Assert.Equal(1, s.LooseCount(s.TileIndex(20, 14, 0), Material.Dirt));
+		Assert.Equal(1, Units(s));
+		Paint(sim, 25, 25);
+		RunTicks(sim, 200);
+		Assert.Equal(1, Stored(s, 25, 25));
+	}
+
+	[Fact]
 	public void A_tile_with_three_loose_units_is_hauled_in_three_trips_and_no_more_than_three_goblins_claim_it()
 	{
 		var sim = Simulation.NewWorld(seed: 1);
@@ -210,6 +231,7 @@ public class ChangingWarrenTests
 	[Fact]
 	public void A_long_run_of_random_Commands_loses_and_invents_no_units()
 	{
+		var putDowns = 0;
 		foreach (var seed in new[] { 1, 2, 3 })
 		{
 			var sim = Simulation.NewWorld(seed);
@@ -220,6 +242,7 @@ public class ChangingWarrenTests
 			var rng = new Random(seed);
 			var dug = 0;
 			var start = Units(s);
+			var previous = new byte[s.GoblinCount];
 
 			for (var tick = 0; tick < 3000; tick++)
 			{
@@ -229,11 +252,20 @@ public class ChangingWarrenTests
 				dug += sim.DrainEvents().OfType<TileDug>().Count();
 				Assert.True(GoblinTasks.FindViolation(s) is null, $"Seed {seed} tick {s.Tick}: {GoblinTasks.FindViolation(s)}");
 				Assert.True(Units(s) == start + dug, $"Seed {seed} tick {s.Tick}: {Units(s)} units, expected {start + dug}.");
+				for (var g = 0; g < s.GoblinCount; g++)
+				{
+					// A carrier that goes Idle with no Pile to drop on put its unit down loose.
+					if (previous[g] == (byte)GoblinTask.Carrying && TaskOf(s, g) == GoblinTask.Idle)
+						putDowns++;
+					previous[g] = s.GoblinTask[g];
+				}
 			}
 
 			Assert.True(dug > 0, "The run dug nothing.");
 			SimJson.Deserialize(SimJson.Serialize(sim));
 		}
+
+		Assert.True(putDowns > 0, "No carrier lost its Pile mid-haul, so the run never reached the put-down path.");
 	}
 
 	[Fact]
@@ -268,8 +300,9 @@ public class ChangingWarrenTests
 			0 => new Designate(DesignationKind.Dig, z, x, y, x1, y1),
 			1 or 2 => new Designate(DesignationKind.DigStairs, z, x, y, x1, y1),
 			3 => new CancelDesignation(z, x, y, x1, y1),
-			4 => new PaintPile(z, x, y, x1, y1),
-			_ => new RemovePile(z, x, y, x1, y1),
+			4 => new PaintPile(z, x, y, x + rng.Next(2), y + rng.Next(2)),
+			// Wide, so a removal often takes every Pile at once.
+			_ => new RemovePile(z, x - 10, y - 10, x + 10, y + 10),
 		};
 	}
 }
