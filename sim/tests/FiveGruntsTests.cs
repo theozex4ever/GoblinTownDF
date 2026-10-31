@@ -8,7 +8,7 @@ public class FiveGruntsTests
 {
 	const double OneTick = 0.1;
 
-	// Dig a tile of Solid standing right beside a Floor tile: one step to the stand tile, then the dig.
+	// The goblin already stands beside the target, so the dig starts on the first tick with no walking.
 	[Theory]
 	[InlineData(1, Material.Dirt, 20)]
 	[InlineData(2, Material.Stone, 40)]
