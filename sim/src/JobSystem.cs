@@ -250,28 +250,60 @@ public sealed class JobSystem
 
 	void Walk(SimState s, int goblin, int job)
 	{
-		if (++s.GoblinStepTicks[goblin] < GoblinTasks.WalkTicksPerTile)
+		if (!StepDue(s, goblin))
 			return;
-		s.GoblinStepTicks[goblin] = 0;
 
 		_goals.Clear();
 		_goalJobs.Clear();
 		AddStandingTiles(s, job);
-		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
-		if (!_pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _)
-			|| _path.Count == 0)
+		switch (MoveToward(s, goblin))
 		{
-			GoblinTasks.Release(s, goblin);
-			return;
+			case Move.NoPath:
+			case Move.Here:
+				GoblinTasks.Release(s, goblin);
+				break;
+			case Move.Arrived:
+				GoblinTasks.StartDigging(s, goblin);
+				break;
 		}
+	}
+
+	/// <summary>True on the tick a walking goblin is due to take its next step; otherwise it counts the tick.</summary>
+	static bool StepDue(SimState s, int goblin)
+	{
+		if (++s.GoblinStepTicks[goblin] < GoblinTasks.WalkTicksPerTile)
+			return false;
+		s.GoblinStepTicks[goblin] = 0;
+		return true;
+	}
+
+	enum Move
+	{
+		/// <summary>No goal in <c>_goals</c> can be reached.</summary>
+		NoPath,
+		/// <summary>The goblin already stands on a goal, so it did not move.</summary>
+		Here,
+		/// <summary>One step along the way; more remain.</summary>
+		Moved,
+		/// <summary>One step onto the nearest goal.</summary>
+		Arrived,
+	}
+
+	/// <summary>Takes one step toward the nearest of the goal tiles in <c>_goals</c>, on any level.</summary>
+	Move MoveToward(SimState s, int goblin)
+	{
+		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
+		if (!_pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _))
+			return Move.NoPath;
+		if (_path.Count == 0)
+			return Move.Here;
 
 		var next = _path[0];
 		var layer = s.Width * s.Height;
 		s.GoblinX[goblin] = next % s.Width;
 		s.GoblinY[goblin] = next / s.Width % s.Height;
 		s.GoblinZ[goblin] = next / layer;
-		if (_path.Count == 1)
-			GoblinTasks.StartDigging(s, goblin);
+		return _path.Count == 1 ? Move.Arrived : Move.Moved;
 	}
 
 	void Dig(SimState s, int goblin, int job, List<SimEvent> events)
