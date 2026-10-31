@@ -26,13 +26,15 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Dig stairs | A designation that turns a Solid or Floor tile into Stairs. |
 | Reachable | A Designation is reachable when some goblin can path to a tile it can dig from. An unreachable Designation waits: it stays designated, is skipped when goblins claim a Job, and shows greyed out until a dug tile opens a path. |
 | Selection | A click-drag on the viewed level that picks a rectangle of tiles; a single click is a 1×1 rectangle. It does not know what the active tool will do with it. |
-| Tool | The action a selection applies, picked by a key: Dig or Dig stairs. |
+| Tool | The action a selection applies, picked by a key: Dig, Dig stairs, or Pile. Right-drag removes what the active Tool makes. |
 | Cancel designation | The `CancelDesignation` Command: removes Designations from a rectangle of tiles. A tile mid-dig loses its progress and stays as it was. |
 | Job | A unit of work in the global job list (dig, haul, brew, build) that an idle goblin claims. |
-| Task | What one goblin is doing right now: Idle, Wandering, Walking, or Digging. Walking to a claimed Job and Digging it are Tasks; the Job is the work itself, and stays on the job list until it is done or cancelled. |
+| Task | What one goblin is doing right now: Idle, Wandering, Walking, or Digging. Walking to a claimed Job and Digging it are Tasks, and P2 adds the Tasks for carrying a Haul (named by the first P2 ticket); the Job is the work itself, and stays on the job list until it is done or cancelled. |
 | Wander | What an idle goblin does when it has no reachable Job: after a 3–6 second pause it walks to a random walkable tile within 4 tiles on its own z-level, then pauses again. A goblin mid-walk is Wandering. A reachable Designation cuts it short. |
-| Pile | A floor zone where goblins dump items; counted per resource, not per item. |
-| Room | A painted zone that works once it holds its required item: Sleeping Heap, Grub Pit, Brewery, Pile, Shrine, Boss Throne. |
+| Pile | A flag painted on Floor tiles with the Pile Tool. Units on a Pile tile are stored and counted per material, with no cap; goblins drop each Haul on the nearest reachable Pile tile. |
+| Loose item | A unit of material on a tile that is not a Pile, such as the one a dug tile drops. Each loose unit is a Haul Job. |
+| Haul | The Job of carrying one loose unit to the nearest reachable Pile tile. With no reachable Pile, a Haul waits and shows greyed out. |
+| Room | A painted zone that works once it holds its required item: Sleeping Heap, Grub Pit, Brewery, Pile, Shrine, Boss Throne. The Pile needs no item. |
 | Raid | An abstracted off-map trip that returns loot and a story after a timer. |
 | Anger | Surface factions' hostility; raised by raids, drives invasion size. |
 | Invasion | Enemies entering the warren from the map edge or surface. |
