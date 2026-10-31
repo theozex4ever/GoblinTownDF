@@ -60,6 +60,7 @@ public sealed class Simulation
 		s.TileMaterials = new byte[layer * MapDepth];
 		s.Designations = new byte[layer * MapDepth];
 		s.DigProgress = new byte[layer * MapDepth];
+		s.TileItems = new int[layer * MapDepth * SimState.CountedMaterials];
 		// The surface and z1 are dirt, so digging into them yields dirt; z2 is stone.
 		for (var z = 0; z < MapDepth; z++)
 		{

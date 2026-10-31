@@ -284,6 +284,7 @@ public sealed class JobSystem
 		s.TileKinds[job] = (byte)TileRules.DugKind(s.DesignationAt(job));
 		s.Designations[job] = (byte)DesignationKind.None;
 		s.DigProgress[job] = 0;
+		s.AddItems(job, material, 1);
 		var layer = s.Width * s.Height;
 		events.Add(new TileDug(job % s.Width, job / s.Width % s.Height, job / layer, material));
 		GoblinTasks.Release(s, goblin);
