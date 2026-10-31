@@ -5,7 +5,7 @@ using Goblins.Sim;
 namespace AThousandGoblinsDeep;
 
 /// <summary>
-/// Checks where carried-material squares are drawn. The layout is pure geometry and always runs. The pixel checks
+/// Checks where carried-material squares and full Pile counts are drawn. The layout is pure geometry and always runs. The pixel checks
 /// render the warren into an image and read pixels, so they need a real renderer: with --headless they print a skip
 /// and pass, which means a run with no display does not check drawing.
 /// </summary>
@@ -30,7 +30,8 @@ public partial class CarryDrawChecks : Node
 
 			await CoveredByBodyCheck();
 			await FullTileCheck();
-			GD.Print("Carry draw checks passed (layout, 2 pixel scenarios).");
+			await FullCountCheck();
+			GD.Print("Carry draw checks passed (layout, 3 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -99,6 +100,30 @@ public partial class CarryDrawChecks : Node
 				continue;
 			var pixel = image.GetPixel(x, y);
 			Require(!IsNear(pixel, DirtSquare) && !IsNear(pixel, StoneSquare), $"A carried colour was drawn at ({x}, {y}), outside the carrier's marker.");
+		}
+	}
+
+	// A Pile count is highlighted at 30 and only for its own material: 30 dirt with 5 stone, and 5 dirt with 30 stone.
+	async System.Threading.Tasks.Task FullCountCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		sim.Apply(new PaintPile(0, 4, 4, 5, 4));
+		s.AddItems(s.TileIndex(4, 4, 0), Goblins.Sim.Material.Dirt, SimState.PileCapacity);
+		s.AddItems(s.TileIndex(4, 4, 0), Goblins.Sim.Material.Stone, 5);
+		s.AddItems(s.TileIndex(5, 4, 0), Goblins.Sim.Material.Dirt, 5);
+		s.AddItems(s.TileIndex(5, 4, 0), Goblins.Sim.Material.Stone, SimState.PileCapacity);
+		var image = await Render(sim);
+
+		var cell = WarrenView.CellSize;
+		foreach (var (tileX, dirtFull, stoneFull) in new[] { (4, true, false), (5, false, true) })
+		{
+			var dirtChip = WarrenView.CountChipRect(new Vector2(tileX * cell + 2, 4 * cell + 9), 0);
+			var stoneChip = WarrenView.CountChipRect(new Vector2(tileX * cell + 2, 4 * cell + cell - 2), 0);
+			Require(IsNear(image.GetPixel((int)dirtChip.Position.X, (int)dirtChip.Position.Y), WarrenView.FullCountChipColor) == dirtFull,
+				$"Tile {tileX}: the dirt count is {(dirtFull ? "not " : "")}highlighted.");
+			Require(IsNear(image.GetPixel((int)stoneChip.Position.X, (int)stoneChip.Position.Y), WarrenView.FullCountChipColor) == stoneFull,
+				$"Tile {tileX}: the stone count is {(stoneFull ? "not " : "")}highlighted.");
 		}
 	}
 

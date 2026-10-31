@@ -25,6 +25,9 @@ public partial class WarrenView : Node2D
 	static readonly Color LooseDirtColor = new(0.55f, 0.36f, 0.18f);
 	static readonly Color WaitingHaulColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
+	// A material whose count has reached the Pile's capacity is drawn dark on a bright chip.
+	public static readonly Color FullCountChipColor = new(1f, 0.85f, 0.2f);
+	static readonly Color FullCountTextColor = new(0.12f, 0.10f, 0.06f);
 	public const int CountFontSize = 9;
 	public const int CarriedSize = 6;
 
@@ -64,8 +67,9 @@ public partial class WarrenView : Node2D
 				}
 
 			// A Pile tile is tinted and shows its stored count per material, in that material's colour (dirt top
-			// left, stone bottom right). A loose item is a small square in the same colour (stone matches solid stone),
-			// greyed while its Haul waits for a Pile it can be carried to.
+			// left, stone bottom right); a count at the Pile's capacity sits on a bright chip, and only that material's.
+			// A loose item is a small square in the same colour (stone matches solid stone), greyed while its Haul
+			// waits for a Pile with room for its material that it can be carried to.
 			if (s.IsPile(tile))
 			{
 				DrawRect(rect, PileTint);
@@ -74,11 +78,12 @@ public partial class WarrenView : Node2D
 			}
 			else
 			{
-				var waiting = !s.IsHaulReachable(tile);
 				if (s.LooseCount(tile, Goblins.Sim.Material.Dirt) > 0)
-					DrawRect(new Rect2(rect.Position.X + 3, rect.Position.Y + 3, 6, 6), waiting ? WaitingHaulColor : LooseDirtColor);
+					DrawRect(new Rect2(rect.Position.X + 3, rect.Position.Y + 3, 6, 6),
+						s.IsHaulReachable(tile, Goblins.Sim.Material.Dirt) ? LooseDirtColor : WaitingHaulColor);
 				if (s.LooseCount(tile, Goblins.Sim.Material.Stone) > 0)
-					DrawRect(new Rect2(rect.End.X - 9, rect.End.Y - 9, 6, 6), waiting ? WaitingHaulColor : StoneColor);
+					DrawRect(new Rect2(rect.End.X - 9, rect.End.Y - 9, 6, 6),
+						s.IsHaulReachable(tile, Goblins.Sim.Material.Stone) ? StoneColor : WaitingHaulColor);
 			}
 
 			if (s.DesignationAt(tile) == DesignationKind.None)
@@ -161,10 +166,23 @@ public partial class WarrenView : Node2D
 		return new Rect2(left + slot % columns * (size + 1), top + slot / columns * (size + 1), size, size);
 	}
 
-	// A zero count draws nothing, so an empty Pile is only its tint.
+	/// <summary>The chip behind a full count whose text starts at <paramref name="baseline"/>: one pixel of margin each side, and the glyph height above the baseline.</summary>
+	public static Rect2 CountChipRect(Vector2 baseline, float textWidth) =>
+		new(baseline.X - 1, baseline.Y - (CountFontSize - 2), textWidth + 2, CountFontSize - 2);
+
+	// A zero count draws nothing, so an empty Pile is only its tint. A count at the Pile's capacity is highlighted.
 	void DrawCount(int count, Vector2 baseline, Color color)
 	{
-		if (count > 0)
-			DrawString(ThemeDB.FallbackFont, baseline, CountLabel.Format(count), HorizontalAlignment.Left, -1, CountFontSize, color);
+		if (count <= 0)
+			return;
+
+		var label = CountLabel.Format(count);
+		if (count >= SimState.PileCapacity)
+		{
+			var width = ThemeDB.FallbackFont.GetStringSize(label, HorizontalAlignment.Left, -1, CountFontSize).X;
+			DrawRect(CountChipRect(baseline, width), FullCountChipColor);
+			color = FullCountTextColor;
+		}
+		DrawString(ThemeDB.FallbackFont, baseline, label, HorizontalAlignment.Left, -1, CountFontSize, color);
 	}
 }

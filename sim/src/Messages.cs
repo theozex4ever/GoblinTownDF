@@ -23,7 +23,8 @@ public sealed record CancelDesignation(int Z, int X0, int Y0, int X1, int Y1) : 
 
 /// <summary>
 /// Paints a Pile on every Floor tile in the rectangle from (X0, Y0) to (X1, Y1) on level Z, corners in any order,
-/// clipped to the map. A single click is a 1×1 rectangle. Stairs, Solid and Open air tiles are skipped. Loose
+/// clipped to the map. A single click is a 1×1 rectangle. Stairs, Solid and Open air tiles are skipped, and so is
+/// a tile holding more than <see cref="SimState.PileCapacity"/> of any material, whose items stay loose. Loose
 /// items on a painted tile are stored on the spot.
 /// </summary>
 public sealed record PaintPile(int Z, int X0, int Y0, int X1, int Y1) : Command;

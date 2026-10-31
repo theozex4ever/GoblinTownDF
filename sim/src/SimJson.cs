@@ -38,6 +38,9 @@ public static class SimJson
 		}
 		foreach (var count in s.TileItems!)
 			Require(count >= 0, $"Item count {count} is negative.");
+		// No save is migrated: a Pile tile over capacity is rejected, while loose items are uncapped.
+		for (var tile = 0; tile < s.Piles.Length; tile++)
+			Require(s.Piles[tile] == 0 || !PileRules.IsOverCapacity(s, tile), $"Pile tile {tile} holds more than {SimState.PileCapacity} units of a material.");
 		foreach (var kind in s.TileKinds!)
 			Require(Enum.IsDefined((TileKind)kind), $"Unknown tile kind {kind}.");
 		foreach (var material in s.TileMaterials!)

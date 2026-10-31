@@ -415,7 +415,7 @@ public class HaulingTests
 	}
 
 	[Fact]
-	public void A_Pile_removed_while_carrying_with_none_left_puts_the_unit_down_where_the_goblin_stands()
+	public void A_Pile_removed_while_carrying_with_none_left_keeps_the_unit_and_the_goblin_waits_for_storage()
 	{
 		var sim = WorldWithLooseUnit(16, 14);
 		var s = sim.State;
@@ -424,15 +424,15 @@ public class HaulingTests
 		Assert.Equal(GoblinTask.Carrying, TaskOf(s, 0));
 
 		sim.Apply(new RemovePile(0, 20, 14, 20, 14));
-		RunTicks(sim, 3);
-
-		Assert.Equal(GoblinTask.Idle, TaskOf(s, 0));
-		Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
-		Assert.Equal(1, s.TileItems.Sum());
-		Assert.Equal(1, s.LooseCount(s.TileIndex(s.GoblinX[0], s.GoblinY[0], 0), Material.Dirt));
 		RunTicks(sim, 80);
-		Assert.Equal(1, s.TileItems.Sum());
-		Assert.False(HaulTask(TaskOf(s, 0)));
+
+		Assert.Equal(GoblinTask.Carrying, TaskOf(s, 0));
+		Assert.Equal((byte)Material.Dirt, s.GoblinCarry[0]);
+		Assert.Equal(0, s.TileItems.Sum());
+		Paint(sim, 22, 14);
+		RunTicks(sim, 80);
+		Assert.Equal(1, Stored(s, 22, 14));
+		Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
 	}
 
 	[Fact]

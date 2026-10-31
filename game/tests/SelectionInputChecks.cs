@@ -106,7 +106,7 @@ public partial class SelectionInputChecks : Node
 		}
 	}
 
-	// A Pile has no cap, so any count must read inside its 18 px cell, with the 2 px left inset.
+	// A Pile tile holds at most 30 of a material, but a label must still read inside its 18 px cell, with the 2 px left inset, for any count.
 	static void CountLabelChecks()
 	{
 		var expected = new (int Count, string Label)[]
