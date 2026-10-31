@@ -24,7 +24,7 @@ public partial class WarrenView : Node2D
 	static readonly Color FaintGoblinColor = new(0.35f, 0.75f, 0.30f, 0.35f);
 	static readonly Color LooseDirtColor = new(0.55f, 0.36f, 0.18f);
 	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
-	const int CountFontSize = 9;
+	public const int CountFontSize = 9;
 
 	public Simulation? Sim { get; set; }
 	public int ViewZ { get; set; }
@@ -120,6 +120,6 @@ public partial class WarrenView : Node2D
 	void DrawCount(int count, Vector2 baseline, Color color)
 	{
 		if (count > 0)
-			DrawString(ThemeDB.FallbackFont, baseline, count.ToString(), HorizontalAlignment.Left, -1, CountFontSize, color);
+			DrawString(ThemeDB.FallbackFont, baseline, CountLabel.Format(count), HorizontalAlignment.Left, -1, CountFontSize, color);
 	}
 }

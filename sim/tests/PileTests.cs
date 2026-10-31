@@ -271,16 +271,54 @@ public class PileTests
 		Assert.True(first.State.TileItems.Sum() >= 4);
 	}
 
+	[Fact]
+	public void A_run_saved_while_Piles_and_stock_exist_replays_the_rest_of_the_log_identically()
+	{
+		var log = new (int Tick, Command Command)[]
+		{
+			(2, new PaintPile(0, 14, 14, 18, 18)),
+			(31, new Designate(DesignationKind.DigStairs, 0, 15, 15, 15, 15)),
+			(250, new RemovePile(0, 17, 17, 18, 18)),
+			(300, new PaintPile(0, 0, 0, 31, 31)),
+			(350, new RemovePile(0, 0, 0, 31, 31)),
+		};
+		var original = Simulation.NewWorld(seed: 12);
+		var stocked = original.State.TileIndex(17, 17, 0);
+		original.State.AddItems(stocked, Material.Stone, 2);
+		original.State.AddItems(original.State.TileIndex(18, 18, 0), Material.Dirt, 3);
+		var next = RunLog(original, log, from: 0, to: 200);
+
+		// The checkpoint holds Piles with stored stock, and the original is still mid-run.
+		Assert.True(CountPiles(original.State) > 0);
+		Assert.Equal(2, original.State.StoredCount(stocked, Material.Stone));
+		var restored = SimJson.Deserialize(SimJson.Serialize(original));
+		Assert.Equal(SimJson.Serialize(original), SimJson.Serialize(restored));
+
+		RunLog(original, log, from: 200, to: 400, next);
+		RunLog(restored, log, from: 200, to: 400, next);
+
+		Assert.Equal(SimJson.Serialize(original), SimJson.Serialize(restored));
+		// The last remove turned all stock loose again, and nothing was lost on the way.
+		Assert.Equal(0, CountPiles(original.State));
+		Assert.Equal(2, original.State.LooseCount(stocked, Material.Stone));
+	}
+
 	static Simulation Replay(int seed, (int Tick, Command Command)[] log, int ticks)
 	{
 		var sim = Simulation.NewWorld(seed);
-		var next = 0;
-		for (var tick = 0; tick < ticks; tick++)
+		RunLog(sim, log, from: 0, to: ticks);
+		return sim;
+	}
+
+	// Runs ticks [from, to), applying each logged Command at its tick. Returns the index of the next unapplied entry.
+	static int RunLog(Simulation sim, (int Tick, Command Command)[] log, int from, int to, int next = 0)
+	{
+		for (var tick = from; tick < to; tick++)
 		{
 			while (next < log.Length && log[next].Tick == tick)
 				sim.Apply(log[next++].Command);
 			sim.Advance(0.1);
 		}
-		return sim;
+		return next;
 	}
 }

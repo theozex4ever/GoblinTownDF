@@ -94,13 +94,34 @@ public partial class SelectionInputChecks : Node
 					Require(SimJson.Serialize(sim) == before, $"{key} allowed a cancelled {button} drag to submit.");
 				});
 
-			GD.Print("Selection input checks passed (16 scenarios).");
+			CountLabelChecks();
+
+			GD.Print("Selection input checks passed (16 scenarios, count labels).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
 		{
 			GD.PushError(error.ToString());
 			GetTree().Quit(1);
+		}
+	}
+
+	// A Pile has no cap, so any count must read inside its 18 px cell, with the 2 px left inset.
+	static void CountLabelChecks()
+	{
+		var expected = new (int Count, string Label)[]
+		{
+			(0, ""), (-1, ""), (1, "1"), (9, "9"), (10, "10"), (99, "99"), (100, "100"), (999, "999"),
+			(1000, "1k"), (1999, "1k"), (2000, "2k"), (9999, "9k"), (10_000, "10k"), (99_999, "99k"),
+			(100_000, "99k"), (1_000_000, "99k"), (int.MaxValue, "99k"),
+		};
+		var font = ThemeDB.FallbackFont;
+		foreach (var (count, label) in expected)
+		{
+			var actual = CountLabel.Format(count);
+			Require(actual == label, $"CountLabel.Format({count}) was \"{actual}\", expected \"{label}\".");
+			var width = font.GetStringSize(actual, HorizontalAlignment.Left, -1, WarrenView.CountFontSize).X;
+			Require(width + 2 <= WarrenView.CellSize, $"Count {count} (\"{actual}\") is {width} px wide and overflows its cell.");
 		}
 	}
 

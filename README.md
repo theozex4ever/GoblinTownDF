@@ -48,7 +48,7 @@ You can also open `game/project.godot` in the Godot .NET editor and build and ru
 
 Current controls: **Space** pauses; **1**, **2**, and **4** select speed; **,** and **.** move up and down a z-level.
 
-Press **D** for Dig or **S** for Dig stairs, then click a tile or left-drag a rectangle to designate it. Right-drag cancels designations. **Escape** clears the selected tool and any active drag.
+Press **D** for Dig, **S** for Dig stairs or **P** for Pile, then click a tile or left-drag a rectangle to designate it or paint a Pile on its Floor tiles. Right-drag removes what the active tool makes: Dig and Dig stairs cancel designations, Pile removes Piles (their stock stays as loose items), and with no tool picked right-drag cancels designations. **Escape** clears the selected tool and any active drag.
 
 ## Development
 
