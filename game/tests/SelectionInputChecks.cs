@@ -50,8 +50,36 @@ public partial class SelectionInputChecks : Node
 				ExpectRectangle(sim.State, 0, DesignationKind.None, 4, 4, 7, 7);
 			});
 
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Key(main, Godot.Key.P);
+				Drag(main, view, MouseButton.Left, 10, 10, 12, 11);
+				ExpectPiles(s, 0, true, 10, 10, 12, 11);
+				// Stairs are skipped; the tile in the box that is not Floor stays unflagged.
+				s.TileKinds[s.TileIndex(20, 20, 0)] = (byte)TileKind.Stairs;
+				Drag(main, view, MouseButton.Left, 20, 20, 21, 20);
+				Require(!s.IsPile(s.TileIndex(20, 20, 0)) && s.IsPile(s.TileIndex(21, 20, 0)), "Pile paint did not skip Stairs.");
+
+				// Right-drag with the Pile Tool removes Piles and leaves Designations alone.
+				sim.Apply(new Designate(DesignationKind.DigStairs, 0, 10, 12, 12, 12));
+				s.AddItems(s.TileIndex(10, 10, 0), Goblins.Sim.Material.Stone, 2);
+				Drag(main, view, MouseButton.Right, 10, 10, 12, 12);
+				ExpectPiles(s, 0, false, 10, 10, 12, 11);
+				ExpectRectangle(s, 0, DesignationKind.DigStairs, 10, 12, 12, 12);
+				Require(s.LooseCount(s.TileIndex(10, 10, 0), Goblins.Sim.Material.Stone) == 2, "Removed Pile lost its stock.");
+
+				// Right-drag with Dig stairs cancels Designations and leaves Piles alone.
+				Drag(main, view, MouseButton.Left, 10, 10, 12, 12);
+				Key(main, Godot.Key.P);
+				Key(main, Godot.Key.S);
+				Drag(main, view, MouseButton.Right, 10, 10, 12, 12);
+				ExpectRectangle(s, 0, DesignationKind.None, 10, 12, 12, 12);
+				ExpectPiles(s, 0, true, 10, 10, 12, 11);
+			});
+
 			foreach (var button in new[] { MouseButton.Left, MouseButton.Right })
-			foreach (var key in new[] { Godot.Key.D, Godot.Key.S, Godot.Key.Escape, Godot.Key.Period, Godot.Key.Comma })
+			foreach (var key in new[] { Godot.Key.D, Godot.Key.S, Godot.Key.P, Godot.Key.Escape, Godot.Key.Period, Godot.Key.Comma })
 				WithMain((main, view, sim) =>
 				{
 					Key(main, Godot.Key.S);
@@ -66,13 +94,34 @@ public partial class SelectionInputChecks : Node
 					Require(SimJson.Serialize(sim) == before, $"{key} allowed a cancelled {button} drag to submit.");
 				});
 
-			GD.Print("Selection input checks passed (13 scenarios).");
+			CountLabelChecks();
+
+			GD.Print("Selection input checks passed (16 scenarios, count labels).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
 		{
 			GD.PushError(error.ToString());
 			GetTree().Quit(1);
+		}
+	}
+
+	// A Pile has no cap, so any count must read inside its 18 px cell, with the 2 px left inset.
+	static void CountLabelChecks()
+	{
+		var expected = new (int Count, string Label)[]
+		{
+			(0, ""), (-1, ""), (1, "1"), (9, "9"), (10, "10"), (99, "99"), (100, "100"), (999, "999"),
+			(1000, "1k"), (1999, "1k"), (2000, "2k"), (9999, "9k"), (10_000, "10k"), (99_999, "99k"),
+			(100_000, "99k"), (1_000_000, "99k"), (int.MaxValue, "99k"),
+		};
+		var font = ThemeDB.FallbackFont;
+		foreach (var (count, label) in expected)
+		{
+			var actual = CountLabel.Format(count);
+			Require(actual == label, $"CountLabel.Format({count}) was \"{actual}\", expected \"{label}\".");
+			var width = font.GetStringSize(actual, HorizontalAlignment.Left, -1, WarrenView.CountFontSize).X;
+			Require(width + 2 <= WarrenView.CellSize, $"Count {count} (\"{actual}\") is {width} px wide and overflows its cell.");
 		}
 	}
 
@@ -127,6 +176,13 @@ public partial class SelectionInputChecks : Node
 		for (var y = y0; y <= y1; y++)
 		for (var x = x0; x <= x1; x++)
 			Require(state.DesignationAt(state.TileIndex(x, y, z)) == kind, $"Expected {kind} at ({x}, {y}, {z}).");
+	}
+
+	static void ExpectPiles(SimState state, int z, bool piled, int x0, int y0, int x1, int y1)
+	{
+		for (var y = y0; y <= y1; y++)
+		for (var x = x0; x <= x1; x++)
+			Require(state.IsPile(state.TileIndex(x, y, z)) == piled, $"Expected Pile {(piled ? "set" : "clear")} at ({x}, {y}, {z}).");
 	}
 
 	static void Require(bool condition, string message)

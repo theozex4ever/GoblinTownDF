@@ -61,6 +61,7 @@ public sealed class Simulation
 		s.Designations = new byte[layer * MapDepth];
 		s.DigProgress = new byte[layer * MapDepth];
 		s.TileItems = new int[layer * MapDepth * SimState.CountedMaterials];
+		s.Piles = new byte[layer * MapDepth];
 		// The surface and z1 are dirt, so digging into them yields dirt; z2 is stone.
 		for (var z = 0; z < MapDepth; z++)
 		{
@@ -107,6 +108,12 @@ public sealed class Simulation
 				break;
 			case CancelDesignation c:
 				_jobs.Cancel(State, c);
+				break;
+			case PaintPile c:
+				PileRules.Paint(State, c);
+				break;
+			case RemovePile c:
+				PileRules.Remove(State, c);
 				break;
 			default:
 				throw new ArgumentException($"Unknown command {command.GetType().Name}.", nameof(command));

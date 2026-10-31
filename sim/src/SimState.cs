@@ -31,6 +31,11 @@ public sealed class SimState
 	/// tile * CountedMaterials + (material - 1). Read through <see cref="ItemCount"/>, add through <see cref="AddItems"/>.
 	/// </summary>
 	public int[] TileItems { get; set; } = [];
+	/// <summary>
+	/// 1 on a Pile tile, which only a Floor tile can be. The flag is what stores a tile's units: units on a Pile
+	/// tile are stored, units anywhere else are loose. Read through <see cref="IsPile"/>.
+	/// </summary>
+	public byte[] Piles { get; set; } = [];
 	// 1 on a designated tile some goblin can path to a tile it can dig from. Derived from the tiles, the
 	// designations and the goblin positions, so it is not saved: loading rebuilds it (see JobSystem.RecheckReachability).
 	[JsonIgnore]
@@ -66,6 +71,14 @@ public sealed class SimState
 	public int ItemCount(int tile, Material material) => TileItems[ItemSlot(tile, material)];
 
 	public void AddItems(int tile, Material material, int units) => TileItems[ItemSlot(tile, material)] += units;
+
+	public bool IsPile(int tile) => Piles[tile] != 0;
+
+	/// <summary>Units of <paramref name="material"/> on a Pile tile; 0 anywhere else.</summary>
+	public int StoredCount(int tile, Material material) => IsPile(tile) ? ItemCount(tile, material) : 0;
+
+	/// <summary>Units of <paramref name="material"/> on a tile that is not a Pile; 0 on a Pile tile.</summary>
+	public int LooseCount(int tile, Material material) => IsPile(tile) ? 0 : ItemCount(tile, material);
 
 	static int ItemSlot(int tile, Material material) => tile * CountedMaterials + (int)material - 1;
 

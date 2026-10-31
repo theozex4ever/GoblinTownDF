@@ -23,6 +23,8 @@ public partial class WarrenView : Node2D
 	static readonly Color GoblinColor = new(0.35f, 0.75f, 0.30f);
 	static readonly Color FaintGoblinColor = new(0.35f, 0.75f, 0.30f, 0.35f);
 	static readonly Color LooseDirtColor = new(0.55f, 0.36f, 0.18f);
+	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
+	public const int CountFontSize = 9;
 
 	public Simulation? Sim { get; set; }
 	public int ViewZ { get; set; }
@@ -59,11 +61,21 @@ public partial class WarrenView : Node2D
 					DrawLine(new Vector2(rect.Position.X + 3, ry), new Vector2(rect.End.X - 3, ry), StairsMarkColor, 2);
 				}
 
-			// A loose item is a small square in its material's colour (stone matches solid stone); the sim keeps no pile-or-loose split yet.
-			if (s.ItemCount(tile, Goblins.Sim.Material.Dirt) > 0)
-				DrawRect(new Rect2(rect.Position.X + 3, rect.Position.Y + 3, 6, 6), LooseDirtColor);
-			if (s.ItemCount(tile, Goblins.Sim.Material.Stone) > 0)
-				DrawRect(new Rect2(rect.End.X - 9, rect.End.Y - 9, 6, 6), StoneColor);
+			// A Pile tile is tinted and shows its stored count per material, in that material's colour (dirt top
+			// left, stone bottom right). A loose item is a small square in the same colour (stone matches solid stone).
+			if (s.IsPile(tile))
+			{
+				DrawRect(rect, PileTint);
+				DrawCount(s.StoredCount(tile, Goblins.Sim.Material.Dirt), rect.Position + new Vector2(2, 9), LooseDirtColor);
+				DrawCount(s.StoredCount(tile, Goblins.Sim.Material.Stone), rect.Position + new Vector2(2, CellSize - 2), StoneColor);
+			}
+			else
+			{
+				if (s.LooseCount(tile, Goblins.Sim.Material.Dirt) > 0)
+					DrawRect(new Rect2(rect.Position.X + 3, rect.Position.Y + 3, 6, 6), LooseDirtColor);
+				if (s.LooseCount(tile, Goblins.Sim.Material.Stone) > 0)
+					DrawRect(new Rect2(rect.End.X - 9, rect.End.Y - 9, 6, 6), StoneColor);
+			}
 
 			if (s.DesignationAt(tile) == DesignationKind.None)
 				continue;
@@ -102,5 +114,12 @@ public partial class WarrenView : Node2D
 			DrawRect(box, SelectionFillColor);
 			DrawRect(box, SelectionColor, filled: false, width: 2);
 		}
+	}
+
+	// A zero count draws nothing, so an empty Pile is only its tint.
+	void DrawCount(int count, Vector2 baseline, Color color)
+	{
+		if (count > 0)
+			DrawString(ThemeDB.FallbackFont, baseline, CountLabel.Format(count), HorizontalAlignment.Left, -1, CountFontSize, color);
 	}
 }

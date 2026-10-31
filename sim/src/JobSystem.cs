@@ -116,7 +116,7 @@ public sealed class JobSystem
 	/// Clips the rectangle to the map, corners in any order. False when it lies wholly off the map, which
 	/// covers nothing rather than the edge row. Throws if the level is off the map.
 	/// </summary>
-	static bool TryClip(SimState s, int z, int cx0, int cy0, int cx1, int cy1, out int x0, out int y0, out int x1, out int y1)
+	internal static bool TryClip(SimState s, int z, int cx0, int cy0, int cx1, int cy1, out int x0, out int y0, out int x1, out int y1)
 	{
 		if (z < 0 || z >= s.Depth)
 			throw new ArgumentOutOfRangeException(nameof(z), z, "Level is off the map.");
@@ -284,6 +284,8 @@ public sealed class JobSystem
 		s.TileKinds[job] = (byte)TileRules.DugKind(s.DesignationAt(job));
 		s.Designations[job] = (byte)DesignationKind.None;
 		s.DigProgress[job] = 0;
+		// Only Floor can hold a Pile; its stock stays on the tile, loose.
+		s.Piles[job] = 0;
 		s.AddItems(job, material, 1);
 		var layer = s.Width * s.Height;
 		events.Add(new TileDug(job % s.Width, job / s.Width % s.Height, job / layer, material));
