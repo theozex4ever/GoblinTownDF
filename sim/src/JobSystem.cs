@@ -391,26 +391,18 @@ public sealed class JobSystem
 		}
 	}
 
-	// Dropping on a Pile tile stores the unit.
+	// Releasing a dropping goblin on a Pile tile stores the unit.
 	void Drop(SimState s, int goblin)
 	{
 		if (GoblinTasks.WorkTick(s, goblin))
-			PutDown(s, goblin);
+			GoblinTasks.Release(s, goblin);
 	}
 
-	// With no Pile in reach, the unit is loose again and its Haul waits for a Pile.
+	// With no Pile in reach, releasing the goblin puts the unit down on its tile: it is loose again and its Haul waits for a Pile.
 	void DropWhereStanding(SimState s, int goblin)
 	{
-		PutDown(s, goblin);
-		RecheckReachability(s);
-	}
-
-	// Puts the carried unit on the goblin's own tile and frees the goblin.
-	static void PutDown(SimState s, int goblin)
-	{
-		var tile = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
-		s.AddItems(tile, (Material)s.GoblinCarry[goblin], 1);
 		GoblinTasks.Release(s, goblin);
+		RecheckReachability(s);
 	}
 
 	void Dig(SimState s, int goblin, int job, List<SimEvent> events)
@@ -435,12 +427,14 @@ public sealed class JobSystem
 		RecheckReachability(s);
 	}
 
+	// A dig is claimed by one goblin; a tile's loose units are claimed one goblin each, so it is claimed once all are.
 	static bool IsClaimed(SimState s, int tile, bool haul)
 	{
+		if (haul)
+			return GoblinTasks.FetchClaims(s, tile, s.GoblinCount) >= s.LooseTotal(tile);
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
-			var task = (GoblinTask)s.GoblinTask[g];
-			if (s.GoblinJobTile[g] == tile && (haul ? GoblinTasks.IsFetchTask(task) : GoblinTasks.IsDigTask(task)))
+			if (s.GoblinJobTile[g] == tile && GoblinTasks.IsDigTask((GoblinTask)s.GoblinTask[g]))
 				return true;
 		}
 		return false;

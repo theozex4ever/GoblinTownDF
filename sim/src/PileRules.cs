@@ -44,7 +44,8 @@ public static class PileRules
 			{
 				case GoblinTask.Fetching:
 				case GoblinTask.PickingUp:
-					if (s.LooseMaterial(s.GoblinJobTile[g]) == Material.None)
+					// A tile claimed by more goblins than it has loose units frees its highest-numbered claimants.
+					if (GoblinTasks.FetchClaims(s, s.GoblinJobTile[g], g) >= s.LooseTotal(s.GoblinJobTile[g]))
 						GoblinTasks.Release(s, g);
 					break;
 				case GoblinTask.Dropping:

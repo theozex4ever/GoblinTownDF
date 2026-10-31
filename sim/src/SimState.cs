@@ -116,6 +116,15 @@ public sealed class SimState
 		return Material.None;
 	}
 
+	/// <summary>Loose units of every material on a tile; 0 on a Pile tile. Each one is its own Haul, so this is how many goblins may claim the tile.</summary>
+	public int LooseTotal(int tile)
+	{
+		var total = 0;
+		for (var material = Material.Dirt; (int)material <= CountedMaterials; material++)
+			total += LooseCount(tile, material);
+		return total;
+	}
+
 	static int ItemSlot(int tile, Material material)
 	{
 		if ((int)material < 1 || (int)material > CountedMaterials)
