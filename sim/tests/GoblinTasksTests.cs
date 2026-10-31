@@ -183,4 +183,242 @@ public class GoblinTasksTests
 
 		Assert.NotNull(GoblinTasks.FindViolation(s));
 	}
+
+	// --- The carry Tasks. Goblin 0 stands at (16, 16, 0); a loose dirt unit lies at (16, 17, 0).
+
+	static SimState WorldWithLooseUnit(out int unit)
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		unit = s.TileIndex(16, 17, 0);
+		s.AddItems(unit, Material.Dirt, 1);
+		return s;
+	}
+
+	static void StandOn(SimState s, int g, int x, int y) => (s.GoblinX[g], s.GoblinY[g]) = (x, y);
+
+	[Fact]
+	public void BeginFetch_walks_to_a_loose_unit_the_goblin_is_not_yet_on()
+	{
+		var s = WorldWithLooseUnit(out var unit);
+		s.GoblinStepTicks[0] = 2;
+
+		GoblinTasks.BeginFetch(s, 0, unit, pickingUp: false);
+
+		Assert.Equal(GoblinTask.Fetching, TaskOf(s, 0));
+		Assert.Equal(unit, s.GoblinJobTile[0]);
+		Assert.Equal(0, s.GoblinStepTicks[0]);
+		Assert.Equal(0, s.GoblinWorkTicks[0]);
+		Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void BeginFetch_picks_up_at_once_when_the_goblin_stands_on_the_unit()
+	{
+		var s = WorldWithLooseUnit(out var unit);
+		StandOn(s, 0, 16, 17);
+
+		GoblinTasks.BeginFetch(s, 0, unit, pickingUp: true);
+
+		Assert.Equal(GoblinTask.PickingUp, TaskOf(s, 0));
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void BeginFetch_takes_a_wandering_goblin_off_its_wander()
+	{
+		var s = WorldWithLooseUnit(out var unit);
+		GoblinTasks.BeginWander(s, 0, s.TileIndex(18, 18, 0));
+
+		GoblinTasks.BeginFetch(s, 0, unit, pickingUp: false);
+
+		Assert.Equal(-1, s.GoblinWanderTile[0]);
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void StartPickingUp_turns_a_fetch_into_a_pick_up_on_arrival()
+	{
+		var s = WorldWithLooseUnit(out var unit);
+		GoblinTasks.BeginFetch(s, 0, unit, pickingUp: false);
+		StandOn(s, 0, 16, 17);
+		s.GoblinStepTicks[0] = 2;
+
+		GoblinTasks.StartPickingUp(s, 0);
+
+		Assert.Equal(GoblinTask.PickingUp, TaskOf(s, 0));
+		Assert.Equal(unit, s.GoblinJobTile[0]);
+		Assert.Equal(0, s.GoblinStepTicks[0]);
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void WorkTick_finishes_a_pick_up_or_drop_on_the_fifth_tick()
+	{
+		var s = WorldWithLooseUnit(out var unit);
+		StandOn(s, 0, 16, 17);
+		GoblinTasks.BeginFetch(s, 0, unit, pickingUp: true);
+
+		for (var tick = 1; tick < GoblinTasks.HaulActionTicks; tick++)
+		{
+			Assert.False(GoblinTasks.WorkTick(s, 0));
+			Assert.Null(GoblinTasks.FindViolation(s));
+		}
+
+		Assert.True(GoblinTasks.WorkTick(s, 0));
+		Assert.Equal(5, GoblinTasks.HaulActionTicks);
+	}
+
+	[Fact]
+	public void FinishPickUp_leaves_the_goblin_carrying_with_no_job_tile()
+	{
+		var s = WorldWithLooseUnit(out var unit);
+		StandOn(s, 0, 16, 17);
+		GoblinTasks.BeginFetch(s, 0, unit, pickingUp: true);
+		GoblinTasks.WorkTick(s, 0);
+		s.RemoveItems(unit, Material.Dirt, 1);
+
+		GoblinTasks.FinishPickUp(s, 0, Material.Dirt);
+
+		Assert.Equal(GoblinTask.Carrying, TaskOf(s, 0));
+		Assert.Equal((byte)Material.Dirt, s.GoblinCarry[0]);
+		Assert.Equal(-1, s.GoblinJobTile[0]);
+		Assert.Equal(0, s.GoblinWorkTicks[0]);
+		Assert.Equal(0, s.GoblinStepTicks[0]);
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void StartDropping_needs_a_Pile_under_the_goblin_and_ResumeCarrying_undoes_it()
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		s.Piles[s.TileIndex(16, 16, 0)] = 1;
+		GoblinTasks.FinishPickUp(s, 0, Material.Stone);
+
+		GoblinTasks.StartDropping(s, 0);
+		Assert.Equal(GoblinTask.Dropping, TaskOf(s, 0));
+		Assert.Equal((byte)Material.Stone, s.GoblinCarry[0]);
+		Assert.Null(GoblinTasks.FindViolation(s));
+
+		GoblinTasks.WorkTick(s, 0);
+		s.Piles[s.TileIndex(16, 16, 0)] = 0;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+
+		GoblinTasks.ResumeCarrying(s, 0);
+		Assert.Equal(GoblinTask.Carrying, TaskOf(s, 0));
+		Assert.Equal(0, s.GoblinWorkTicks[0]);
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void Release_drops_the_carry_fields_too()
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		GoblinTasks.FinishPickUp(s, 0, Material.Dirt);
+
+		GoblinTasks.Release(s, 0);
+
+		AssertIdle(s);
+		Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
+		Assert.Equal(0, s.GoblinWorkTicks[0]);
+	}
+
+	[Fact]
+	public void FindViolation_flags_a_fetch_to_a_tile_with_no_loose_unit()
+	{
+		var s = WorldWithLooseUnit(out var unit);
+		GoblinTasks.BeginFetch(s, 0, unit, pickingUp: false);
+		s.RemoveItems(unit, Material.Dirt, 1);
+
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FindViolation_flags_a_fetch_to_a_unit_that_is_stored()
+	{
+		var s = WorldWithLooseUnit(out var unit);
+		GoblinTasks.BeginFetch(s, 0, unit, pickingUp: false);
+		s.Piles[unit] = 1;
+
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FindViolation_flags_a_pick_up_away_from_the_unit()
+	{
+		var s = WorldWithLooseUnit(out var unit);
+		GoblinTasks.BeginFetch(s, 0, unit, pickingUp: true);
+
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FindViolation_flags_two_goblins_claiming_one_loose_unit()
+	{
+		var s = WorldWithLooseUnit(out var unit);
+		GoblinTasks.BeginFetch(s, 0, unit, pickingUp: false);
+		GoblinTasks.BeginFetch(s, 1, unit, pickingUp: false);
+
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FindViolation_lets_a_dig_and_a_haul_claim_the_same_tile()
+	{
+		var sim = Simulation.NewWorld(seed: 7);
+		var s = sim.State;
+		var tile = s.TileIndex(16, 17, 0);
+		s.AddItems(tile, Material.Dirt, 1);
+		sim.Apply(new Designate(DesignationKind.DigStairs, 0, 16, 17, 16, 17));
+
+		GoblinTasks.BeginJob(s, 0, tile, digging: false);
+		GoblinTasks.BeginFetch(s, 1, tile, pickingUp: false);
+
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FindViolation_flags_a_carrying_goblin_with_nothing_carried()
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		GoblinTasks.FinishPickUp(s, 0, Material.Dirt);
+		s.GoblinCarry[0] = (byte)Material.None;
+
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FindViolation_flags_a_carried_unit_on_a_goblin_that_is_not_carrying()
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		s.GoblinCarry[0] = (byte)Material.Dirt;
+
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FindViolation_flags_an_unknown_carried_material()
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		GoblinTasks.FinishPickUp(s, 0, Material.Dirt);
+		s.GoblinCarry[0] = 99;
+
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FindViolation_flags_work_ticks_on_a_task_that_does_not_work_and_ticks_past_the_limit()
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		s.Piles[s.TileIndex(16, 16, 0)] = 1;
+		GoblinTasks.FinishPickUp(s, 0, Material.Dirt);
+		s.GoblinWorkTicks[0] = 1;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+
+		GoblinTasks.StartDropping(s, 0);
+		s.GoblinWorkTicks[0] = (byte)(GoblinTasks.HaulActionTicks - 1);
+		Assert.Null(GoblinTasks.FindViolation(s));
+		s.GoblinWorkTicks[0] = (byte)GoblinTasks.HaulActionTicks;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
 }

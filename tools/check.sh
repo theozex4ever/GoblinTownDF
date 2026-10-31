@@ -26,3 +26,11 @@ fi
 # Exercise the bridge with real Godot input events; the scene exits nonzero on a failed check.
 echo "== selection input checks"
 "$GODOT" --headless --path "$ROOT/game" res://tests/SelectionInputChecks.tscn
+
+# Reads rendered pixels, so it opens a window when there is a display and skips itself when there is none.
+echo "== carry draw checks"
+if [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+	"$GODOT" --path "$ROOT/game" res://tests/CarryDrawChecks.tscn
+else
+	"$GODOT" --headless --path "$ROOT/game" res://tests/CarryDrawChecks.tscn
+fi

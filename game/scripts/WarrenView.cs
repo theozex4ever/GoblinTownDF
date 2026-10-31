@@ -23,8 +23,10 @@ public partial class WarrenView : Node2D
 	static readonly Color GoblinColor = new(0.35f, 0.75f, 0.30f);
 	static readonly Color FaintGoblinColor = new(0.35f, 0.75f, 0.30f, 0.35f);
 	static readonly Color LooseDirtColor = new(0.55f, 0.36f, 0.18f);
+	static readonly Color WaitingHaulColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
 	public const int CountFontSize = 9;
+	public const int CarriedSize = 6;
 
 	public Simulation? Sim { get; set; }
 	public int ViewZ { get; set; }
@@ -62,7 +64,8 @@ public partial class WarrenView : Node2D
 				}
 
 			// A Pile tile is tinted and shows its stored count per material, in that material's colour (dirt top
-			// left, stone bottom right). A loose item is a small square in the same colour (stone matches solid stone).
+			// left, stone bottom right). A loose item is a small square in the same colour (stone matches solid stone),
+			// greyed while its Haul waits for a Pile it can be carried to.
 			if (s.IsPile(tile))
 			{
 				DrawRect(rect, PileTint);
@@ -71,10 +74,11 @@ public partial class WarrenView : Node2D
 			}
 			else
 			{
+				var waiting = !s.IsHaulReachable(tile);
 				if (s.LooseCount(tile, Goblins.Sim.Material.Dirt) > 0)
-					DrawRect(new Rect2(rect.Position.X + 3, rect.Position.Y + 3, 6, 6), LooseDirtColor);
+					DrawRect(new Rect2(rect.Position.X + 3, rect.Position.Y + 3, 6, 6), waiting ? WaitingHaulColor : LooseDirtColor);
 				if (s.LooseCount(tile, Goblins.Sim.Material.Stone) > 0)
-					DrawRect(new Rect2(rect.End.X - 9, rect.End.Y - 9, 6, 6), StoneColor);
+					DrawRect(new Rect2(rect.End.X - 9, rect.End.Y - 9, 6, 6), waiting ? WaitingHaulColor : StoneColor);
 			}
 
 			if (s.DesignationAt(tile) == DesignationKind.None)
@@ -91,19 +95,33 @@ public partial class WarrenView : Node2D
 			DrawRect(rect.Grow(-1), s.IsReachable(tile) ? DesignationColor : UnreachableColor, filled: false, width: 2);
 		}
 
+		// Every body first, then every carried square, so a goblin standing on a carrier's tile cannot cover it.
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			var dz = s.GoblinZ[g] - ViewZ;
-			if (Math.Abs(dz) > 1)
+			if (Math.Abs(dz) <= 1)
+				DrawRect(MarkerRect(s, g, dz), dz == 0 ? GoblinColor : FaintGoblinColor);
+		}
+
+		for (var g = 0; g < s.GoblinCount; g++)
+		{
+			var carried = (Goblins.Sim.Material)s.GoblinCarry[g];
+			if (s.GoblinZ[g] != ViewZ || carried == Goblins.Sim.Material.None)
 				continue;
 
-			var inset = dz == 0 ? 3 : 6;
-			var rect = new Rect2(
-				s.GoblinX[g] * CellSize + inset,
-				s.GoblinY[g] * CellSize + inset,
-				CellSize - 2 * inset,
-				CellSize - 2 * inset);
-			DrawRect(rect, dz == 0 ? GoblinColor : FaintGoblinColor);
+			// Carriers on one tile share its marker, a grid slot each in goblin order.
+			var slot = 0;
+			var carriers = 1;
+			for (var other = 0; other < s.GoblinCount; other++)
+			{
+				if (other == g || s.GoblinCarry[other] == (byte)Goblins.Sim.Material.None
+					|| s.GoblinX[other] != s.GoblinX[g] || s.GoblinY[other] != s.GoblinY[g] || s.GoblinZ[other] != s.GoblinZ[g])
+					continue;
+				carriers++;
+				if (other < g)
+					slot++;
+			}
+			DrawRect(CarriedRect(MarkerRect(s, g, 0), slot, carriers), carried == Goblins.Sim.Material.Stone ? StoneColor : LooseDirtColor);
 		}
 
 		if (Selection is { } sel)
@@ -114,6 +132,33 @@ public partial class WarrenView : Node2D
 			DrawRect(box, SelectionFillColor);
 			DrawRect(box, SelectionColor, filled: false, width: 2);
 		}
+	}
+
+	static Rect2 MarkerRect(SimState s, int goblin, int dz)
+	{
+		var inset = dz == 0 ? 3 : 6;
+		return new Rect2(
+			s.GoblinX[goblin] * CellSize + inset,
+			s.GoblinY[goblin] * CellSize + inset,
+			CellSize - 2 * inset,
+			CellSize - 2 * inset);
+	}
+
+	/// <summary>
+	/// The small square of material for carrier number <paramref name="slot"/> of <paramref name="carriers"/> on one tile.
+	/// The squares form a centred grid of whole pixels inside the goblin <paramref name="marker"/>, one pixel apart: a
+	/// lone carrier gets one <see cref="CarriedSize"/> square, and the squares shrink as more carriers share the tile,
+	/// so any number up to the goblin cap fits and none overlap.
+	/// </summary>
+	public static Rect2 CarriedRect(Rect2 marker, int slot, int carriers)
+	{
+		var side = (int)Math.Min(marker.Size.X, marker.Size.Y);
+		var columns = (int)Math.Ceiling(Math.Sqrt(carriers));
+		var rows = (carriers + columns - 1) / columns;
+		var size = Math.Max(1, Math.Min(CarriedSize, (side - (columns - 1)) / columns));
+		var left = marker.Position.X + ((int)marker.Size.X - (columns * size + columns - 1)) / 2;
+		var top = marker.Position.Y + ((int)marker.Size.Y - (rows * size + rows - 1)) / 2;
+		return new Rect2(left + slot % columns * (size + 1), top + slot / columns * (size + 1), size, size);
 	}
 
 	// A zero count draws nothing, so an empty Pile is only its tint.

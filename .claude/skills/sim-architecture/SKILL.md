@@ -20,7 +20,7 @@ The sim is a **headless** C# library. Godot reads snapshots and sends commands; 
 - Tiles: one flat array indexed `x + y*W + z*W*H`, grouped into 16×16 chunks with a dirty flag per chunk for redraws.
 - Variable-length per-goblin data (grudges, quirks) lives in side tables keyed by goblin index.
 - Hot loops allocate nothing: no LINQ, no `new` per tick.
-- Goblin Task fields (`GoblinTask`, `GoblinJobTile`, `GoblinWanderTile`, `GoblinWanderTicks`, `GoblinStepTicks`) change only through `GoblinTasks`. Its `FindViolation` holds the rules; a new Task is added there. `ArchitectureTests` fails on a stray write.
+- Goblin Task fields (`GoblinTask`, `GoblinJobTile`, `GoblinWanderTile`, `GoblinWanderTicks`, `GoblinStepTicks`, `GoblinCarry`, `GoblinWorkTicks`) change only through `GoblinTasks`. Its `FindViolation` holds the rules; a new Task is added there. `ArchitectureTests` fails on a stray write.
 
 ## Determinism
 

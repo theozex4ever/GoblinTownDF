@@ -1,10 +1,11 @@
 namespace Goblins.Sim;
 
 /// <summary>
-/// The global job list and the goblins that work it. A designated tile is a Job; an idle goblin claims
-/// the nearest one by path length (ties go to the lowest tile index), walks to a tile it can dig from,
-/// and digs. A goblin with no reachable Job wanders instead. Loops over the state arrays; the only
-/// memory it owns is reused scratch lists.
+/// The global job list and the goblins that work it. A designated tile is a dig Job and a tile with a loose
+/// unit is a Haul Job. An idle goblin claims the nearest one of either kind by path length (ties go to the
+/// lowest tile index). It walks to a tile it can dig from and digs, or walks to the unit, picks it up (5 ticks),
+/// carries it to the nearest Pile tile and drops it (5 ticks). A goblin with no reachable Job wanders instead.
+/// Loops over the state arrays; the only memory it owns is reused scratch lists.
 /// </summary>
 public sealed class JobSystem
 {
@@ -17,6 +18,8 @@ public sealed class JobSystem
 	readonly List<int> _path = [];
 	readonly List<int> _goals = [];
 	readonly List<int> _goalJobs = [];
+	// Parallel to _goals while a claim is being weighed: whether the goal is a loose unit rather than a dig.
+	readonly List<bool> _goalHauls = [];
 	readonly List<int> _starts = [];
 	byte[] _reached = [];
 
@@ -51,9 +54,10 @@ public sealed class JobSystem
 	}
 
 	/// <summary>
-	/// Rebuilds <see cref="SimState.Reachable"/> from the tiles, designations and goblin positions. Runs once
-	/// when a tile is dug, when a Designation is made, and when a sim is built, and never on a tick that did
-	/// none of those. Anything else that opens a path or adds a Designation calls this too, through
+	/// Rebuilds <see cref="SimState.Reachable"/> and <see cref="SimState.HaulReachable"/> from the tiles,
+	/// designations, loose units, Piles and goblin positions. Runs once when a tile is dug, when a Designation
+	/// is made, when a Pile is painted or removed, when a goblin puts a unit down loose, and when a sim is
+	/// built, and never on a tick that did none of those. Anything else that opens a path or adds a Designation calls this too, through
 	/// <see cref="Simulation.RecheckReachability"/>. Cancellation needs no flood: IsReachable checks that
 	/// the Designation still exists.
 	/// </summary>
@@ -71,14 +75,21 @@ public sealed class JobSystem
 			_starts.Add(s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]));
 		_pathfinder.FloodReachable(s, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_starts), _reached);
 
+		// A Haul is reachable when its unit and some Pile tile are.
+		var pileReached = false;
+		for (var tile = 0; tile < tiles && !pileReached; tile++)
+			pileReached = s.Piles[tile] != 0 && _reached[tile] != 0;
+		if (s.HaulReachable.Length != tiles)
+			s.HaulReachable = new byte[tiles];
+
 		for (var tile = 0; tile < tiles; tile++)
 		{
+			s.HaulReachable[tile] = (byte)(pileReached && _reached[tile] != 0 && s.LooseMaterial(tile) != Material.None ? 1 : 0);
 			s.Reachable[tile] = 0;
 			if (s.DesignationAt(tile) == DesignationKind.None)
 				continue;
 
-			_goals.Clear();
-			_goalJobs.Clear();
+			ClearGoals();
 			AddStandingTiles(s, tile);
 			foreach (var stand in _goals)
 				if (_reached[stand] != 0)
@@ -107,7 +118,7 @@ public sealed class JobSystem
 			s.Designations[tile] = (byte)DesignationKind.None;
 			s.DigProgress[tile] = 0;
 			for (var g = 0; g < s.GoblinCount; g++)
-				if (s.GoblinJobTile[g] == tile)
+				if (s.GoblinJobTile[g] == tile && GoblinTasks.IsDigTask((GoblinTask)s.GoblinTask[g]))
 					GoblinTasks.Release(s, g);
 		}
 	}
@@ -139,42 +150,57 @@ public sealed class JobSystem
 				continue;
 			}
 
-			var job = s.GoblinJobTile[g];
-			if (s.DesignationAt(job) == DesignationKind.None)
-			{
-				GoblinTasks.Release(s, g);
-				continue;
-			}
-
-			// One action per tick: arriving spends the tick, so digging starts on the next one.
+			// One action per tick: arriving spends the tick, so the work starts on the next one. A goblin that
+			// carries a unit is never offered a new Job, whatever becomes reachable.
 			switch ((GoblinTask)s.GoblinTask[g])
 			{
 				case GoblinTask.Walking:
-					Walk(s, g, job);
-					break;
 				case GoblinTask.Digging:
-					Dig(s, g, job, events);
+					var job = s.GoblinJobTile[g];
+					if (s.DesignationAt(job) == DesignationKind.None)
+						GoblinTasks.Release(s, g);
+					else if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Walking)
+						Walk(s, g, job);
+					else
+						Dig(s, g, job, events);
+					break;
+				case GoblinTask.Fetching:
+					Fetch(s, g);
+					break;
+				case GoblinTask.PickingUp:
+					PickUp(s, g);
+					break;
+				case GoblinTask.Carrying:
+					Carry(s, g);
+					break;
+				case GoblinTask.Dropping:
+					Drop(s, g);
 					break;
 			}
 		}
 	}
 
+	// Claims the nearest reachable Job of either kind: dig goals are the tiles a goblin can dig from, haul goals are
+	// the loose units themselves. Goals go in tile order, so a tie goes to the lowest tile index.
 	bool TryClaim(SimState s, int goblin)
 	{
-		_goals.Clear();
-		_goalJobs.Clear();
+		ClearGoals();
 		for (var tile = 0; tile < s.Designations.Length; tile++)
 		{
-			if (!s.IsReachable(tile) || IsClaimed(s, tile))
-				continue;
-			AddStandingTiles(s, tile);
+			if (s.IsReachable(tile) && !IsClaimed(s, tile, haul: false))
+				AddStandingTiles(s, tile);
+			if (s.IsHaulReachable(tile) && !IsClaimed(s, tile, haul: true))
+				AddGoal(tile, tile, haul: true);
 		}
 
 		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
 		if (!_pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out var goalIndex))
 			return false;
 
-		GoblinTasks.BeginJob(s, goblin, _goalJobs[goalIndex], digging: _path.Count == 0);
+		if (_goalHauls[goalIndex])
+			GoblinTasks.BeginFetch(s, goblin, _goalJobs[goalIndex], pickingUp: _path.Count == 0);
+		else
+			GoblinTasks.BeginJob(s, goblin, _goalJobs[goalIndex], digging: _path.Count == 0);
 		return true;
 	}
 
@@ -250,28 +276,141 @@ public sealed class JobSystem
 
 	void Walk(SimState s, int goblin, int job)
 	{
-		if (++s.GoblinStepTicks[goblin] < GoblinTasks.WalkTicksPerTile)
+		if (!StepDue(s, goblin))
 			return;
-		s.GoblinStepTicks[goblin] = 0;
 
-		_goals.Clear();
-		_goalJobs.Clear();
+		ClearGoals();
 		AddStandingTiles(s, job);
-		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
-		if (!_pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _)
-			|| _path.Count == 0)
+		switch (MoveToward(s, goblin))
 		{
-			GoblinTasks.Release(s, goblin);
-			return;
+			case Move.NoPath:
+			case Move.Here:
+				GoblinTasks.Release(s, goblin);
+				break;
+			case Move.Arrived:
+				GoblinTasks.StartDigging(s, goblin);
+				break;
 		}
+	}
+
+	/// <summary>True on the tick a walking goblin is due to take its next step; otherwise it counts the tick.</summary>
+	static bool StepDue(SimState s, int goblin)
+	{
+		if (++s.GoblinStepTicks[goblin] < GoblinTasks.WalkTicksPerTile)
+			return false;
+		s.GoblinStepTicks[goblin] = 0;
+		return true;
+	}
+
+	enum Move
+	{
+		/// <summary>No goal in <c>_goals</c> can be reached.</summary>
+		NoPath,
+		/// <summary>The goblin already stands on a goal, so it did not move.</summary>
+		Here,
+		/// <summary>One step along the way; more remain.</summary>
+		Moved,
+		/// <summary>One step onto the nearest goal.</summary>
+		Arrived,
+	}
+
+	/// <summary>Takes one step toward the nearest of the goal tiles in <c>_goals</c>, on any level.</summary>
+	Move MoveToward(SimState s, int goblin)
+	{
+		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
+		if (!_pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _))
+			return Move.NoPath;
+		if (_path.Count == 0)
+			return Move.Here;
 
 		var next = _path[0];
 		var layer = s.Width * s.Height;
 		s.GoblinX[goblin] = next % s.Width;
 		s.GoblinY[goblin] = next / s.Width % s.Height;
 		s.GoblinZ[goblin] = next / layer;
-		if (_path.Count == 1)
-			GoblinTasks.StartDigging(s, goblin);
+		return _path.Count == 1 ? Move.Arrived : Move.Moved;
+	}
+
+	void Fetch(SimState s, int goblin)
+	{
+		if (!StepDue(s, goblin))
+			return;
+
+		ClearGoals();
+		AddGoal(s.GoblinJobTile[goblin], s.GoblinJobTile[goblin], haul: true);
+		switch (MoveToward(s, goblin))
+		{
+			case Move.NoPath:
+				GoblinTasks.Release(s, goblin);
+				break;
+			case Move.Here:
+			case Move.Arrived:
+				GoblinTasks.StartPickingUp(s, goblin);
+				break;
+		}
+	}
+
+	void PickUp(SimState s, int goblin)
+	{
+		if (!GoblinTasks.WorkTick(s, goblin))
+			return;
+
+		var tile = s.GoblinJobTile[goblin];
+		var material = s.LooseMaterial(tile);
+		if (material == Material.None)
+		{
+			GoblinTasks.Release(s, goblin);
+			return;
+		}
+
+		s.RemoveItems(tile, material, 1);
+		GoblinTasks.FinishPickUp(s, goblin, material);
+	}
+
+	// Walks to the nearest Pile tile by path length, ties to the lowest tile index. The route is found afresh at every
+	// step, so a Pile painted or removed on the way changes the goal. With no Pile in reach the goblin puts the unit down
+	// where it stands.
+	void Carry(SimState s, int goblin)
+	{
+		if (!StepDue(s, goblin))
+			return;
+
+		ClearGoals();
+		for (var tile = 0; tile < s.Piles.Length; tile++)
+			if (s.Piles[tile] != 0)
+				AddGoal(tile, tile, haul: false);
+		switch (MoveToward(s, goblin))
+		{
+			case Move.NoPath:
+				DropWhereStanding(s, goblin);
+				break;
+			case Move.Here:
+			case Move.Arrived:
+				GoblinTasks.StartDropping(s, goblin);
+				break;
+		}
+	}
+
+	// Dropping on a Pile tile stores the unit.
+	void Drop(SimState s, int goblin)
+	{
+		if (GoblinTasks.WorkTick(s, goblin))
+			PutDown(s, goblin);
+	}
+
+	// With no Pile in reach, the unit is loose again and its Haul waits for a Pile.
+	void DropWhereStanding(SimState s, int goblin)
+	{
+		PutDown(s, goblin);
+		RecheckReachability(s);
+	}
+
+	// Puts the carried unit on the goblin's own tile and frees the goblin.
+	static void PutDown(SimState s, int goblin)
+	{
+		var tile = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
+		s.AddItems(tile, (Material)s.GoblinCarry[goblin], 1);
+		GoblinTasks.Release(s, goblin);
 	}
 
 	void Dig(SimState s, int goblin, int job, List<SimEvent> events)
@@ -285,20 +424,40 @@ public sealed class JobSystem
 		s.Designations[job] = (byte)DesignationKind.None;
 		s.DigProgress[job] = 0;
 		// Only Floor can hold a Pile; its stock stays on the tile, loose.
+		var wasPile = s.Piles[job] != 0;
 		s.Piles[job] = 0;
 		s.AddItems(job, material, 1);
 		var layer = s.Width * s.Height;
 		events.Add(new TileDug(job % s.Width, job / s.Width % s.Height, job / layer, material));
 		GoblinTasks.Release(s, goblin);
+		if (wasPile)
+			PileRules.Settle(s);
 		RecheckReachability(s);
 	}
 
-	static bool IsClaimed(SimState s, int tile)
+	static bool IsClaimed(SimState s, int tile, bool haul)
 	{
 		for (var g = 0; g < s.GoblinCount; g++)
-			if (s.GoblinJobTile[g] == tile)
+		{
+			var task = (GoblinTask)s.GoblinTask[g];
+			if (s.GoblinJobTile[g] == tile && (haul ? GoblinTasks.IsFetchTask(task) : GoblinTasks.IsDigTask(task)))
 				return true;
+		}
 		return false;
+	}
+
+	void ClearGoals()
+	{
+		_goals.Clear();
+		_goalJobs.Clear();
+		_goalHauls.Clear();
+	}
+
+	void AddGoal(int stand, int job, bool haul)
+	{
+		_goals.Add(stand);
+		_goalJobs.Add(job);
+		_goalHauls.Add(haul);
 	}
 
 	/// <summary>Appends the tiles a goblin can dig <paramref name="tile"/> from (see <see cref="TileRules.CanDigFrom"/>).</summary>
@@ -321,9 +480,6 @@ public sealed class JobSystem
 	void AddIfStanding(SimState s, int stand, int job, DesignationKind designation)
 	{
 		if (TileRules.CanDigFrom(s, stand, job, designation))
-		{
-			_goals.Add(stand);
-			_goalJobs.Add(job);
-		}
+			AddGoal(stand, job, haul: false);
 	}
 }

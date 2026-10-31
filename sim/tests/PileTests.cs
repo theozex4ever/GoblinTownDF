@@ -298,9 +298,12 @@ public class PileTests
 		RunLog(restored, log, from: 200, to: 400, next);
 
 		Assert.Equal(SimJson.Serialize(original), SimJson.Serialize(restored));
-		// The last remove turned all stock loose again, and nothing was lost on the way.
+		// The last remove turned all stock loose again, and nothing was lost on the way. Goblins may have picked
+		// stock up and put it down elsewhere since, so count the stone across the map.
 		Assert.Equal(0, CountPiles(original.State));
-		Assert.Equal(2, original.State.LooseCount(stocked, Material.Stone));
+		var stone = Enumerable.Range(0, original.State.TileKinds.Length)
+			.Sum(tile => original.State.LooseCount(tile, Material.Stone));
+		Assert.Equal(2, stone);
 	}
 
 	static Simulation Replay(int seed, (int Tick, Command Command)[] log, int ticks)
