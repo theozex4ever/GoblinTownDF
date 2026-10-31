@@ -142,6 +142,20 @@ The first prototype answers one question: is it fun to dig a warren and watch go
   - **Judged on:** fun tests 1 and 4. The other three are answered and logged as a baseline. A no on test 4 pauses new features.
 
 - [ ] **P2 — Hauling and piles.** Dug material drops; goblins carry it to a pile. 5 goblins.
+
+  **P2 decisions**
+
+  - **Map:** as P1, but z2 is Solid stone. This bends the band table (Stone is z4–9) because the prototype has only three levels. Stone digs in 40 ticks, dirt in 20.
+  - **Goblins:** five Grunts start in a fixed cluster on z0 around the map centre. No other Roles yet.
+  - **Loose items:** a dug tile, Stairs included, drops one unit of its material on that tile. Dirt is hauled like any other material; whether it is worth anything is decided later. Loose items do not block walking.
+  - **Piles:** every tile keeps a count per material. A Pile is a flag painted on Floor tiles with a third Tool. Units on a Pile tile are stored; units anywhere else are loose. There is no cap yet; a cap may come later, to make the player paint new Piles. Painting over loose items stores them. Right-drag with the Pile Tool removes Pile tiles, and their stock becomes loose. Dig stairs on a Pile tile clears the Pile once dug. The Pile is the first Room and needs no item to work.
+  - **Hauling:** every loose unit is a Haul Job. Goblins pick from one job list, digs and hauls together: the nearest reachable Job by path length (to the dig tile or the loose item) wins, ties broken by lowest tile index. A goblin carries one unit and drops it on the nearest reachable Pile tile. Picking up and dropping off take 5 ticks each; carrying does not slow walking. A carrying goblin always finishes its delivery: if its Pile tile is removed it heads for the next nearest, and with none reachable it drops the unit where it stands.
+  - **Waiting hauls:** with no reachable Pile, loose items stay put and their Hauls wait, greyed out. They are checked again whenever a Pile is painted or a tile is dug.
+  - **View:** a loose item is a small square in its material's colour (dirt brown, stone grey), greyed while its Haul waits. Pile tiles get a tinted fill and a count per material, drawn in that material's colour. A carrying goblin shows its material on its marker.
+  - **Text:** no totals panel. The Pile Tool joins the key-hint line, written with `goblin-voice`.
+  - **Saves:** as P1.
+  - **Judged on:** fun tests 1 and 2. The other three are answered and logged as a baseline.
+
 - [ ] **P3 — Needs.** Grub and Grog meters. Fungus farm and Brewery rooms. Goblins eat, drink, sleep.
 - [ ] **P4 — Chaos.** Chaos meter from unmet needs. At least 3 acting-out behaviours (shirk, fight, steal).
 - [ ] **P5 — One invasion.** A 3-hero party walks in from the surface. One trap type. Brutes fight back.
