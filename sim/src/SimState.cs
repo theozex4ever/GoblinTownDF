@@ -63,9 +63,11 @@ public sealed class SimState
 
 	public int TileIndex(int x, int y, int z) => x + y * Width + z * Width * Height;
 
-	public int ItemCount(int tile, Material material) => TileItems[tile * CountedMaterials + (int)material - 1];
+	public int ItemCount(int tile, Material material) => TileItems[ItemSlot(tile, material)];
 
-	public void AddItems(int tile, Material material, int units) => TileItems[tile * CountedMaterials + (int)material - 1] += units;
+	public void AddItems(int tile, Material material, int units) => TileItems[ItemSlot(tile, material)] += units;
+
+	static int ItemSlot(int tile, Material material) => tile * CountedMaterials + (int)material - 1;
 
 	public TileKind KindAt(int tile) => (TileKind)TileKinds[tile];
 
