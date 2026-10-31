@@ -18,7 +18,7 @@ public class WorldTests
 	}
 
 	[Fact]
-	public void Z0_is_all_dirt_floor_and_z1_z2_are_all_solid_dirt()
+	public void Z0_is_dirt_floor_z1_is_solid_dirt_and_z2_is_solid_stone()
 	{
 		var s = Simulation.NewWorld(seed: 7).State;
 
@@ -27,24 +27,37 @@ public class WorldTests
 		for (var x = 0; x < s.Width; x++)
 		{
 			var i = s.TileIndex(x, y, z);
-			if (z == 0)
-				Assert.Equal(TileKind.Floor, s.KindAt(i));
-			else
-				Assert.Equal(TileKind.Solid, s.KindAt(i));
-			Assert.Equal(Material.Dirt, s.MaterialAt(i));
+			Assert.Equal(z == 0 ? TileKind.Floor : TileKind.Solid, s.KindAt(i));
+			Assert.Equal(z == 2 ? Material.Stone : Material.Dirt, s.MaterialAt(i));
 		}
 	}
 
 	[Fact]
-	public void One_grunt_stands_at_16_16_on_z0()
+	public void Five_grunts_stand_in_a_cluster_around_the_centre_of_z0()
 	{
 		var s = Simulation.NewWorld(seed: 7).State;
 
-		Assert.Equal(1, s.GoblinCount);
-		Assert.Equal(Role.Grunt, (Role)s.GoblinRole[0]);
-		Assert.Equal(16, s.GoblinX[0]);
-		Assert.Equal(16, s.GoblinY[0]);
-		Assert.Equal(0, s.GoblinZ[0]);
+		Assert.Equal(5, s.GoblinCount);
+		var spots = new HashSet<(int, int)>();
+		for (var g = 0; g < s.GoblinCount; g++)
+		{
+			Assert.Equal(Role.Grunt, (Role)s.GoblinRole[g]);
+			Assert.Equal(0, s.GoblinZ[g]);
+			Assert.True(Math.Abs(s.GoblinX[g] - 16) + Math.Abs(s.GoblinY[g] - 16) <= 1);
+			spots.Add((s.GoblinX[g], s.GoblinY[g]));
+		}
+		Assert.Equal(5, spots.Count);
+	}
+
+	[Fact]
+	public void The_goblin_cluster_is_the_same_for_every_seed()
+	{
+		var a = Simulation.NewWorld(seed: 1).State;
+		var b = Simulation.NewWorld(seed: 2).State;
+
+		Assert.Equal(a.GoblinX, b.GoblinX);
+		Assert.Equal(a.GoblinY, b.GoblinY);
+		Assert.Equal(a.GoblinZ, b.GoblinZ);
 	}
 
 	[Fact]

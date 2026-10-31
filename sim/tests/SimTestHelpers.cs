@@ -9,6 +9,18 @@ static class SimTestHelpers
 	const double OneTick = 0.1;
 
 	/// <summary>
+	/// A new world trimmed to goblin 0 alone, for tests that script one goblin's route and would
+	/// otherwise share the work with the other four Grunts.
+	/// </summary>
+	public static Simulation NewWorldWithOneGrunt(int seed)
+	{
+		var sim = Simulation.NewWorld(seed);
+		sim.State.GoblinCount = 1;
+		sim.RecheckReachability();
+		return sim;
+	}
+
+	/// <summary>
 	/// Runs <paramref name="ticks"/> ticks one at a time, and after each one asserts that every goblin's
 	/// Task still satisfies <see cref="GoblinTasks.FindViolation"/>, printing the violation if not.
 	/// </summary>

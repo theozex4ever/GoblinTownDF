@@ -95,7 +95,7 @@ public class CancelDesignationTests
 	[Fact]
 	public void After_cancelling_the_tile_it_was_digging_the_goblin_moves_on_to_its_next_job()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithOneGrunt(seed: 1);
 		var s = sim.State;
 		var first = s.TileIndex(16, 15, 0);
 		var next = s.TileIndex(16, 18, 0);

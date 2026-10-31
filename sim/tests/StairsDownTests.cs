@@ -58,7 +58,7 @@ public class StairsDownTests
 	[Fact]
 	public void Dig_stairs_on_z2_below_z1_Stairs_is_dug_from_the_Stairs_above_and_then_links_the_levels()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithOneGrunt(seed: 1);
 		var s = sim.State;
 		DigStairsAndWait(sim, 16, 15, 0);
 		DigStairsAndWait(sim, 16, 15, 1);
@@ -70,7 +70,7 @@ public class StairsDownTests
 		var z1 = s.TileIndex(16, 15, 1);
 		var z2 = s.TileIndex(16, 15, 2);
 		Assert.Equal(TileKind.Stairs, s.KindAt(z2));
-		Assert.Equal(new SimEvent[] { new TileDug(16, 15, 2, Material.Dirt) }, sim.DrainEvents());
+		Assert.Equal(new SimEvent[] { new TileDug(16, 15, 2, Material.Stone) }, sim.DrainEvents());
 		// The goblin walked down the z0 Stairs onto the z1 Stairs and dug z2 from there.
 		Assert.Equal((16, 15, 1), (s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]));
 		Assert.Equal([z1, z2], PathBetween(s, z0, z2));
@@ -101,7 +101,7 @@ public class StairsDownTests
 	[InlineData(false, false)]
 	public void A_goblin_cannot_move_between_levels_where_only_one_of_the_two_tiles_is_Stairs(bool upperIsStairs, bool goblinOnStairs)
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithOneGrunt(seed: 1);
 		var s = sim.State;
 		s.TileKinds[s.TileIndex(16, 15, 0)] = (byte)(upperIsStairs ? TileKind.Stairs : TileKind.Floor);
 		s.TileKinds[s.TileIndex(16, 15, 1)] = (byte)(upperIsStairs ? TileKind.Floor : TileKind.Stairs);

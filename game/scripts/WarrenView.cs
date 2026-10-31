@@ -11,6 +11,7 @@ public partial class WarrenView : Node2D
 
 	static readonly Color FloorColor = new(0.62f, 0.62f, 0.64f);
 	static readonly Color DirtColor = new(0.30f, 0.26f, 0.22f);
+	static readonly Color StoneColor = new(0.36f, 0.40f, 0.48f);
 	static readonly Color GridColor = new(0f, 0f, 0f, 0.15f);
 	static readonly Color StairsColor = new(0.78f, 0.74f, 0.58f);
 	static readonly Color StairsMarkColor = new(0.25f, 0.22f, 0.15f);
@@ -41,7 +42,7 @@ public partial class WarrenView : Node2D
 			var kind = s.KindAt(tile);
 			var color = kind switch
 			{
-				TileKind.Solid => DirtColor,
+				TileKind.Solid => s.MaterialAt(tile) == Goblins.Sim.Material.Stone ? StoneColor : DirtColor,
 				TileKind.Stairs => StairsColor,
 				_ => FloorColor,
 			};

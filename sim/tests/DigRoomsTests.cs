@@ -11,7 +11,7 @@ public class DigRoomsTests
 	// A stair shaft at (x, y) linking z0 and z1, with the Grunt standing on its z1 end.
 	static Simulation WorldWithShaftAt(int x, int y)
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithOneGrunt(seed: 1);
 		var s = sim.State;
 		s.TileKinds[s.TileIndex(x, y, 0)] = (byte)TileKind.Stairs;
 		s.TileKinds[s.TileIndex(x, y, 1)] = (byte)TileKind.Stairs;
