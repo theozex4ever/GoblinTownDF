@@ -38,14 +38,19 @@ public sealed class SimState
 	/// tile are stored, units anywhere else are loose. Read through <see cref="IsPile"/>.
 	/// </summary>
 	public byte[] Piles { get; set; } = [];
-	// 1 on a tile some goblin can path to. Derived and not saved, like Reachable; loading rebuilds it. Read through
-	// IsHaulReachable, which also checks the tile still holds a loose unit with storage to go to.
+	// Per tile, the region (1 to MaxGoblins) of walkable tiles that a goblin stands in and can walk to, or 0 for a tile no
+	// goblin can path to. Goblins never leave their region, so a unit can only be stored on a Pile tile of its own region.
+	// Derived and not saved, like Reachable; loading rebuilds it. Read through IsHaulReachable.
+	[JsonIgnore]
+	public byte[] HaulRegion { get; set; } = [];
+	// 1 on a tile some goblin can path to that holds a loose unit: a cheap filter for the claim loop, which looks at every tile.
+	// Derived and not saved; loading rebuilds it. Read through IsHaulReachable, which also checks the unit's storage.
 	[JsonIgnore]
 	public byte[] HaulReachable { get; set; } = [];
-	// Per counted material (Dirt, then Stone): 1 when some Pile tile a goblin can path to has room for one more unit of it.
-	// Derived and not saved; loading rebuilds it. Read through HasStorageRoom.
+	// Per region and counted material (Dirt, then Stone), at (region - 1) * CountedMaterials + (material - 1): 1 when some
+	// Pile tile of the region has room for one more unit of the material. Derived and not saved; loading rebuilds it. Read through HasStorageRoom.
 	[JsonIgnore]
-	public byte[] StorageRoom { get; set; } = new byte[CountedMaterials];
+	public byte[] StorageRoom { get; set; } = new byte[MaxGoblins * CountedMaterials];
 	// 1 on a designated tile some goblin can path to a tile it can dig from. Derived from the tiles, the
 	// designations and the goblin positions, so it is not saved: loading rebuilds it (see JobSystem.RecheckReachability).
 	[JsonIgnore]
@@ -131,8 +136,15 @@ public sealed class SimState
 		return total;
 	}
 
-	/// <summary>True when a reachable Pile tile has room for one more unit of <paramref name="material"/>. Cached; see <see cref="JobSystem.RecheckReachability"/>.</summary>
-	public bool HasStorageRoom(Material material) => StorageRoom[(int)material - 1] != 0;
+	/// <summary>
+	/// True when a Pile tile in the same region as <paramref name="tile"/> has room for one more unit of <paramref name="material"/>;
+	/// false for a tile no goblin can reach. Cached; see <see cref="JobSystem.RecheckReachability"/>.
+	/// </summary>
+	public bool HasStorageRoom(int tile, Material material)
+	{
+		var region = HaulRegion[tile];
+		return region != 0 && StorageRoom[(region - 1) * CountedMaterials + (int)material - 1] != 0;
+	}
 
 	/// <summary>Whether a Pile tile has room for one more unit of <paramref name="material"/>. A tile that is not a Pile has none.</summary>
 	public bool PileHasRoom(int tile, Material material) => IsPile(tile) && ItemCount(tile, material) < PileCapacity;
@@ -141,7 +153,7 @@ public sealed class SimState
 	public Material HaulableMaterial(int tile)
 	{
 		for (var material = Material.Dirt; (int)material <= CountedMaterials; material++)
-			if (LooseCount(tile, material) > 0 && HasStorageRoom(material))
+			if (LooseCount(tile, material) > 0 && HasStorageRoom(tile, material))
 				return material;
 		return Material.None;
 	}
@@ -151,7 +163,7 @@ public sealed class SimState
 	{
 		var total = 0;
 		for (var material = Material.Dirt; (int)material <= CountedMaterials; material++)
-			if (HasStorageRoom(material))
+			if (HasStorageRoom(tile, material))
 				total += LooseCount(tile, material);
 		return total;
 	}
@@ -177,14 +189,14 @@ public sealed class SimState
 
 	/// <summary>
 	/// False for a tile with no loose unit on it, and for one whose Hauls all wait: no goblin can reach the unit, or no
-	/// Pile tile a goblin can reach has room for its material. True when at least one of its units can be hauled. A unit
-	/// picked up since the last recheck is never reachable, even while its cached flag is stale.
+	/// Pile tile in the unit's region has room for its material. True when at least one of its units can be hauled. A unit
+	/// picked up since the last recheck is never reachable, even while its cached flags are stale.
 	/// </summary>
 	public bool IsHaulReachable(int tile) => HaulReachable[tile] != 0 && HaulableMaterial(tile) != Material.None;
 
-	/// <summary>Whether the loose units of <paramref name="material"/> on a tile can be hauled: there are some, and a goblin can reach both them and room for them.</summary>
+	/// <summary>Whether the loose units of <paramref name="material"/> on a tile can be hauled: there are some, and a goblin can reach both them and room for them in their region.</summary>
 	public bool IsHaulReachable(int tile, Material material) =>
-		HaulReachable[tile] != 0 && LooseCount(tile, material) > 0 && HasStorageRoom(material);
+		HaulReachable[tile] != 0 && LooseCount(tile, material) > 0 && HasStorageRoom(tile, material);
 
 	public static int[] NoJobs()
 	{

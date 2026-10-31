@@ -55,8 +55,8 @@ public sealed class JobSystem
 	}
 
 	/// <summary>
-	/// Rebuilds <see cref="SimState.Reachable"/> and <see cref="SimState.HaulReachable"/> from the tiles,
-	/// designations, loose units, Piles and goblin positions, and <see cref="SimState.StorageRoom"/> from the Piles' counts.
+	/// Rebuilds <see cref="SimState.Reachable"/>, <see cref="SimState.HaulReachable"/> and <see cref="SimState.HaulRegion"/> from the tiles, designations and
+	/// goblin positions, and <see cref="SimState.StorageRoom"/> from each region's Piles and their counts.
 	/// Runs once when a tile is dug, when a Designation is made, when a Pile is painted or removed, when a drop takes a
 	/// Pile tile's last slot of a material, and when a sim is built, and never on a tick that did none of those. Anything else that opens a path or adds a Designation calls this too, through
 	/// <see cref="Simulation.RecheckReachability"/>. Cancellation needs no flood: IsReachable checks that
@@ -70,26 +70,41 @@ public sealed class JobSystem
 		if (_reached.Length != tiles)
 			_reached = new byte[tiles];
 
-		// Goblins never leave the region they stand in, so what they can reach only changes when a tile does.
-		_starts.Clear();
+		// Goblins never leave the region they stand in, so what they can reach only changes when a tile does. Each region
+		// is flooded from its first goblin and numbered, so a unit is only offered storage its own region's goblins can reach.
+		if (s.HaulRegion.Length != tiles)
+			s.HaulRegion = new byte[tiles];
+		Array.Clear(s.HaulRegion);
+		Array.Clear(s.StorageRoom);
+		var regions = 0;
 		for (var g = 0; g < s.GoblinCount; g++)
-			_starts.Add(s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]));
-		_pathfinder.FloodReachable(s, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_starts), _reached);
-
-		// A Haul is reachable when its unit is, and some Pile tile that is has room for its material.
-		for (var material = Material.Dirt; (int)material <= SimState.CountedMaterials; material++)
 		{
-			var room = false;
-			for (var tile = 0; tile < tiles && !room; tile++)
-				room = _reached[tile] != 0 && s.PileHasRoom(tile, material);
-			s.StorageRoom[(int)material - 1] = (byte)(room ? 1 : 0);
+			var start = s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]);
+			if (s.HaulRegion[start] != 0)
+				continue;
+			regions++;
+			_starts.Clear();
+			_starts.Add(start);
+			_pathfinder.FloodReachable(s, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_starts), _reached);
+			for (var tile = 0; tile < tiles; tile++)
+				if (_reached[tile] != 0)
+					s.HaulRegion[tile] = (byte)regions;
 		}
-		if (s.HaulReachable.Length != tiles)
-			s.HaulReachable = new byte[tiles];
 
 		for (var tile = 0; tile < tiles; tile++)
 		{
-			s.HaulReachable[tile] = (byte)(_reached[tile] != 0 && s.LooseMaterial(tile) != Material.None ? 1 : 0);
+			if (s.HaulRegion[tile] == 0 || !s.IsPile(tile))
+				continue;
+			for (var material = Material.Dirt; (int)material <= SimState.CountedMaterials; material++)
+				if (s.PileHasRoom(tile, material))
+					s.StorageRoom[(s.HaulRegion[tile] - 1) * SimState.CountedMaterials + (int)material - 1] = 1;
+		}
+
+		if (s.HaulReachable.Length != tiles)
+			s.HaulReachable = new byte[tiles];
+		for (var tile = 0; tile < tiles; tile++)
+		{
+			s.HaulReachable[tile] = (byte)(s.HaulRegion[tile] != 0 && s.LooseMaterial(tile) != Material.None ? 1 : 0);
 			s.Reachable[tile] = 0;
 			if (s.DesignationAt(tile) == DesignationKind.None)
 				continue;

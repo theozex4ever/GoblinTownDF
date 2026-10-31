@@ -251,7 +251,7 @@ public class ChangingWarrenTests
 						Assert.True(s.ItemCount(tile, Material.Dirt) <= SimState.PileCapacity && s.ItemCount(tile, Material.Stone) <= SimState.PileCapacity, $"Seed {seed} tick {s.Tick}: Pile tile {tile} is overfull.");
 				for (var g = 0; g < s.GoblinCount; g++)
 					// A carrier with no Pile to take its unit keeps it and waits.
-					if (TaskOf(s, g) == GoblinTask.Carrying && !s.HasStorageRoom((Material)s.GoblinCarry[g]))
+					if (TaskOf(s, g) == GoblinTask.Carrying && !s.HasStorageRoom(s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]), (Material)s.GoblinCarry[g]))
 						waits++;
 			}
 

@@ -378,4 +378,118 @@ public class PileCapacityTests
 		Assert.Equal(1, Count(restored.State, 25, 25, Material.Dirt));
 		Assert.Equal(GoblinTask.Idle, TaskOf(restored.State, 0));
 	}
+
+	// Two goblins in rooms split by a Solid wall at x=10 on z0: goblin 0 at (5, 5) on the west, goblin 1 at (20, 5) on the east.
+	// Round-tripped through a save, as a loaded state with disconnected regions would be.
+	static Simulation SplitWarren(Action<Simulation> stock)
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		s.GoblinCount = 2;
+		(s.GoblinX[0], s.GoblinY[0]) = (5, 5);
+		(s.GoblinX[1], s.GoblinY[1]) = (20, 5);
+		for (var y = 0; y < s.Height; y++)
+			s.TileKinds[s.TileIndex(10, y, 0)] = (byte)TileKind.Solid;
+		sim.RecheckReachability();
+		stock(sim);
+		return SimJson.Deserialize(SimJson.Serialize(sim));
+	}
+
+	static readonly (int X, int Y) Source = (5, 6);
+
+	[Fact]
+	public void Storage_in_another_region_does_not_make_blocked_dirt_eligible_so_the_local_stone_is_still_hauled()
+	{
+		var sim = SplitWarren(sim =>
+		{
+			var s = sim.State;
+			s.AddItems(s.TileIndex(Source.X, Source.Y, 0), Material.Dirt, 1);
+			s.AddItems(s.TileIndex(Source.X, Source.Y, 0), Material.Stone, 1);
+			PaintStocked(sim, 5, 7, Material.Dirt, 30);
+			Paint(sim, 20, 7);
+		});
+		var s = sim.State;
+		var source = s.TileIndex(Source.X, Source.Y, 0);
+		Assert.False(s.IsHaulReachable(source, Material.Dirt));
+		Assert.True(s.IsHaulReachable(source, Material.Stone));
+
+		RunTicks(sim, 300);
+
+		Assert.Equal(1, Count(s, 5, 7, Material.Stone));
+		Assert.Equal(1, s.LooseCount(source, Material.Dirt));
+		Assert.Equal(0, s.GoblinCarry.Take(2).Count(c => c != 0));
+		Assert.Equal(0, Count(s, 20, 7, Material.Dirt));
+	}
+
+	[Fact]
+	public void A_unit_whose_only_storage_is_in_another_region_waits_greyed_even_though_a_goblin_lives_there()
+	{
+		var sim = SplitWarren(sim =>
+		{
+			var s = sim.State;
+			s.AddItems(s.TileIndex(Source.X, Source.Y, 0), Material.Dirt, 1);
+			PaintStocked(sim, 5, 7, Material.Dirt, 30);
+			Paint(sim, 20, 7);
+		});
+		var s = sim.State;
+		var source = s.TileIndex(Source.X, Source.Y, 0);
+
+		Assert.False(s.IsHaulReachable(source));
+		for (var tick = 0; tick < 300; tick++)
+		{
+			RunTicks(sim, 1);
+			Assert.DoesNotContain(Enumerable.Range(0, 2).Select(g => TaskOf(s, g)), task => task is GoblinTask.Fetching or GoblinTask.PickingUp or GoblinTask.Carrying or GoblinTask.Dropping);
+		}
+
+		Assert.Equal(1, s.LooseCount(source, Material.Dirt));
+		Assert.Equal(0, Count(s, 20, 7, Material.Dirt));
+	}
+
+	[Fact]
+	public void Digging_through_the_wall_joins_the_regions_and_the_waiting_unit_is_hauled_to_the_far_Pile()
+	{
+		var sim = SplitWarren(sim =>
+		{
+			var s = sim.State;
+			s.AddItems(s.TileIndex(Source.X, Source.Y, 0), Material.Dirt, 1);
+			PaintStocked(sim, 5, 7, Material.Dirt, 30);
+			Paint(sim, 20, 7);
+		});
+		var s = sim.State;
+		RunTicks(sim, 50);
+		Assert.Equal(1, s.LooseCount(s.TileIndex(Source.X, Source.Y, 0), Material.Dirt));
+
+		sim.Apply(new Designate(DesignationKind.Dig, 0, 10, 6, 10, 6));
+		RunTicks(sim, 1500);
+
+		Assert.Equal(TileKind.Floor, s.KindAt(s.TileIndex(10, 6, 0)));
+		// The unit that was waiting, and the one the wall dropped.
+		Assert.Equal(2, Count(s, 20, 7, Material.Dirt));
+		Assert.Equal(30, Count(s, 5, 7, Material.Dirt));
+		Assert.Equal(0, s.GoblinCarry.Take(2).Count(c => c != 0));
+	}
+
+	[Fact]
+	public void A_carrier_whose_region_has_no_room_waits_and_resumes_when_a_dug_tile_joins_the_region_with_room()
+	{
+		var sim = SplitWarren(sim =>
+		{
+			var s = sim.State;
+			PaintStocked(sim, 5, 7, Material.Dirt, 29);
+			Paint(sim, 20, 7);
+			s.AddItems(s.TileIndex(Source.X, Source.Y, 0), Material.Dirt, 2);
+			sim.RecheckReachability();
+		});
+		var s = sim.State;
+
+		RunTicks(sim, 400);
+
+		// One unit took the last local slot; the other waits on the source tile, not in a goblin's hands.
+		Assert.Equal(30, Count(s, 5, 7, Material.Dirt));
+		Assert.Equal(1, s.LooseCount(s.TileIndex(Source.X, Source.Y, 0), Material.Dirt));
+		Assert.Equal(0, s.GoblinCarry.Take(2).Count(c => c != 0));
+		sim.Apply(new Designate(DesignationKind.Dig, 0, 10, 6, 10, 6));
+		RunTicks(sim, 1500);
+		Assert.Equal(2, Count(s, 20, 7, Material.Dirt));
+	}
 }
