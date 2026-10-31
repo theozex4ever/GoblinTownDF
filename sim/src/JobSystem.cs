@@ -405,13 +405,8 @@ public sealed class JobSystem
 		RecheckReachability(s);
 	}
 
-	// Puts the carried unit on the goblin's own tile and frees the goblin.
-	static void PutDown(SimState s, int goblin)
-	{
-		var tile = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
-		s.AddItems(tile, (Material)s.GoblinCarry[goblin], 1);
-		GoblinTasks.Release(s, goblin);
-	}
+	// Frees the goblin, which puts the unit it carries down on its own tile.
+	static void PutDown(SimState s, int goblin) => GoblinTasks.Release(s, goblin);
 
 	void Dig(SimState s, int goblin, int job, List<SimEvent> events)
 	{
@@ -435,12 +430,14 @@ public sealed class JobSystem
 		RecheckReachability(s);
 	}
 
+	// A dig is claimed by one goblin; a tile's loose units are claimed one goblin each, so it is claimed once all are.
 	static bool IsClaimed(SimState s, int tile, bool haul)
 	{
+		if (haul)
+			return GoblinTasks.FetchClaims(s, tile, s.GoblinCount) >= s.LooseTotal(tile);
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
-			var task = (GoblinTask)s.GoblinTask[g];
-			if (s.GoblinJobTile[g] == tile && (haul ? GoblinTasks.IsFetchTask(task) : GoblinTasks.IsDigTask(task)))
+			if (s.GoblinJobTile[g] == tile && GoblinTasks.IsDigTask((GoblinTask)s.GoblinTask[g]))
 				return true;
 		}
 		return false;

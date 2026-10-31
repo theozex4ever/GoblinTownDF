@@ -105,12 +105,14 @@ public static class GoblinTasks
 	}
 
 	/// <summary>
-	/// Any Task → Idle, with no Job, no wander and nothing carried. The Job, if any, stays on the job list. A carried
-	/// unit is not put back, so releasing a Carrying or Dropping goblin destroys the unit it holds: put the unit
-	/// down first (see JobSystem.PutDown). No caller releases a carrier today.
+	/// Any Task → Idle, with no Job and no wander. The Job, if any, stays on the job list. A Carrying or Dropping goblin
+	/// puts its unit down on the tile it stands on first, so no release loses a unit: the unit is stored on a Pile tile
+	/// and loose anywhere else. When it lands loose its Haul is only offered once <see cref="JobSystem.RecheckReachability"/> runs.
 	/// </summary>
 	public static void Release(SimState s, int g)
 	{
+		if ((Material)s.GoblinCarry[g] != Material.None)
+			s.AddItems(s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]), (Material)s.GoblinCarry[g], 1);
 		s.GoblinTask[g] = (byte)GoblinTask.Idle;
 		s.GoblinJobTile[g] = -1;
 		s.GoblinCarry[g] = (byte)Material.None;
@@ -134,20 +136,30 @@ public static class GoblinTasks
 
 	/// <summary>
 	/// True for the Tasks that work a Designation (Walking, Digging), false for the Tasks that work a loose unit
-	/// (Fetching, PickingUp). Two goblins never claim one tile for the same kind of Job; a dig and a Haul may
-	/// share a tile.
+	/// (Fetching, PickingUp). Two goblins never claim one tile for a dig; a dig and a Haul may share a tile, and a tile
+	/// is claimed for Hauls by at most as many goblins as it has loose units.
 	/// </summary>
 	public static bool IsDigTask(GoblinTask task) => task is GoblinTask.Walking or GoblinTask.Digging;
 
 	/// <summary>True for Fetching and PickingUp: the Tasks that hold a claim on a loose unit.</summary>
 	public static bool IsFetchTask(GoblinTask task) => task is GoblinTask.Fetching or GoblinTask.PickingUp;
 
+	/// <summary>How many goblins numbered below <paramref name="below"/> hold a claim on a loose unit of <paramref name="tile"/>.</summary>
+	public static int FetchClaims(SimState s, int tile, int below)
+	{
+		var claims = 0;
+		for (var g = 0; g < below; g++)
+			if (s.GoblinJobTile[g] == tile && IsFetchTask((GoblinTask)s.GoblinTask[g]))
+				claims++;
+		return claims;
+	}
+
 	/// <summary>
 	/// The first broken Task rule, or null when every goblin's Task fits its fields and the world: the field
 	/// shape of each Task, and the world rules (a claimed tile is designated or holds a loose unit, a Digging goblin
 	/// stands where it can dig, a PickingUp goblin stands on its unit, a Dropping goblin stands on a Pile tile, a
 	/// goblin carries a unit exactly while Carrying or Dropping, a wander target is walkable on the goblin's own
-	/// level and not its own tile, no two goblins claim one tile for the same kind of Job, step ticks are below
+	/// level and not its own tile, no two goblins claim one tile to dig it and no more claim a tile's loose units than it holds, step ticks are below
 	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> and only count while
 	/// PickingUp or Dropping, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
 	/// Precondition: the state is structurally sound: array lengths match the map and goblin cap, tile, material
@@ -226,8 +238,8 @@ public static class GoblinTasks
 						return $"Goblin {g} fetches tile {job}, which holds no loose unit.";
 					if (task == GoblinTask.PickingUp && job != here)
 						return $"Goblin {g} is picking up tile {job} from tile {here}.";
-					if (FindOtherClaim(s, g, job) is { } fetchRival)
-						return $"Goblins {fetchRival} and {g} both claim the unit on tile {job}.";
+					if (FetchClaims(s, job, g) >= s.LooseTotal(job))
+						return $"Goblin {g} fetches a unit on tile {job}, which holds {s.LooseTotal(job)} and is claimed by others.";
 					break;
 
 				case GoblinTask.Carrying:
@@ -244,16 +256,12 @@ public static class GoblinTasks
 		return null;
 	}
 
-	// The lower-numbered goblin that claims the same tile as goblin g for the same kind of Job, or null.
+	// The lower-numbered goblin that is digging the same tile as goblin g, or null.
 	static int? FindOtherClaim(SimState s, int g, int job)
 	{
-		var dig = IsDigTask((GoblinTask)s.GoblinTask[g]);
 		for (var other = 0; other < g; other++)
-		{
-			var task = (GoblinTask)s.GoblinTask[other];
-			if (s.GoblinJobTile[other] == job && (dig ? IsDigTask(task) : IsFetchTask(task)))
+			if (s.GoblinJobTile[other] == job && IsDigTask((GoblinTask)s.GoblinTask[other]))
 				return other;
-		}
 		return null;
 	}
 }
