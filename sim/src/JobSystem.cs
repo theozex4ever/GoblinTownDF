@@ -112,7 +112,7 @@ public sealed class JobSystem
 			ClearGoals();
 			AddStandingTiles(s, tile);
 			foreach (var stand in _goals)
-				if (_reached[stand] != 0)
+				if (s.HaulRegion[stand] != 0)
 				{
 					s.Reachable[tile] = 1;
 					break;

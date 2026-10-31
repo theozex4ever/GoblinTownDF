@@ -398,6 +398,21 @@ public class PileCapacityTests
 	static readonly (int X, int Y) Source = (5, 6);
 
 	[Fact]
+	public void Dig_designations_remain_reachable_in_every_occupied_region()
+	{
+		var sim = SplitWarren(_ => { });
+		var s = sim.State;
+		sim.Apply(new Designate(DesignationKind.DigStairs, 0, 5, 6, 5, 6));
+		sim.Apply(new Designate(DesignationKind.DigStairs, 0, 20, 6, 20, 6));
+
+		Assert.True(s.IsReachable(s.TileIndex(5, 6, 0)));
+		Assert.True(s.IsReachable(s.TileIndex(20, 6, 0)));
+		RunTicks(sim, 40);
+		Assert.Equal(TileKind.Stairs, s.KindAt(s.TileIndex(5, 6, 0)));
+		Assert.Equal(TileKind.Stairs, s.KindAt(s.TileIndex(20, 6, 0)));
+	}
+
+	[Fact]
 	public void Storage_in_another_region_does_not_make_blocked_dirt_eligible_so_the_local_stone_is_still_hauled()
 	{
 		var sim = SplitWarren(sim =>
@@ -470,7 +485,7 @@ public class PileCapacityTests
 	}
 
 	[Fact]
-	public void A_carrier_whose_region_has_no_room_waits_and_resumes_when_a_dug_tile_joins_the_region_with_room()
+	public void A_loose_unit_whose_region_fills_is_hauled_when_a_dug_tile_joins_the_region_with_room()
 	{
 		var sim = SplitWarren(sim =>
 		{
