@@ -141,7 +141,7 @@ The first prototype answers one question: is it fun to dig a warren and watch go
   - **Saves:** no save or load in the game. Sim tests replay a seed plus a command log and assert identical state, and round-trip the state through JSON.
   - **Judged on:** fun tests 1 and 4. The other three are answered and logged as a baseline. A no on test 4 pauses new features.
 
-- [ ] **P2 — Hauling and piles.** Dug material drops; goblins carry it to a pile. 5 goblins.
+- [x] **P2 — Hauling and piles.** Dug material drops; goblins carry it to a pile. 5 goblins.
 
   **P2 decisions**
 
