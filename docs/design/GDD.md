@@ -48,7 +48,7 @@ One embark map, about 96×96 tiles and 16 z-levels, viewed top-down one layer at
 
 **Digging** is the main verb. The player designates an area and Grunts dig it out tile by tile. Every dug tile drops its material as a hauling job.
 
-**Rooms** are zones painted on dug floor: Sleeping Heap, Grub Pit, Brewery, Pile, Shrine, Boss Throne. A room works once it has its one required item.
+**Rooms** are zones painted on dug floor: Sleeping Heap, Grub Pit, Fungus Farm, Brewery, Pile, Shrine, Boss Throne. A room works once it has its one required item, a rule waived until crafting and building exist.
 
 ## Economy: six resources
 
@@ -56,8 +56,8 @@ Six resources, no quality tiers, and no chain longer than two steps. Items are c
 
 | Resource | Where it comes from | What it's for | If you run out |
 | --- | --- | --- | --- |
-| Grub | Fungus farms, rat traps, raids | Food | Hunger, then fights over scraps |
-| Grog | Brewed from fungus (1 step) | Morale | Goblins get bored and cause chaos |
+| Grub | Grub Pits, rat traps, raids | Food | Hunger, then fights over scraps |
+| Grog | Brewed from Fungus Farm fungus (1 step) | Morale | Goblins get bored and cause chaos |
 | Scrap | Ore, raids, dead heroes | Weapons, tools, traps (1 step) | Unarmed brutes, no new traps |
 | Stone and wood | Digging, surface trees | Building furniture and walls | Can't build rooms |
 | Shinies | Ore band, raids | Loyalty, Boss status, bribes | Boss authority drops |
@@ -141,7 +141,7 @@ The first prototype answers one question: is it fun to dig a warren and watch go
   - **Saves:** no save or load in the game. Sim tests replay a seed plus a command log and assert identical state, and round-trip the state through JSON.
   - **Judged on:** fun tests 1 and 4. The other three are answered and logged as a baseline. A no on test 4 pauses new features.
 
-- [ ] **P2 — Hauling and piles.** Dug material drops; goblins carry it to a pile. 5 goblins.
+- [x] **P2 — Hauling and piles.** Dug material drops; goblins carry it to a pile. 5 goblins.
 
   **P2 decisions**
 
@@ -160,7 +160,42 @@ The first prototype answers one question: is it fun to dig a warren and watch go
   - **Saves:** as P1. Simulation saves containing a Pile tile with more than 30 units of any material are rejected, with no migration or grandfathered overflow. Loose item counts above 30 remain valid. There is still no player-facing save or load.
   - **Judged on:** fun tests 1 and 2. The other three are answered and logged as a baseline.
 
-- [ ] **P3 — Needs.** Grub and Grog meters. Fungus farm and Brewery rooms. Goblins eat, drink, sleep.
+- [ ] **P3 — Needs.** Grub, Grog and Sleep meters. Grub Pit, Fungus Farm, Brewery and Sleeping Heap rooms. Goblins eat, drink, sleep.
+
+  **P3 decisions**
+
+  - **Map and goblins:** as P2, but seven Grunts start in the cluster on z0, with 14 Grub and 7 Grog loose on one tile beside them. There is no starting Fungus.
+  - **Materials:** Grub, Fungus and Grog are Materials. They drop loose, are hauled like dirt and stone, and obey the Pile limit of 30 units per material.
+  - **Needs:** each goblin has Grub, Grog and Sleep meters, each starting at a random 70–100 from `SimRandom`. A goblin craves a Need when its meter falls below 30.
+  - **Cravings interrupt:** a goblin craving a Need it can satisfy abandons its Job at once. Dig progress stays on the tile; Tend and Brew progress is lost. Anything it carries drops. This is the one exception to the P2 Waiting hauls rule against dropping a unit. A goblin on a Pile tile with room stores the unit there; on a Pile tile with no room for that material, the unit lands on the nearest walkable tile that can legally take it, ties broken by lowest tile index. Elsewhere the unit lands loose on the goblin's own tile.
+  - **Which craving wins:** the lowest meter, ties broken Grub, then Grog, then Sleep. A goblin finishes satisfying one Need before it considers the next. With no reachable supply, a craving does not interrupt: the goblin keeps working and looks again when supply or reachability changes.
+  - **Eating and drinking:** a craving goblin walks to the nearest reachable unit of Grub or Grog, on a Pile or loose, and consumes it there with no carrying. It may take a unit another goblin is about to haul; that hauler looks for other work. Nothing reserves a unit: when two goblins head for the last one, the first to finish consumes it and the other searches again.
+  - **Sleeping:** a craving goblin walks to the nearest reachable Sleeping Heap tile, which any number of goblins can share, and sleeps until the meter is full. Other Needs keep draining and do not wake it. With no reachable Heap, it sleeps on the spot at half the recovery rate.
+  - **A Need at 0:** Grub at 0 means Starving: the goblin walks and works at half speed. Grog at 0 has no effect until P4. Sleep at 0 means Collapse: the goblin drops what it carries, by the rule above, and sleeps on the spot until full. Nothing dies in P3.
+  - **Waiting carriers:** a goblin holding a unit with no Pile to take it drains Grog at double rate. Its craving eventually makes it drop the unit and go for a drink. With no Grog reachable it stays put, until Chaos takes over in P4.
+  - **Rooms:** the Grub Pit, Fungus Farm, Brewery and Sleeping Heap each get a Tool and follow the Pile's painting rules: Floor tiles only, right-drag removes, Dig stairs clears. A tile holds one Room, so painting over a different Room skips that tile. All four work as soon as they are painted. The required-item rule returns once crafting and building exist.
+  - **Farming:** a Tend Job appears on a Grub Pit or Fungus Farm tile that is untended and holds no unhauled unit of its crop. One Tend on a Grub Pit tile yields 3 Grub, spawned one at a time. One Tend on a Fungus Farm tile yields 1 Fungus after a growth timer. Fungus Farms work only on z1 or deeper. Removing a farm tile discards anything it has not yet spawned. Tend Jobs join the one job list, nearest first, with no priorities.
+  - **Brewing:** a Brew Job takes one reachable Fungus, on a Pile or loose, to a free Brewery tile, one brewer per tile, and works it into 1 Grog. The Grog drops loose on that tile and is hauled to the nearest Pile, as is anything a craft station makes. A Brew Job waits, greyed out, while Grog has no Pile with room. An interrupted brewer drops its Fungus.
+  - **Numbers:** kept together in one place in the sim, to be tuned after play.
+
+    | Value | Number |
+    | --- | --- |
+    | Grub drain | 1 point per 25 ticks |
+    | Grog drain | 1 point per 35 ticks |
+    | Sleep drain | 1 point per 45 ticks |
+    | Eating or drinking | 10 ticks, +50 to the meter |
+    | Sleep recovery | 1 point per 5 ticks on a Heap, 1 per 10 on the floor |
+    | Tend | 20 ticks |
+    | Grub spawn | 1 per 200 ticks |
+    | Fungus growth | 300 ticks |
+    | Brew | 20 ticks |
+
+  - **View:** each Room has a tile tint and each new Material a colour for its loose squares. A sleeping goblin shows a small "zzz", a craving goblin a pip coloured by its Need, and a Starving goblin a tint. A Pile tile shows two counts, full materials first, then the largest. One hover line shows the meters of the goblin under the cursor, or every count on the Pile tile under it.
+  - **Text:** no event log until P6. New Tools join the key-hint line. All new text is written with `goblin-voice`.
+  - **Saves:** as P2. New state goes in the JSON, and old saves are not migrated.
+  - **Judged on:** fun test 2. The other four are answered and logged as a baseline. If test 2 is still a no, apply Tune before starting P4 (see `docs/playtests/2026-10-31-P2.md`).
+  - **Later, not P3:** a goblin whose Haul gets eaten is annoyed, which can become a Grudge or Chaos in P4. A waiting carrier's boredom can move to Chaos in P4. The "zzz" gets replaced with something better.
+
 - [ ] **P4 — Chaos.** Chaos meter from unmet needs. At least 3 acting-out behaviours (shirk, fight, steal).
 - [ ] **P5 — One invasion.** A 3-hero party walks in from the surface. One trap type. Brutes fight back.
 - [ ] **P6 — Legends.** Event log with templated entries for deaths, invasion, and chaos.
@@ -191,7 +226,7 @@ Keep the simulation separate from Godot. The sim is plain code that runs on fixe
 - **World storage:** flat arrays indexed by (x, y, z), split into 16×16 chunks for dirty-flag redraws.
 - **Tick rate:** sim at 10 ticks per second at normal speed, decoupled from frame rate. Speed controls multiply ticks.
 - **Pathfinding:** plain A\* on the 3D grid is fine for P1–P3. Plan for hierarchical paths between chunks before going past about 50 goblins.
-- **Jobs:** a global job list (dig, haul, brew, build) that idle goblins claim. Needs override jobs when low.
+- **Jobs:** a global job list (dig, haul, tend, brew, build) that idle goblins claim. Needs override jobs when low.
 - **Saves:** serialise the sim core to JSON from day one. It also makes bugs reproducible.
 - **Determinism:** seeded random number generator in the sim, so a seed plus a command log replays a run.
 
@@ -210,7 +245,7 @@ The biggest risk for a solo colony sim is scope, not tech. The prototype is deli
 
 **Open questions**
 
-- [ ] How does the goblin brain choose between needs, jobs, and chaos? (Next design pass.)
+- [ ] How does the goblin brain choose between needs, jobs, and chaos? (P3 settles needs against jobs; chaos is the next design pass.)
 - [ ] Is there a win condition, or is it endless until the warren falls?
 - [x] Real-time with pause, or a fixed set of speeds? **Both:** real-time with pause, plus 1×, 2× and 4× speeds. Speed changes how many ticks run per frame, never the tick length.
 - [x] How much direct control: designations only, or can you order a specific goblin? **Designations only** for the prototype.
