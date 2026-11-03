@@ -9,7 +9,7 @@ namespace AThousandGoblinsDeep;
 /// <summary>
 /// Checks where carried-material squares, loose squares and Pile counts are drawn. The layout is pure geometry and always runs. The pixel checks
 /// render the warren into an image and read pixels, so they need a real renderer: with --headless they print a skip
-/// and pass, which means a run with no display does not check drawing.
+/// and report the pixel scenarios as skipped, which means a run with no display does not check drawing.
 /// </summary>
 public partial class CarryDrawChecks : Node
 {
@@ -30,7 +30,7 @@ public partial class CarryDrawChecks : Node
 
 			if (DisplayServer.GetName() == "headless")
 			{
-				GD.Print("Carry draw checks: layout checks passed; pixel checks skipped, no renderer under --headless.");
+				GD.Print("Carry draw checks: layout checks passed; the 10 pixel scenarios were SKIPPED, not passed: no renderer under --headless.");
 				GetTree().Quit();
 				return;
 			}
@@ -44,7 +44,8 @@ public partial class CarryDrawChecks : Node
 			await RoomTintCheck();
 			await SleepMarksCheck();
 			await FungusFarmTintCheck();
-			GD.Print("Carry draw checks passed (layout, colours, count order, 9 pixel scenarios).");
+			await BreweryTintCheck();
+			GD.Print("Carry draw checks passed (layout, colours, count order, 10 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -230,6 +231,37 @@ public partial class CarryDrawChecks : Node
 		ExpectColor(image, 12 * WarrenView.CellSize + 9, 10 * WarrenView.CellSize + 9, floor, "A tile beside the Fungus Farm is tinted.");
 		var square = WarrenView.LooseSquare(new Rect2(11 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize), (int)Material.Fungus - 1).GetCenter();
 		ExpectColor(image, (int)square.X, (int)square.Y, WarrenView.MaterialColor(Material.Fungus), "The Fungus loose on a Fungus Farm is hidden by its tint.");
+	}
+
+	// A Brewery tile is tinted over the floor in its own colour; it greys while no Pile in reach has room for Grog, and goes back to its
+	// colour when one is painted. The Grog lying loose on it shows over either tint.
+	async System.Threading.Tasks.Task BreweryTintCheck()
+	{
+		var floor = new Color(0.62f, 0.62f, 0.64f);
+		Color Over(Color tint) { var c = floor * (1 - tint.A) + tint * tint.A; return new Color(c.R, c.G, c.B); }
+		var cell = WarrenView.CellSize;
+		// The bottom right corner of the tile: the loose squares fill a three-by-three grid and the ninth slot is no material's.
+		var centre = new Vector2(10 * cell + cell - 3, 10 * cell + cell - 3);
+		var loose = WarrenView.LooseSquare(new Rect2(10 * cell, 10 * cell, cell, cell), (int)Material.Grog - 1).GetCenter();
+
+		Require(!IsNear(WarrenView.BreweryTint, WarrenView.GrubPitTint) && !IsNear(WarrenView.BreweryTint, WarrenView.FungusFarmTint)
+			&& !IsNear(WarrenView.BreweryTint, WarrenView.SleepingHeapTint) && !IsNear(WarrenView.BreweryTint, WarrenView.WaitingBreweryTint),
+			"The Brewery tint is the same as another Room's, or as its waiting tint.");
+
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		sim.Apply(new PaintRoom(RoomKind.Brewery, 0, 10, 10, 11, 10));
+		s.AddItems(s.TileIndex(10, 10, 0), Material.Grog, 1);
+		sim.RecheckReachability();
+		var waiting = await Render(sim);
+		ExpectColor(waiting, (int)centre.X, (int)centre.Y, Over(WarrenView.WaitingBreweryTint), "A Brewery with no Pile for its Grog is not greyed out.");
+		ExpectColor(waiting, (int)loose.X, (int)loose.Y, WarrenView.WaitingHaulColor, "The Grog waiting on a Brewery with no Pile is not greyed.");
+
+		sim.Apply(new PaintPile(0, 20, 20, 20, 20));
+		var ready = await Render(sim);
+		ExpectColor(ready, (int)centre.X, (int)centre.Y, Over(WarrenView.BreweryTint), "A Brewery with a Pile for its Grog is not tinted.");
+		ExpectColor(ready, 12 * cell + 9, 10 * cell + 9, floor, "A tile beside the Brewery is tinted.");
+		ExpectColor(ready, (int)loose.X, (int)loose.Y, WarrenView.MaterialColor(Material.Grog), "The Grog loose on a Brewery is hidden by its tint.");
 	}
 
 	// A Sleeping Heap tile is tinted over the floor, a sleeping goblin wears "zzz" and an awake one does not, and a goblin craving Sleep
