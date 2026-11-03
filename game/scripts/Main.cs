@@ -73,7 +73,7 @@ public partial class Main : Node
 			UpdateDepthLabel();
 	}
 
-	/// <summary>The hover line: every count on the Pile tile under the cursor, or empty over anything else.</summary>
+	/// <summary>The hover line: the Grub meter of the goblin under the cursor, else every count on the Pile tile under it, else empty.</summary>
 	public string HoverText => _hoverLabel.Text;
 
 	public override void _UnhandledInput(InputEvent @event)
@@ -103,7 +103,14 @@ public partial class Main : Node
 	{
 		var s = _sim.State;
 		var inMap = _hoverCell.X >= 0 && _hoverCell.Y >= 0 && _hoverCell.X < s.Width && _hoverCell.Y < s.Height;
-		_hoverLabel.Text = inMap ? PileCounts.HoverLine(s, s.TileIndex(_hoverCell.X, _hoverCell.Y, _viewZ)) : "";
+		if (!inMap)
+		{
+			_hoverLabel.Text = "";
+			return;
+		}
+		var tile = s.TileIndex(_hoverCell.X, _hoverCell.Y, _viewZ);
+		var goblin = GoblinHover.GoblinAt(s, tile);
+		_hoverLabel.Text = goblin >= 0 ? GoblinHover.HoverLine(s, goblin) : PileCounts.HoverLine(s, tile);
 	}
 
 	void UpdateSelection()

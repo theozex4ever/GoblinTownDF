@@ -20,7 +20,7 @@ Goblins are earnest underdogs who take absurd traditions seriously. Failure shou
 
 ## Development status
 
-**Early grey-box prototype. P1 (map and digging) is done and passed its [playtest](docs/playtests/2026-10-30-P1.md); next up is P2: hauling and piles.** The current build has a 32×32 map across three z-levels with one Grunt who digs designated tunnels and stairs and wanders when idle. You can switch levels, pause, and change speed. The wider colony systems are still to come.
+**Early grey-box prototype. P1 (map and digging) and P2 (hauling and piles) have been played and logged ([P1](docs/playtests/2026-10-30-P1.md), [P2](docs/playtests/2026-10-31-P2.md)); P3 (Needs) is in progress.** The current build has a 32×32 map across three z-levels and seven Grunts who start together on the surface beside 14 loose Grub and 7 loose Grog. They dig designated tunnels and stairs, haul what they dig to Piles, wander when idle, and eat. Each Grunt has a Grub meter; when it falls below 30 the Grunt drops its work and any unit it carries, and goes to eat the nearest Grub it can reach. At 0 it is Starving and moves at half speed. Grog, Sleep, farming and brewing are still to come. You can switch levels, pause, and change speed.
 
 The first prototype asks: **is it fun to dig a warren and watch goblins mess it up?** It will grow through six playable milestones:
 
@@ -50,7 +50,11 @@ Current controls: **Space** pauses; **1**, **2**, and **4** select speed; **,** 
 
 Press **D** for Dig, **S** for Dig stairs or **P** for Pile, then click a tile or left-drag a rectangle to designate it or paint a Pile on its Floor tiles. Right-drag removes what the active tool makes: Dig and Dig stairs cancel designations, Pile removes Piles (their stock stays as loose items), and with no tool picked right-drag cancels designations. **Escape** clears the selected tool and any active drag.
 
-Each Pile tile holds up to 30 units of each material; a Pile that is full of one material shows its count highlighted, and goblins carry to the nearest Pile with room, or wait holding the unit until one appears. Painting skips any tile holding more than 30 of a material.
+Each Pile tile holds up to 30 units of each material; goblins carry to the nearest Pile with room, or wait holding the unit until one appears. Painting skips any tile holding more than 30 of a material. A Pile tile draws two counts, each in its material's colour: a material that is full comes first (highlighted), then the largest. The hover line under the map names every count on the Pile tile under the cursor, or, over a goblin, that goblin's Grub meter.
+
+On the map, a goblin with a Craving wears a small pip in the colour of its Need (Grub is pink), and a Starving goblin turns yellow.
+
+Saves are whole-state JSON and are never migrated: a P2 save, which counted two materials, is rejected. There is no player-facing save or load yet.
 
 ## Development
 

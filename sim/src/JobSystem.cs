@@ -6,6 +6,7 @@ namespace Goblins.Sim;
 /// lowest tile index). It walks to a tile it can dig from and digs, or walks to the unit, picks it up (5 ticks),
 /// carries it to the nearest Pile tile with room for its material and drops it (5 ticks); with no such tile it waits holding
 /// the unit. A goblin with no reachable Job wanders instead.
+/// A goblin with a Craving for Grub that can reach a unit of it drops everything and goes to eat it, whatever it was doing.
 /// Loops over the state arrays; the only memory it owns is reused scratch lists.
 /// </summary>
 public sealed class JobSystem
@@ -163,6 +164,11 @@ public sealed class JobSystem
 	{
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
+			// A Craving comes before any Job, and before a Starving goblin sits a tick out. Eating is not slowed.
+			TryCraving(s, g);
+			if ((GoblinTask)s.GoblinTask[g] != GoblinTask.Eating && !NeedRules.ActsThisTick(s.GoblinGrub[g], s.Tick))
+				continue;
+
 			// An idle or wandering goblin takes any Job it can reach; with none, it wanders on.
 			if ((GoblinTask)s.GoblinTask[g] is GoblinTask.Idle or GoblinTask.Wandering && !TryClaim(s, g))
 			{
@@ -196,8 +202,112 @@ public sealed class JobSystem
 				case GoblinTask.Dropping:
 					Drop(s, g);
 					break;
+				case GoblinTask.Seeking:
+					Seek(s, g);
+					break;
+				case GoblinTask.Eating:
+					Eat(s, g);
+					break;
 			}
 		}
+	}
+
+	// A goblin with a Craving for Grub drops its Job at once when it can reach a unit, Pile or loose. Anything carried is put
+	// down first, where a legal drop is found; a carrier with nowhere to put its unit keeps working. With no Grub in reach
+	// nothing happens, and the goblin looks again next tick, which is how it notices supply or reachability changing.
+	void TryCraving(SimState s, int goblin)
+	{
+		if ((GoblinTask)s.GoblinTask[goblin] is GoblinTask.Seeking or GoblinTask.Eating
+			|| !NeedRules.IsCraving(s.GoblinGrub[goblin]))
+			return;
+
+		ClearGoals();
+		AddGrubGoals(s);
+		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
+		if (_goals.Count == 0
+			|| !_pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _))
+			return;
+
+		var onGrub = _path.Count == 0;
+		var carried = (Material)s.GoblinCarry[goblin];
+		var dropTile = -1;
+		if (carried != Material.None && !TryFindDropTile(s, goblin, carried, out dropTile))
+			return;
+
+		GoblinTasks.BeginSeek(s, goblin, dropTile, eating: onGrub);
+		// The unit put down is a new loose Haul, or has taken a Pile tile's last slot of its material.
+		if (carried != Material.None)
+			RecheckReachability(s);
+	}
+
+	// Where a carried unit lands: the Pile tile underfoot if it has room, the goblin's own tile if that is not a Pile,
+	// otherwise the nearest walkable tile that can legally take it (a Pile tile with room, or any tile that is not a
+	// Pile), by path length, ties to the lowest tile index. False when no such tile is in reach.
+	bool TryFindDropTile(SimState s, int goblin, Material material, out int tile)
+	{
+		var here = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
+		if (!s.IsPile(here) || s.PileHasRoom(here, material))
+		{
+			tile = here;
+			return true;
+		}
+
+		ClearGoals();
+		for (var candidate = 0; candidate < s.Piles.Length; candidate++)
+			if (candidate != here && TileRules.IsWalkable(s.KindAt(candidate))
+				&& (!s.IsPile(candidate) || s.PileHasRoom(candidate, material)))
+				AddGoal(candidate, candidate, haul: false);
+		if (!_pathfinder.TryFindPath(s, here, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out var goalIndex))
+		{
+			tile = -1;
+			return false;
+		}
+		tile = _goals[goalIndex];
+		return true;
+	}
+
+	// Every tile holding a unit of Grub, stored or loose, as a goal. Goals go in tile order, so a tie goes to the lowest tile index.
+	void AddGrubGoals(SimState s)
+	{
+		for (var tile = 0; tile < s.Piles.Length; tile++)
+			if (s.ItemCount(tile, Material.Grub) > 0)
+				AddGoal(tile, tile, haul: false);
+	}
+
+	// Walks toward the nearest unit of Grub, found afresh at every step so a unit eaten or hauled off changes the goal. The
+	// goblin eats once it stands on one. With none left in reach it gives up and goes back to its work.
+	void Seek(SimState s, int goblin)
+	{
+		if (!StepDue(s, goblin))
+			return;
+
+		ClearGoals();
+		AddGrubGoals(s);
+		switch (MoveToward(s, goblin))
+		{
+			case Move.NoPath:
+				GoblinTasks.Release(s, goblin);
+				break;
+			case Move.Here:
+			case Move.Arrived:
+				GoblinTasks.StartEating(s, goblin);
+				break;
+		}
+	}
+
+	// The unit is eaten as the meal ends, so when two goblins eat the last one the first to finish has it. Settle frees the
+	// other, which finds the Grub gone and looks again. A Pile tile that was full of Grub has room again.
+	void Eat(SimState s, int goblin)
+	{
+		if (!GoblinTasks.EatTick(s, goblin))
+			return;
+
+		var tile = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
+		var wasFull = s.IsPile(tile) && !s.PileHasRoom(tile, Material.Grub);
+		GoblinTasks.FinishEating(s, goblin);
+		PileRules.Settle(s);
+		if (wasFull)
+			RecheckReachability(s);
 	}
 
 	// Claims the nearest reachable Job of either kind: dig goals are the tiles a goblin can dig from, haul goals are
@@ -393,6 +503,9 @@ public sealed class JobSystem
 
 		s.RemoveItems(tile, material, 1);
 		GoblinTasks.FinishPickUp(s, goblin, material);
+		// A goblin eating the last unit has nothing left to eat.
+		if (material == Material.Grub)
+			PileRules.Settle(s);
 	}
 
 	// Walks to the nearest Pile tile with room for the carried material, by path length, ties to the lowest tile index. The

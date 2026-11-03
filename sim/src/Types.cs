@@ -40,4 +40,6 @@ public enum GoblinTask : byte
 	PickingUp,
 	Carrying,
 	Dropping,
+	Seeking,
+	Eating,
 }

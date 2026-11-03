@@ -82,8 +82,13 @@ public sealed class SimState
 	public byte[] GoblinWanderTicks { get; set; } = new byte[MaxGoblins];
 	/// <summary>The <see cref="Goblins.Sim.Material"/> a goblin carries while Carrying or Dropping; None otherwise. Change through <see cref="GoblinTasks"/> only.</summary>
 	public byte[] GoblinCarry { get; set; } = new byte[MaxGoblins];
-	/// <summary>Ticks spent so far picking a unit up or dropping it off. Change through <see cref="GoblinTasks"/> only.</summary>
+	/// <summary>Ticks spent so far picking a unit up, dropping it off or eating it. Change through <see cref="GoblinTasks"/> only.</summary>
 	public byte[] GoblinWorkTicks { get; set; } = new byte[MaxGoblins];
+	/// <summary>
+	/// The Grub Need per goblin, 0 to <see cref="NeedRules.MeterMax"/>. <see cref="NeedsSystem"/> drains it and a meal in
+	/// <see cref="GoblinTasks"/> restores it. Numbers live in <see cref="NeedRules"/>.
+	/// </summary>
+	public byte[] GoblinGrub { get; set; } = new byte[MaxGoblins];
 
 	/// <summary>The materials a tile keeps a count for: every <see cref="Goblins.Sim.Material"/> but None, which the enum numbers 1 upward without gaps.</summary>
 	public static readonly int CountedMaterials = Enum.GetValues<Material>().Length - 1;

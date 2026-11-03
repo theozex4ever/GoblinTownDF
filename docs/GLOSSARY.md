@@ -9,7 +9,7 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Role | A goblin's job class: Grunt, Brute, Sneak, Tinkerer, Shaman, Boss. |
 | Need | A 0–100 meter that drains over time. Prototype needs: Grub, Grog, Sleep. |
 | Craving | The state of a goblin whose Need has fallen below the threshold. A Craving it can satisfy pulls it off its Job at once. |
-| Starving | A goblin whose Grub Need is at 0. It walks and works at half speed. |
+| Starving | A goblin whose Grub Need is at 0. It walks and works at half speed; eating is not slowed, so a Starving goblin recovers as fast as any other. |
 | Collapse | What a goblin does when its Sleep Need reaches 0: it drops what it carries and sleeps on the spot until full. |
 | Chaos | Per-goblin meter raised by unmet needs and grudges; high chaos triggers acting out. |
 | Acting out | A chaos behaviour: shirk, fight, steal, set fire. |
@@ -37,7 +37,7 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Job | A unit of work in the global job list (dig, haul, tend, brew, build) that an idle goblin claims. |
 | Tend | The Job of working a Grub Pit or Fungus Farm tile so that it produces. A Grub Pit tile yields several units per Tend, a Fungus Farm tile one. |
 | Brew | The Job of taking one Fungus to a free Brewery tile and working it into one Grog. |
-| Task | What one goblin is doing right now. A dig Job is worked as Walking to the claimed tile, then Digging it. A Haul is worked as Fetching (walking to the loose unit), PickingUp (5 ticks), Carrying (walking to the nearest Pile tile with room for its material, or waiting while none is available), and Dropping (5 ticks, which stores the unit). A goblin with no Job is Idle, or Wandering. The Job is the work itself, and stays on the job list until it is done or cancelled; a carrying goblin is never given another Job until it has dropped its unit. A Craving can end any of these Tasks at once. |
+| Task | What one goblin is doing right now. A dig Job is worked as Walking to the claimed tile, then Digging it. A Haul is worked as Fetching (walking to the loose unit), PickingUp (5 ticks), Carrying (walking to the nearest Pile tile with room for its material, or waiting while none is available), and Dropping (5 ticks, which stores the unit). A goblin with no Job is Idle, or Wandering. The Job is the work itself, and stays on the job list until it is done or cancelled; a carrying goblin is never given another Job until it has dropped its unit. A Craving for Grub can end any of these Tasks at once: the goblin puts down whatever it carries, goes Seeking the nearest reachable unit of Grub, then Eating it where it lies (10 ticks, no carrying). The Job it left stays on the list. |
 | Wander | What an idle goblin does when it has no reachable Job: after a 3–6 second pause it walks to a random walkable tile within 4 tiles on its own z-level, then pauses again. A goblin mid-walk is Wandering. A reachable Designation cuts it short. |
 | Pile | A storage area painted on Floor tiles with the Pile Tool. Each Pile tile holds up to 30 units of each material; different materials share a tile without a combined limit. |
 | Loose item | A unit of material on a tile that is not a Pile, such as the one a dug tile drops. Each loose unit is a Haul Job, so a tile holding several (a removed Pile's stock, or dirt and stone together) is hauled one unit per trip and claimed by at most as many goblins as it has units. |

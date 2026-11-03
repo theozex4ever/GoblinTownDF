@@ -25,6 +25,7 @@ public partial class CarryDrawChecks : Node
 			LayoutChecks();
 			ColourChecks();
 			LooseLayoutChecks();
+			PipLayoutCheck();
 
 			if (DisplayServer.GetName() == "headless")
 			{
@@ -38,7 +39,8 @@ public partial class CarryDrawChecks : Node
 			await FullCountCheck();
 			await TwoCountsCheck();
 			await LooseSquaresCheck();
-			GD.Print("Carry draw checks passed (layout, colours, count order, 5 pixel scenarios).");
+			await NeedMarksCheck();
+			GD.Print("Carry draw checks passed (layout, colours, count order, 6 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -172,6 +174,45 @@ public partial class CarryDrawChecks : Node
 			var center = WarrenView.LooseSquare(rect, (int)material - 1).GetCenter();
 			ExpectColor(image, (int)center.X, (int)center.Y, WarrenView.MaterialColor(material), $"The loose {material} square is missing or the wrong colour.");
 		}
+	}
+
+	// A craving goblin wears a Grub-coloured pip, a Starving one also a tinted body, and a fed one neither. The pip is drawn
+	// over a carried square without hiding it.
+	async System.Threading.Tasks.Task NeedMarksCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		s.GoblinGrub[0] = 29;
+		s.GoblinGrub[3] = 0;
+		s.GoblinGrub[4] = 100;
+		GoblinTasks.FinishPickUp(s, 3, Material.Dirt);
+		var image = await Render(sim);
+
+		Color Body(int g) => image.GetPixel(s.GoblinX[g] * WarrenView.CellSize + 5, s.GoblinY[g] * WarrenView.CellSize + 13);
+		Vector2I Pip(int g)
+		{
+			var marker = new Rect2(s.GoblinX[g] * WarrenView.CellSize + 3, s.GoblinY[g] * WarrenView.CellSize + 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+			return (Vector2I)WarrenView.PipRect(marker).GetCenter();
+		}
+
+		Require(IsNear(Body(0), GoblinBody), "A craving goblin's body should stay green.");
+		ExpectColor(image, Pip(0).X, Pip(0).Y, WarrenView.MaterialColor(Material.Grub), "A craving goblin has no Grub pip.");
+		Require(IsNear(Body(3), WarrenView.StarvingGoblinColor), "A Starving goblin's body is not tinted.");
+		ExpectColor(image, Pip(3).X, Pip(3).Y, WarrenView.MaterialColor(Material.Grub), "A Starving goblin has no Grub pip.");
+		var square = Square(s, 3, slot: 0, carriers: 1);
+		ExpectColor(image, square.X, square.Y, DirtSquare, "The pip covered the Starving carrier's square.");
+		Require(IsNear(Body(4), GoblinBody), "A fed goblin's body should be green.");
+		ExpectColor(image, Pip(4).X, Pip(4).Y, GoblinBody, "A fed goblin has a pip.");
+	}
+
+	// The pip lies inside its tile, and clear of the carried square at the middle of the marker.
+	static void PipLayoutCheck()
+	{
+		var tile = new Rect2(0, 0, WarrenView.CellSize, WarrenView.CellSize);
+		var marker = new Rect2(3, 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+		var pip = WarrenView.PipRect(marker);
+		Require(tile.Encloses(pip), $"The pip {pip} leaves its tile.");
+		Require(!pip.Intersects(WarrenView.CarriedRect(marker, 0, 1)), "The pip overlaps the carried square.");
 	}
 
 	// The first lit pixel of a count's chip, or its text colour, is read at the count's baseline.

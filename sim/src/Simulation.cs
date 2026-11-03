@@ -83,6 +83,7 @@ public sealed class Simulation
 			s.GoblinX[g] = MapWidth / 2 + StartingCluster[g].Dx;
 			s.GoblinY[g] = MapHeight / 2 + StartingCluster[g].Dy;
 			s.GoblinZ[g] = 0;
+			s.GoblinGrub[g] = NeedRules.Start(s.Rng);
 		}
 
 		var supplies = s.TileIndex(MapWidth / 2 + StartingSupplies.Dx, MapHeight / 2 + StartingSupplies.Dy, 0);
@@ -169,6 +170,7 @@ public sealed class Simulation
 	void Step()
 	{
 		State.Tick++;
+		NeedsSystem.Drain(State);
 		_jobs.Step(State, _events);
 	}
 }

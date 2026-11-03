@@ -44,9 +44,11 @@ public static class PileRules
 	}
 
 	/// <summary>
-	/// Brings the goblins' hauls in line after a Pile appeared or went: a goblin fetching a unit that is now stored is
-	/// freed, and a goblin dropping a unit on a tile that is no longer a Pile carries it on to the next nearest Pile.
-	/// Run after anything that clears or sets a Pile flag (painting, removing, digging stairs on a Pile), so <see cref="GoblinTasks.FindViolation"/> holds between ticks.
+	/// Brings the goblins' hauls and meals in line after a Pile appeared or went, or a unit of Grub was eaten or picked up: a
+	/// goblin fetching a unit that is now stored is freed, a goblin dropping a unit on a tile that is no longer a Pile carries it
+	/// on to the next nearest Pile, and a goblin eating a unit that is gone is freed to look for another.
+	/// Run after anything that clears or sets a Pile flag (painting, removing, digging stairs on a Pile) or takes a unit of Grub
+	/// off a tile, so <see cref="GoblinTasks.FindViolation"/> holds between ticks.
 	/// </summary>
 	public static void Settle(SimState s)
 	{
@@ -63,6 +65,10 @@ public static class PileRules
 				case GoblinTask.Dropping:
 					if (!s.IsPile(s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g])))
 						GoblinTasks.ResumeCarrying(s, g);
+					break;
+				case GoblinTask.Eating:
+					if (s.ItemCount(s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]), Material.Grub) == 0)
+						GoblinTasks.Release(s, g);
 					break;
 			}
 		}
