@@ -71,7 +71,7 @@ public static class RoomRules
 				case GoblinTask.Gathering:
 				case GoblinTask.Taking:
 					// Fungus that shrank under its claimants frees the highest-numbered of them.
-					if (GoblinTasks.SupplyClaims(s, s.GoblinJobTile[g], g) >= s.ItemCount(s.GoblinJobTile[g], Material.Fungus))
+					if (!GoblinTasks.BrewClaimHasUnit(s, s.GoblinJobTile[g], g))
 						GoblinTasks.Release(s, g);
 					break;
 				case GoblinTask.Bringing:

@@ -5,13 +5,14 @@ namespace Goblins.Sim;
 /// a Pile with room for the Grog: the goblin Gathers to the Fungus, Takes one unit (5 ticks), Brings it to the nearest free Brewery tile and Brews it
 /// for <see cref="ProductionRules.BrewTicks"/> working ticks into one Grog, which lands loose on that tile to be hauled like anything a craft
 /// station makes. A Brewery tile has one brewer at a time, and a Fungus unit one claimant, a brewer or a hauler.
+/// The brew works only while a Pile has room for the Grog: with none the brewer holds its Fungus and its progress until room appears.
 /// The goblin's side of a Brew (the four Tasks) lives in <see cref="GoblinTasks"/> and <see cref="JobSystem"/>.
 /// </summary>
 public static class BrewSystem
 {
 	/// <summary>
-	/// True for a Brewery tile whose Brews wait: no Pile its goblins can reach has room for one more Grog. The view greys it out, and
-	/// it brews again once room appears (a Pile painted, Grog drunk or hauled off, the tile made reachable).
+	/// True for a Brewery tile whose Brews wait: no Pile its goblins can reach has room for one more Grog. The view greys it out, no Brew
+	/// is offered and a brewer there makes no progress, and it brews again from where it was once room appears (a Pile painted, Grog drunk or hauled off, the tile made reachable).
 	/// </summary>
 	public static bool IsWaiting(SimState s, int tile) =>
 		s.RoomAt(tile) == RoomKind.Brewery && !s.HasStorageRoom(tile, Material.Grog);

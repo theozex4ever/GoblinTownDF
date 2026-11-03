@@ -6,7 +6,7 @@ namespace Goblins.Sim;
 /// lowest tile index). It walks to a tile it can dig from and digs, or walks to the unit, picks it up (5 ticks),
 /// carries it to the nearest Pile tile with room for its material and drops it (5 ticks); with no such tile it waits holding
 /// the unit; or walks to the Grub Pit tile and tends it (20 ticks), which starts the tile spawning Grub; or walks to the Fungus, takes a unit (5 ticks),
-/// brings it to a free Brewery tile and brews it (20 ticks) into one Grog, loose on that tile. A goblin with no reachable Job wanders instead.
+/// brings it to a free Brewery tile and brews it (20 ticks, which only count while a Pile in reach has room for the Grog) into one Grog, loose on that tile. A goblin with no reachable Job wanders instead.
 /// A goblin with a Craving for Grub or Grog that can reach a unit of it drops everything and goes to eat or drink it, whatever
 /// it was doing. A Craving for Sleep always can be met: the goblin walks to the nearest Sleeping Heap tile and sleeps there, or sleeps
 /// where it stands when none is in reach. With several Cravings the lowest meter wins (Grub, then Grog, then Sleep on a tie),
@@ -664,7 +664,7 @@ public sealed class JobSystem
 		var region = s.HaulRegion[tile];
 		return region != 0
 			&& _freeBreweries[region] - _gatherers[region] > 0
-			&& GoblinTasks.SupplyClaims(s, tile, s.GoblinCount) < fungus
+			&& GoblinTasks.BrewClaimHasUnit(s, tile, s.GoblinCount)
 			&& s.HasStorageRoom(tile, Material.Grog);
 	}
 
@@ -760,14 +760,16 @@ public sealed class JobSystem
 		}
 	}
 
-	// Twenty working ticks, then the Fungus is one Grog, loose on the Brewery tile. Reachability is derived: a tile some goblin can path
-	// to is a Haul as soon as it holds a loose unit.
+	// Twenty working ticks, then the Fungus is one Grog, loose on the Brewery tile. A tick only counts while a Pile in reach has room for
+	// the Grog, the test that greys the tile: with none the goblin stands holding its Fungus and the progress waits, and the brew carries
+	// on from there when room appears. Room is not reserved, so a Pile that fills after the last working tick leaves the Grog loose.
+	// Reachability is derived: a tile some goblin can path to is a Haul as soon as it holds a loose unit.
 	void Brew(SimState s, int goblin)
 	{
-		if (!GoblinTasks.BrewTick(s, goblin))
+		var tile = s.GoblinJobTile[goblin];
+		if (BrewSystem.IsWaiting(s, tile) || !GoblinTasks.BrewTick(s, goblin))
 			return;
 
-		var tile = s.GoblinJobTile[goblin];
 		GoblinTasks.FinishBrew(s, goblin);
 		if (s.HaulRegion[tile] != 0)
 			s.HaulReachable[tile] = 1;
@@ -779,7 +781,7 @@ public sealed class JobSystem
 			return;
 
 		// Storage that filled or went since the claim leaves nothing worth the walk.
-		if (s.HaulableTotal(s.GoblinJobTile[goblin]) == 0)
+		if (GoblinTasks.HaulPickup(s, s.GoblinJobTile[goblin]) == Material.None)
 		{
 			GoblinTasks.Release(s, goblin);
 			return;
@@ -804,9 +806,9 @@ public sealed class JobSystem
 		if (!GoblinTasks.WorkTick(s, goblin))
 			return;
 
-		// The unit taken is the first material that has storage to go to, so a blocked material waits while another is hauled.
+		// The unit taken is the first material that has storage to go to and is not Fungus a brewer claimed, so a blocked material waits while another is hauled.
 		var tile = s.GoblinJobTile[goblin];
-		var material = s.HaulableMaterial(tile);
+		var material = GoblinTasks.HaulPickup(s, tile);
 		if (material == Material.None)
 		{
 			GoblinTasks.Release(s, goblin);
@@ -889,7 +891,7 @@ public sealed class JobSystem
 	static bool IsClaimed(SimState s, int tile, JobKind kind)
 	{
 		if (kind == JobKind.Haul)
-			return GoblinTasks.SupplyClaims(s, tile, s.GoblinCount) >= s.HaulableTotal(tile);
+			return GoblinTasks.FetchClaims(s, tile, s.GoblinCount) >= GoblinTasks.HaulClaimable(s, tile);
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			var task = (GoblinTask)s.GoblinTask[g];

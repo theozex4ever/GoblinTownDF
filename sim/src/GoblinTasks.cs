@@ -12,7 +12,7 @@ namespace Goblins.Sim;
 /// A Tend: Approaching a farm tile (a Grub Pit or a Fungus Farm), then Tending it for <see cref="ProductionRules.TendTicks"/> working ticks, after which the tile
 /// spawns its crop and the goblin is Idle again.
 /// A Brew: Gathering to a tile holding Fungus, Taking one unit (5 ticks), Bringing it to a free Brewery tile and Brewing it there for
-/// <see cref="ProductionRules.BrewTicks"/> working ticks, after which the Fungus is one Grog, loose on the tile, and the goblin is Idle again.
+/// <see cref="ProductionRules.BrewTicks"/> working ticks, counted only while a Pile has room for the Grog, after which the Fungus is one Grog, loose on the tile, and the goblin is Idle again.
 /// A Craving ends any of those Tasks at once, dropping what the goblin carries: it goes Seeking the nearest unit of Grub,
 /// then Eating it where it lies, or SeekingGrog and Drinking for a Craving for Grog, or SeekingHeap (walking to the
 /// nearest Sleeping Heap tile) and Sleeping there, or Sleeping where it stands when no Heap is in reach. A goblin finishes the one Need it
@@ -441,10 +441,45 @@ public static class GoblinTasks
 	}
 
 	/// <summary>
-	/// Claims on a tile's units by goblins numbered below <paramref name="below"/>, haulers and brewers together: no unit is claimed twice,
-	/// so the count stays under what the tile holds (<see cref="SimState.LooseTotal"/> for a hauler, its Fungus for a brewer).
+	/// Claims on a tile's units by goblins numbered below <paramref name="below"/>, haulers and brewers together. A hauler's claim is on
+	/// any loose unit and a brewer's on a unit of Fungus, so a hauler has a unit of its own while this stays under <see cref="SimState.LooseTotal"/>.
+	/// For a brewer see <see cref="BrewClaimHasUnit"/>.
 	/// </summary>
 	public static int SupplyClaims(SimState s, int tile, int below) => FetchClaims(s, tile, below) + BrewClaims(s, tile, below);
+
+	/// <summary>
+	/// True when a Brew claim on <paramref name="tile"/>'s Fungus has a unit of its own beside the claims of the goblins numbered below
+	/// <paramref name="below"/>: the brewers before it leave Fungus, and the brewers and haulers before it together leave a unit of
+	/// the tile's stock (a hauler may take Fungus, so only the whole stock bounds them). Pass the goblin count to ask whether one more brewer
+	/// may claim. A hauler's claim on Dirt does not count against a brewer's Fungus, nor a brewer's against a hauler's Dirt.
+	/// </summary>
+	public static bool BrewClaimHasUnit(SimState s, int tile, int below)
+	{
+		var brewers = BrewClaims(s, tile, below);
+		return brewers < s.ItemCount(tile, Material.Fungus)
+			&& brewers + FetchClaims(s, tile, below) < s.LooseTotal(tile) + s.StoredCount(tile, Material.Fungus);
+	}
+
+	/// <summary>Loose Fungus on a tile that brewers have claimed. A hauler never takes these, whether or not Fungus has a Pile to go to.</summary>
+	public static int ReservedFungus(SimState s, int tile) =>
+		Math.Min(BrewClaims(s, tile, s.GoblinCount), s.LooseCount(tile, Material.Fungus));
+
+	/// <summary>
+	/// Loose units on a tile that haulers may claim: the units whose material has storage to go to, less the Fungus brewers have
+	/// claimed. Fungus with no Pile to go to is not haulable, so a brewer's claim on it costs no other material a hauler.
+	/// </summary>
+	public static int HaulClaimable(SimState s, int tile) =>
+		s.HaulableTotal(tile) - (s.HasStorageRoom(tile, Material.Fungus) ? ReservedFungus(s, tile) : 0);
+
+	/// <summary>The first material (in Material order) a hauler may pick up on the tile: loose, with storage to go to, and not Fungus a brewer has claimed. None when there is none.</summary>
+	public static Material HaulPickup(SimState s, int tile)
+	{
+		var reserved = ReservedFungus(s, tile);
+		for (var material = Material.Dirt; (int)material <= SimState.CountedMaterials; material++)
+			if (s.LooseCount(tile, material) - (material == Material.Fungus ? reserved : 0) > 0 && s.HasStorageRoom(tile, material))
+				return material;
+		return Material.None;
+	}
 
 	/// <summary>True when a goblin is Bringing or Brewing at the Brewery tile <paramref name="tile"/>: one brewer per tile.</summary>
 	public static bool IsBreweryClaimed(SimState s, int tile)
@@ -475,7 +510,7 @@ public static class GoblinTasks
 	/// stands where it can dig, a PickingUp goblin stands on its unit, a Dropping goblin stands on a Pile tile, a
 	/// goblin carries a unit exactly while Carrying or Dropping, a seeking or consuming goblin has a Craving for what it seeks and an Eating or Drinking goblin stands
 	/// on a unit of it, a Sleeping goblin's meter is below <see cref="NeedRules.MeterMax"/> (it has climbed past any Craving, or Collapsed), a wander target is walkable on the goblin's own
-	/// level and not its own tile, a tender works a farm tile that is not producing, and a Tending one stands on it, no two goblins claim one tile to dig it or to tend it, no more claim a tile's loose units than it holds, no more claim its Fungus to brew than it holds (hauling and brewing together never claim a unit twice), a Bringing or Brewing goblin holds Fungus and a Brewery tile that no other goblin has, and a Brewing one stands on it, step ticks are below
+	/// level and not its own tile, a tender works a farm tile that is not producing, and a Tending one stands on it, no two goblins claim one tile to dig it or to tend it, no more claim a tile's loose units than it holds, no more claim its Fungus to brew than it holds, and haulers and brewers together never claim more units than it has, a Bringing or Brewing goblin holds Fungus and a Brewery tile that no other goblin has, and a Brewing one stands on it, step ticks are below
 	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> (<see cref="NeedRules.EatTicks"/> while Eating or Drinking, <see cref="ProductionRules.TendTicks"/> while Tending,
 	/// <see cref="NeedRules.FloorRecoveryTicks"/> while Sleeping) and only count while
 	/// PickingUp, Dropping, Eating, Drinking, Tending or Sleeping, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
@@ -567,7 +602,7 @@ public static class GoblinTasks
 						return $"Goblin {g} gathers tile {job}, which holds no Fungus.";
 					if (task == GoblinTask.Taking && job != here)
 						return $"Goblin {g} is taking Fungus on tile {job} from tile {here}.";
-					if (SupplyClaims(s, job, g) >= s.ItemCount(job, Material.Fungus))
+					if (!BrewClaimHasUnit(s, job, g))
 						return $"Goblin {g} gathers a unit of Fungus on tile {job}, which holds {s.ItemCount(job, Material.Fungus)} and is claimed by others.";
 					break;
 

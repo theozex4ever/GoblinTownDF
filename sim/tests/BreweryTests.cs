@@ -1085,6 +1085,356 @@ public class BreweryTests
 		Assert.Throws<JsonException>(() => SimJson.Deserialize(node.ToJsonString()));
 	}
 
+	// ---- Claims: a brewer's Fungus never costs another material its hauler
+
+	// Loose units on a tile that nobody may claim twice: every claim, hauler or brewer, needs a unit of its own.
+	static void AssertNoUnitClaimedTwice(SimState s, int tile)
+	{
+		var units = s.LooseTotal(tile) + s.StoredCount(tile, Material.Fungus);
+		var claims = GoblinTasks.FetchClaims(s, tile, s.GoblinCount) + GoblinTasks.BrewClaims(s, tile, s.GoblinCount);
+		Assert.True(claims <= units, $"Tick {s.Tick}: tile {tile} holds {units} units and is claimed {claims} times.");
+	}
+
+	[Fact]
+	public void A_brewer_claiming_Fungus_no_Pile_can_take_leaves_a_Dirt_unit_beside_it_to_the_haulers()
+	{
+		var sim = World(2);
+		var s = sim.State;
+		var source = At(s, 20, 10);
+		PaintBrewery(sim, 28, 10);
+		// The Fungus is full here, so the loose Fungus can only be brewed; Dirt and Grog have room.
+		var pile = StockPile(sim, 30, 10, fungus: 30);
+		s.AddItems(source, Material.Fungus, 1);
+		sim.RecheckReachability();
+		RunTicks(sim, 1);
+		Assert.Equal(GoblinTask.Gathering, TaskOf(s, 0));
+		Assert.Equal(source, s.GoblinJobTile[0]);
+
+		// A Dig stairs elsewhere drops one Dirt on the same tile.
+		s.AddItems(source, Material.Dirt, 1);
+		sim.RecheckReachability();
+		RunTicks(sim, 1);
+
+		Assert.Equal(GoblinTask.Gathering, TaskOf(s, 0));
+		Assert.Equal(source, s.GoblinJobTile[1]);
+		Assert.True(TaskOf(s, 1) is GoblinTask.Fetching or GoblinTask.PickingUp, $"Goblin 1 is {TaskOf(s, 1)}.");
+
+		var dirt = Total(s, Material.Dirt);
+		var fungusAndGrog = Total(s, Material.Fungus) + Total(s, Material.Grog);
+		RunUntil(sim, () => s.StoredCount(pile, Material.Dirt) == 1 && Total(s, Material.Grog) == 1, limit: 600, what: "The Dirt hauled and the Fungus brewed");
+		Assert.Equal(dirt, Total(s, Material.Dirt));
+		Assert.Equal(fungusAndGrog, Total(s, Material.Fungus) + Total(s, Material.Grog));
+		Assert.Equal(30, s.StoredCount(pile, Material.Fungus));
+	}
+
+	[Fact]
+	public void A_hauler_beside_a_brewers_Fungus_never_picks_the_Fungus_the_brewer_claimed()
+	{
+		var sim = World(2);
+		var s = sim.State;
+		var source = At(s, 20, 10);
+		PaintBrewery(sim, 28, 10);
+		var pile = StockPile(sim, 30, 10, fungus: 30);
+		s.AddItems(source, Material.Fungus, 1);
+		s.GoblinX[1] = 19;
+		s.GoblinY[1] = 10;
+		sim.RecheckReachability();
+		RunTicks(sim, 1);
+		Assert.Equal(GoblinTask.Gathering, TaskOf(s, 0));
+
+		s.RemoveItems(pile, Material.Fungus, 1);
+		s.AddItems(source, Material.Grog, 1);
+		sim.RecheckReachability();
+
+		while (TaskOf(s, 0) != GoblinTask.Bringing)
+		{
+			RunTicks(sim, 1);
+			Assert.NotEqual((byte)Material.Fungus, s.GoblinCarry[1]);
+			Assert.True(IsBrewTask(s, 0), $"Tick {s.Tick}: the brewer was freed and is {TaskOf(s, 0)}.");
+			Assert.True(s.Tick < 400, "The brewer never took its Fungus.");
+		}
+		Assert.Equal(0, s.ItemCount(source, Material.Fungus));
+		RunUntil(sim, () => Total(s, Material.Grog) == 2 && Total(s, Material.Fungus) == 29, limit: 600, what: "Both Grog");
+	}
+
+	[Fact]
+	public void A_hauler_fetching_Dirt_does_not_stop_a_brewer_taking_the_Fungus_beside_it()
+	{
+		var sim = World(2);
+		var s = sim.State;
+		var source = At(s, 13, 10);
+		PaintBrewery(sim, 8, 10);
+		StockPile(sim, 30, 10, fungus: 30);
+		s.AddItems(source, Material.Fungus, 1);
+		s.AddItems(source, Material.Dirt, 1);
+		sim.RecheckReachability();
+
+		RunTicks(sim, 1);
+
+		// The Haul comes first on a shared tile, and its unit is the Dirt; the Fungus is still free to brew.
+		Assert.True(TaskOf(s, 0) is GoblinTask.Fetching or GoblinTask.PickingUp, $"Goblin 0 is {TaskOf(s, 0)}.");
+		Assert.Equal(GoblinTask.Gathering, TaskOf(s, 1));
+		Assert.Equal(source, s.GoblinJobTile[1]);
+		RunUntil(sim, () => Total(s, Material.Grog) == 1, limit: 600, what: "The brewed Grog");
+		Assert.Equal(1, Total(s, Material.Dirt));
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void Mixed_units_on_one_tile_are_claimed_once_each_and_conserved_whether_or_not_Fungus_has_a_Pile(bool fungusPileFull)
+	{
+		var sim = World(4);
+		var s = sim.State;
+		var source = At(s, 16, 10);
+		PaintBrewery(sim, 6, 14, 7, 14);
+		var pile = StockPile(sim, 26, 10, fungus: fungusPileFull ? 30 : 0);
+		s.AddItems(source, Material.Fungus, 2);
+		s.AddItems(source, Material.Dirt, 2);
+		s.AddItems(source, Material.Grog, 1);
+		sim.RecheckReachability();
+		var fungusAndGrog = Total(s, Material.Fungus) + Total(s, Material.Grog);
+
+		for (var i = 0; i < 900; i++)
+		{
+			RunTicks(sim, 1);
+			AssertNoUnitClaimedTwice(s, source);
+			Assert.Equal(2, Total(s, Material.Dirt));
+			Assert.Equal(fungusAndGrog, Total(s, Material.Fungus) + Total(s, Material.Grog));
+			Assert.True(s.ItemCount(pile, Material.Fungus) <= SimState.PileCapacity);
+		}
+
+		Assert.Equal(2, s.StoredCount(pile, Material.Dirt));
+		Assert.Equal(0, s.LooseTotal(source));
+	}
+
+	[Fact]
+	public void FindViolation_lets_a_hauler_and_a_brewer_claim_different_units_of_one_tile_in_either_goblin_order()
+	{
+		var s = Hand(out _, out _);
+		var tile = At(s, 12, 12);
+		s.AddItems(tile, Material.Fungus, 1);
+		s.AddItems(tile, Material.Dirt, 1);
+
+		s.GoblinTask[0] = (byte)GoblinTask.Gathering;
+		s.GoblinJobTile[0] = tile;
+		s.GoblinTask[1] = (byte)GoblinTask.Fetching;
+		s.GoblinJobTile[1] = tile;
+		Assert.Null(GoblinTasks.FindViolation(s));
+
+		s.GoblinTask[0] = (byte)GoblinTask.Fetching;
+		s.GoblinTask[1] = (byte)GoblinTask.Gathering;
+		Assert.Null(GoblinTasks.FindViolation(s));
+		RoomRules.Settle(s);
+		Assert.Equal(GoblinTask.Fetching, TaskOf(s, 0));
+		Assert.Equal(GoblinTask.Gathering, TaskOf(s, 1));
+
+		// Two units, three claims: the highest-numbered claim has no unit.
+		s.GoblinCount = 3;
+		s.GoblinX[2] = 10;
+		s.GoblinY[2] = 12;
+		s.GoblinGrub[2] = s.GoblinGrog[2] = s.GoblinSleep[2] = 100;
+		s.GoblinTask[2] = (byte)GoblinTask.Fetching;
+		s.GoblinJobTile[2] = tile;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+		RoomRules.Settle(s);
+		Assert.Null(GoblinTasks.FindViolation(s));
+		Assert.Equal(GoblinTask.Idle, TaskOf(s, 2));
+	}
+
+	// ---- Brewing waits for room for the Grog
+
+	// A brewer partway through its brew: Brewing for `ticks` working ticks at (10, 10), with the 30-Fungus Pile at (30, 10) as its Grog sink.
+	static Simulation BrewingFor(int ticks, out int brewery)
+	{
+		var sim = LooseBrew(out brewery, out _);
+		RunUntilTask(sim, 0, GoblinTask.Brewing);
+		RunTicks(sim, ticks);
+		Assert.Equal(ticks, sim.State.GoblinWorkTicks[0]);
+		return sim;
+	}
+
+	[Fact]
+	public void A_brew_pauses_when_the_only_Grog_Pile_goes_and_finishes_its_remaining_ticks_when_a_Pile_returns()
+	{
+		var sim = BrewingFor(7, out var brewery);
+		var s = sim.State;
+
+		sim.Apply(new RemovePile(0, 30, 10, 30, 10));
+		Assert.True(BrewSystem.IsWaiting(s, brewery));
+		for (var i = 0; i < 60; i++)
+		{
+			RunTicks(sim, 1);
+			Assert.Equal(GoblinTask.Brewing, TaskOf(s, 0));
+			Assert.Equal(7, s.GoblinWorkTicks[0]);
+			Assert.Equal((byte)Material.Fungus, s.GoblinCarry[0]);
+			Assert.Equal(brewery, s.GoblinJobTile[0]);
+			Assert.Equal(0, s.ItemCount(brewery, Material.Grog));
+		}
+
+		PaintPile(sim, 30, 10);
+		Assert.False(BrewSystem.IsWaiting(s, brewery));
+		RunTicks(sim, 12);
+		Assert.Equal(GoblinTask.Brewing, TaskOf(s, 0));
+		Assert.Equal(19, s.GoblinWorkTicks[0]);
+		RunTicks(sim, 1);
+		Assert.Equal(GoblinTask.Idle, TaskOf(s, 0));
+		Assert.Equal(1, s.LooseCount(brewery, Material.Grog));
+		Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
+	}
+
+	[Fact]
+	public void A_brew_pauses_when_a_hauler_fills_the_last_Grog_slot_and_resumes_when_a_goblin_drinks_from_the_Pile()
+	{
+		var sim = World(2);
+		var s = sim.State;
+		var brewery = At(s, 10, 10);
+		PaintBrewery(sim, 10, 10);
+		var pile = StockPile(sim, 30, 10, fungus: 30, grog: 29);
+		s.AddItems(brewery, Material.Fungus, 1);
+		// Goblin 1 is on its way to drop the Grog that fills the Pile.
+		s.GoblinX[1] = 29;
+		s.GoblinY[1] = 10;
+		s.GoblinTask[1] = (byte)GoblinTask.Carrying;
+		s.GoblinCarry[1] = (byte)Material.Grog;
+		sim.RecheckReachability();
+
+		RunUntil(sim, () => s.StoredCount(pile, Material.Grog) == 30, limit: 40, what: "The Pile filling with Grog");
+		Assert.Equal(GoblinTask.Brewing, TaskOf(s, 0));
+		Assert.True(BrewSystem.IsWaiting(s, brewery));
+		var held = s.GoblinWorkTicks[0];
+		Assert.InRange(held, 1, ProductionRules.BrewTicks - 1);
+
+		RunTicks(sim, 80);
+		Assert.Equal(held, s.GoblinWorkTicks[0]);
+		Assert.Equal(0, s.ItemCount(brewery, Material.Grog));
+
+		// Goblin 1 gets thirsty and drinks from the full Pile: room appears.
+		s.GoblinGrog[1] = 10;
+		RunUntil(sim, () => !BrewSystem.IsWaiting(s, brewery), limit: 100, what: "A slot opening in the Pile");
+		Assert.Equal(held, s.GoblinWorkTicks[0]);
+		RunTicks(sim, ProductionRules.BrewTicks - held - 1);
+		Assert.Equal(GoblinTask.Brewing, TaskOf(s, 0));
+		RunTicks(sim, 1);
+		Assert.Equal(GoblinTask.Idle, TaskOf(s, 0));
+		Assert.Equal(1, s.LooseCount(brewery, Material.Grog));
+		Assert.Equal(30, Total(s, Material.Grog));
+	}
+
+	[Fact]
+	public void A_brew_pauses_while_the_Grog_Pile_is_out_of_reach_and_resumes_when_the_way_opens()
+	{
+		var sim = BrewingFor(9, out var brewery);
+		var s = sim.State;
+		var wall = new int[s.Height];
+		for (var y = 0; y < s.Height; y++)
+		{
+			wall[y] = s.TileKinds[At(s, 20, y)];
+			s.TileKinds[At(s, 20, y)] = (byte)TileKind.Solid;
+		}
+		sim.RecheckReachability();
+		Assert.True(BrewSystem.IsWaiting(s, brewery));
+
+		RunTicks(sim, 50);
+		Assert.Equal(9, s.GoblinWorkTicks[0]);
+		Assert.Equal(GoblinTask.Brewing, TaskOf(s, 0));
+		Assert.Equal(0, s.ItemCount(brewery, Material.Grog));
+
+		for (var y = 0; y < s.Height; y++)
+			s.TileKinds[At(s, 20, y)] = (byte)wall[y];
+		sim.RecheckReachability();
+		Assert.False(BrewSystem.IsWaiting(s, brewery));
+		RunTicks(sim, 10);
+		Assert.Equal(GoblinTask.Brewing, TaskOf(s, 0));
+		RunTicks(sim, 1);
+		Assert.Equal(GoblinTask.Idle, TaskOf(s, 0));
+		Assert.Equal(1, s.LooseCount(brewery, Material.Grog));
+	}
+
+	[Fact]
+	public void A_paused_brewer_still_answers_a_Craving_losing_the_progress_and_dropping_its_Fungus()
+	{
+		var sim = BrewingFor(7, out var brewery);
+		var s = sim.State;
+		s.AddItems(At(s, 20, 20), Material.Grog, 1);
+		sim.Apply(new RemovePile(0, 30, 10, 30, 10));
+		RunTicks(sim, 10);
+		Assert.Equal(7, s.GoblinWorkTicks[0]);
+
+		s.GoblinGrog[0] = 10;
+		RunTicks(sim, 1);
+
+		Assert.Equal(GoblinTask.SeekingGrog, TaskOf(s, 0));
+		Assert.Equal(0, s.GoblinWorkTicks[0]);
+		Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
+		Assert.Equal(1, s.LooseCount(brewery, Material.Fungus));
+		Assert.Equal(0, s.ItemCount(brewery, Material.Grog));
+	}
+
+	[Fact]
+	public void A_paused_brewer_whose_Brewery_is_removed_carries_its_Fungus_and_a_new_Pile_takes_it()
+	{
+		var sim = BrewingFor(7, out _);
+		var s = sim.State;
+		sim.Apply(new RemovePile(0, 30, 10, 30, 10));
+		RunTicks(sim, 5);
+		sim.Apply(new RemoveRoom(RoomKind.Brewery, 0, 10, 10, 10, 10));
+
+		RunTicks(sim, 30);
+		Assert.Equal(GoblinTask.Carrying, TaskOf(s, 0));
+		Assert.Equal((byte)Material.Fungus, s.GoblinCarry[0]);
+		Assert.Equal(0, s.GoblinWorkTicks[0]);
+		Assert.Equal(0, Total(s, Material.Grog));
+
+		PaintPile(sim, 12, 12);
+		RunUntilTask(sim, 0, GoblinTask.Idle, limit: 200);
+		Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
+		Assert.Equal(0, Total(s, Material.Grog));
+	}
+
+	[Fact]
+	public void A_Starving_brewer_makes_no_progress_while_paused_and_keeps_its_half_speed_after()
+	{
+		var sim = BrewingFor(2, out var brewery);
+		var s = sim.State;
+		s.GoblinGrub[0] = 0;
+		sim.Apply(new RemovePile(0, 30, 10, 30, 10));
+		RunTicks(sim, 50);
+		Assert.Equal(2, s.GoblinWorkTicks[0]);
+
+		PaintPile(sim, 30, 10);
+		RunTicks(sim, 2 * (ProductionRules.BrewTicks - 2) - 2);
+		Assert.Equal(GoblinTask.Brewing, TaskOf(s, 0));
+		RunTicks(sim, 4);
+		Assert.Equal(1, s.LooseCount(brewery, Material.Grog));
+	}
+
+	[Fact]
+	public void A_save_taken_while_a_brew_is_paused_round_trips_and_replays_identically_to_the_same_Grog()
+	{
+		var original = BrewingFor(7, out var brewery);
+		original.Apply(new RemovePile(0, 30, 10, 30, 10));
+		RunTicks(original, 20);
+		var restored = SimJson.Deserialize(SimJson.Serialize(original));
+		Assert.Equal(SimJson.Serialize(original), SimJson.Serialize(restored));
+		Assert.Equal(7, restored.State.GoblinWorkTicks[0]);
+		Assert.True(BrewSystem.IsWaiting(restored.State, brewery));
+
+		foreach (var sim in new[] { original, restored })
+		{
+			RunTicks(sim, 40);
+			Assert.Equal(7, sim.State.GoblinWorkTicks[0]);
+			sim.Apply(new PaintPile(0, 30, 10, 30, 10));
+			RunTicks(sim, ProductionRules.BrewTicks - 7);
+			Assert.Equal(GoblinTask.Idle, TaskOf(sim.State, 0));
+			Assert.Equal(1, sim.State.LooseCount(brewery, Material.Grog));
+			RunTicks(sim, 40);
+		}
+
+		Assert.Equal(SimJson.Serialize(original), SimJson.Serialize(restored));
+		Assert.Equal(1, Total(original.State, Material.Grog));
+	}
+
 	// ---- The loop, end to end
 
 	// Commands only, on the unchanged new world: stairs and a dug room underground, a farm, a Brewery, a Pile and a Grub Pit.
