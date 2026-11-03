@@ -40,7 +40,8 @@ public partial class CarryDrawChecks : Node
 			await TwoCountsCheck();
 			await LooseSquaresCheck();
 			await NeedMarksCheck();
-			GD.Print("Carry draw checks passed (layout, colours, count order, 6 pixel scenarios).");
+			await RoomTintCheck();
+			GD.Print("Carry draw checks passed (layout, colours, count order, 7 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -179,6 +180,28 @@ public partial class CarryDrawChecks : Node
 	// A goblin craving Grub wears a Grub-coloured pip and one craving Grog a Grog-coloured one; with both, the lower meter's
 	// colour shows (Grub on a tie). A Starving goblin also has a tinted body, a fed one neither, and Grog at 0 tints nothing.
 	// The pip is drawn over a carried square without hiding it.
+	// A Grub Pit tile is tinted over the floor, and the Grub lying loose on it still shows over the tint.
+	async System.Threading.Tasks.Task RoomTintCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		sim.Apply(new PaintRoom(RoomKind.GrubPit, 0, 10, 10, 11, 10));
+		sim.Apply(new PaintPile(0, 20, 20, 20, 20));
+		s.AddItems(s.TileIndex(11, 10, 0), Material.Grub, 1);
+		sim.RecheckReachability();
+		var image = await Render(sim);
+
+		var floor = new Color(0.62f, 0.62f, 0.64f);
+		var tint = WarrenView.GrubPitTint;
+		var tinted = floor * (1 - tint.A) + tint * tint.A;
+		var rect = new Rect2(10 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
+		var centre = rect.GetCenter();
+		ExpectColor(image, (int)centre.X, (int)centre.Y, new Color(tinted.R, tinted.G, tinted.B), "A Grub Pit tile is not tinted.");
+		ExpectColor(image, 12 * WarrenView.CellSize + 9, 10 * WarrenView.CellSize + 9, floor, "A tile beside the Grub Pit is tinted.");
+		var square = WarrenView.LooseSquare(new Rect2(11 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize), (int)Material.Grub - 1).GetCenter();
+		ExpectColor(image, (int)square.X, (int)square.Y, WarrenView.MaterialColor(Material.Grub), "The Grub loose on a Grub Pit is hidden by its tint.");
+	}
+
 	async System.Threading.Tasks.Task NeedMarksCheck()
 	{
 		var sim = Simulation.NewWorld(seed: 1);

@@ -1,7 +1,7 @@
 namespace Goblins.Sim;
 
 /// <summary>
-/// Every number of the Needs, kept together so they can be tuned after play and shared with the Sleep Need that follows.
+/// Every number of the Needs and of the production that feeds them (<see cref="ProductionRules"/> below), kept together so they can be tuned after play and shared with the Sleep Need that follows.
 /// A Need is a 0 to <see cref="MeterMax"/> meter that drains over time; below <see cref="CravingThreshold"/> the
 /// goblin has a Craving, and at 0 it is Starving (Grub only).
 /// </summary>
@@ -57,6 +57,17 @@ public static class NeedRules
 		var other = winner == Material.Grub ? grog : grub;
 		return IsCraving(winning) ? winner : IsCraving(other) ? Other(winner) : Material.None;
 	}
+}
+
+/// <summary>The numbers of the Rooms that produce, kept beside <see cref="NeedRules"/> so both can be tuned after play.</summary>
+public static class ProductionRules
+{
+	/// <summary>Working ticks one Tend of a Grub Pit tile takes.</summary>
+	public const int TendTicks = 20;
+	/// <summary>Grub one Tend yields, spawned one at a time.</summary>
+	public const int GrubPerTend = 3;
+	/// <summary>Ticks from the end of a Tend to its first Grub, and between one Grub and the next.</summary>
+	public const int GrubSpawnTicks = 200;
 }
 
 /// <summary>The Needs' own system: the slow drain of every goblin's meters. Cravings and meals are worked by <see cref="JobSystem"/>.</summary>

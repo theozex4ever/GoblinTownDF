@@ -18,6 +18,14 @@ public enum Material : byte
 	Grog,
 }
 
+/// <summary>A painted zone. A tile holds at most one Room.</summary>
+public enum RoomKind : byte
+{
+	None,
+	Pile,
+	GrubPit,
+}
+
 public enum Role : byte
 {
 	Grunt,
@@ -44,4 +52,6 @@ public enum GoblinTask : byte
 	Eating,
 	SeekingGrog,
 	Drinking,
+	Approaching,
+	Tending,
 }

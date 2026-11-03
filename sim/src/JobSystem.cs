@@ -1,11 +1,11 @@
 namespace Goblins.Sim;
 
 /// <summary>
-/// The global job list and the goblins that work it. A designated tile is a dig Job and a tile with a loose
-/// unit is a Haul Job. An idle goblin claims the nearest one of either kind by path length (ties go to the
+/// The global job list and the goblins that work it. A designated tile is a dig Job, a tile with a loose
+/// unit is a Haul Job and an untended Grub Pit tile is a Tend Job. An idle goblin claims the nearest one of any kind by path length (ties go to the
 /// lowest tile index). It walks to a tile it can dig from and digs, or walks to the unit, picks it up (5 ticks),
 /// carries it to the nearest Pile tile with room for its material and drops it (5 ticks); with no such tile it waits holding
-/// the unit. A goblin with no reachable Job wanders instead.
+/// the unit; or walks to the Grub Pit tile and tends it (20 ticks), which starts the tile spawning Grub. A goblin with no reachable Job wanders instead.
 /// A goblin with a Craving for Grub or Grog that can reach a unit of it drops everything and goes to eat or drink it, whatever
 /// it was doing. With both, the lower meter wins (Grub on a tie), and a Craving with no unit in reach does not count.
 /// Loops over the state arrays; the only memory it owns is reused scratch lists.
@@ -17,12 +17,20 @@ public sealed class JobSystem
 	// Random targets tried per wander before the goblin gives up and pauses again.
 	const int WanderAttempts = 8;
 
+	// The kinds of Job on the one list. Goals that belong to no Job (a meal, a drop-off) are filed as Dig and never read back.
+	enum JobKind
+	{
+		Dig,
+		Haul,
+		Tend,
+	}
+
 	readonly IPathfinder _pathfinder;
 	readonly List<int> _path = [];
 	readonly List<int> _goals = [];
 	readonly List<int> _goalJobs = [];
-	// Parallel to _goals while a claim is being weighed: whether the goal is a loose unit rather than a dig.
-	readonly List<bool> _goalHauls = [];
+	// Parallel to _goals while a claim is being weighed: which kind of Job the goal belongs to.
+	readonly List<JobKind> _goalKinds = [];
 	readonly List<int> _starts = [];
 	byte[] _reached = [];
 
@@ -191,6 +199,10 @@ public sealed class JobSystem
 					else
 						Dig(s, g, job, events);
 					break;
+				case GoblinTask.Approaching:
+				case GoblinTask.Tending:
+					Tend(s, g);
+					break;
 				case GoblinTask.Fetching:
 					Fetch(s, g);
 					break;
@@ -273,7 +285,7 @@ public sealed class JobSystem
 		for (var candidate = 0; candidate < s.Piles.Length; candidate++)
 			if (candidate != here && TileRules.IsWalkable(s.KindAt(candidate))
 				&& (!s.IsPile(candidate) || s.PileHasRoom(candidate, material)))
-				AddGoal(candidate, candidate, haul: false);
+				AddGoal(candidate, candidate);
 		if (!_pathfinder.TryFindPath(s, here, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out var goalIndex))
 		{
 			tile = -1;
@@ -288,7 +300,7 @@ public sealed class JobSystem
 	{
 		for (var tile = 0; tile < s.Piles.Length; tile++)
 			if (s.ItemCount(tile, supply) > 0)
-				AddGoal(tile, tile, haul: false);
+				AddGoal(tile, tile);
 	}
 
 	// Walks toward the nearest unit of what the goblin seeks, found afresh at every step so a unit eaten, drunk or hauled off
@@ -331,7 +343,7 @@ public sealed class JobSystem
 			GoblinTasks.FinishEating(s, goblin);
 		else
 			GoblinTasks.FinishDrinking(s, goblin);
-		PileRules.Settle(s);
+		RoomRules.Settle(s);
 		if (wasFull)
 			RecheckReachability(s);
 	}
@@ -343,20 +355,31 @@ public sealed class JobSystem
 		ClearGoals();
 		for (var tile = 0; tile < s.Designations.Length; tile++)
 		{
-			if (s.IsReachable(tile) && !IsClaimed(s, tile, haul: false))
+			if (s.IsReachable(tile) && !IsClaimed(s, tile, JobKind.Dig))
 				AddStandingTiles(s, tile);
-			if (s.IsHaulReachable(tile) && !IsClaimed(s, tile, haul: true))
-				AddGoal(tile, tile, haul: true);
+			if (s.IsHaulReachable(tile) && !IsClaimed(s, tile, JobKind.Haul))
+				AddGoal(tile, tile, JobKind.Haul);
+			// A Grub Pit tile some goblin can path to; the pathfinder weighs the walk for this goblin.
+			if (s.HaulRegion[tile] != 0 && FarmSystem.IsTendOffered(s, tile) && !IsClaimed(s, tile, JobKind.Tend))
+				AddGoal(tile, tile, JobKind.Tend);
 		}
 
 		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
 		if (!_pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out var goalIndex))
 			return false;
 
-		if (_goalHauls[goalIndex])
-			GoblinTasks.BeginFetch(s, goblin, _goalJobs[goalIndex], pickingUp: _path.Count == 0);
-		else
-			GoblinTasks.BeginJob(s, goblin, _goalJobs[goalIndex], digging: _path.Count == 0);
+		switch (_goalKinds[goalIndex])
+		{
+			case JobKind.Haul:
+				GoblinTasks.BeginFetch(s, goblin, _goalJobs[goalIndex], pickingUp: _path.Count == 0);
+				break;
+			case JobKind.Tend:
+				GoblinTasks.BeginTend(s, goblin, _goalJobs[goalIndex], tending: _path.Count == 0);
+				break;
+			default:
+				GoblinTasks.BeginJob(s, goblin, _goalJobs[goalIndex], digging: _path.Count == 0);
+				break;
+		}
 		return true;
 	}
 
@@ -487,6 +510,42 @@ public sealed class JobSystem
 		return _path.Count == 1 ? Move.Arrived : Move.Moved;
 	}
 
+	// A Tend ends the moment its Job goes: the tile gained loose Grub, or stopped being a Grub Pit that is free to tend. The goblin is
+	// freed with no progress, and the Job is offered again whenever it exists again.
+	void Tend(SimState s, int goblin)
+	{
+		var tile = s.GoblinJobTile[goblin];
+		if (!FarmSystem.IsTendOffered(s, tile))
+		{
+			GoblinTasks.Release(s, goblin);
+			return;
+		}
+
+		if ((GoblinTask)s.GoblinTask[goblin] == GoblinTask.Tending)
+		{
+			if (!GoblinTasks.TendTick(s, goblin))
+				return;
+			FarmSystem.StartSpawning(s, tile);
+			GoblinTasks.Release(s, goblin);
+			return;
+		}
+
+		if (!StepDue(s, goblin))
+			return;
+		ClearGoals();
+		AddGoal(tile, tile, JobKind.Tend);
+		switch (MoveToward(s, goblin))
+		{
+			case Move.NoPath:
+				GoblinTasks.Release(s, goblin);
+				break;
+			case Move.Here:
+			case Move.Arrived:
+				GoblinTasks.StartTending(s, goblin);
+				break;
+		}
+	}
+
 	void Fetch(SimState s, int goblin)
 	{
 		if (!StepDue(s, goblin))
@@ -500,7 +559,7 @@ public sealed class JobSystem
 		}
 
 		ClearGoals();
-		AddGoal(s.GoblinJobTile[goblin], s.GoblinJobTile[goblin], haul: true);
+		AddGoal(s.GoblinJobTile[goblin], s.GoblinJobTile[goblin], JobKind.Haul);
 		switch (MoveToward(s, goblin))
 		{
 			case Move.NoPath:
@@ -531,7 +590,7 @@ public sealed class JobSystem
 		GoblinTasks.FinishPickUp(s, goblin, material);
 		// A goblin eating or drinking the last unit has nothing left to take.
 		if (material is Material.Grub or Material.Grog)
-			PileRules.Settle(s);
+			RoomRules.Settle(s);
 	}
 
 	// Walks to the nearest Pile tile with room for the carried material, by path length, ties to the lowest tile index. The
@@ -546,7 +605,7 @@ public sealed class JobSystem
 		ClearGoals();
 		for (var tile = 0; tile < s.Piles.Length; tile++)
 			if (s.PileHasRoom(tile, material))
-				AddGoal(tile, tile, haul: false);
+				AddGoal(tile, tile);
 		switch (MoveToward(s, goblin))
 		{
 			case Move.Here:
@@ -587,26 +646,27 @@ public sealed class JobSystem
 		s.TileKinds[job] = (byte)TileRules.DugKind(s.DesignationAt(job));
 		s.Designations[job] = (byte)DesignationKind.None;
 		s.DigProgress[job] = 0;
-		// Only Floor can hold a Pile; its stock stays on the tile, loose.
-		var wasPile = s.Piles[job] != 0;
-		s.Piles[job] = 0;
+		// Only Floor can hold a Room; a Pile's stock stays on the tile, loose.
+		var hadRoom = s.RoomAt(job) != RoomKind.None;
+		RoomRules.Clear(s, job);
 		s.AddItems(job, material, 1);
 		var layer = s.Width * s.Height;
 		events.Add(new TileDug(job % s.Width, job / s.Width % s.Height, job / layer, material));
 		GoblinTasks.Release(s, goblin);
-		if (wasPile)
-			PileRules.Settle(s);
+		if (hadRoom)
+			RoomRules.Settle(s);
 		RecheckReachability(s);
 	}
 
-	// A dig is claimed by one goblin; a tile's loose units are claimed one goblin each, so it is claimed once all are.
-	static bool IsClaimed(SimState s, int tile, bool haul)
+	// A dig or a Tend is claimed by one goblin; a tile's loose units are claimed one goblin each, so it is claimed once all are.
+	static bool IsClaimed(SimState s, int tile, JobKind kind)
 	{
-		if (haul)
+		if (kind == JobKind.Haul)
 			return GoblinTasks.FetchClaims(s, tile, s.GoblinCount) >= s.HaulableTotal(tile);
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
-			if (s.GoblinJobTile[g] == tile && GoblinTasks.IsDigTask((GoblinTask)s.GoblinTask[g]))
+			var task = (GoblinTask)s.GoblinTask[g];
+			if (s.GoblinJobTile[g] == tile && (kind == JobKind.Tend ? GoblinTasks.IsTendTask(task) : GoblinTasks.IsDigTask(task)))
 				return true;
 		}
 		return false;
@@ -616,14 +676,14 @@ public sealed class JobSystem
 	{
 		_goals.Clear();
 		_goalJobs.Clear();
-		_goalHauls.Clear();
+		_goalKinds.Clear();
 	}
 
-	void AddGoal(int stand, int job, bool haul)
+	void AddGoal(int stand, int job, JobKind kind = JobKind.Dig)
 	{
 		_goals.Add(stand);
 		_goalJobs.Add(job);
-		_goalHauls.Add(haul);
+		_goalKinds.Add(kind);
 	}
 
 	/// <summary>Appends the tiles a goblin can dig <paramref name="tile"/> from (see <see cref="TileRules.CanDigFrom"/>).</summary>
@@ -646,6 +706,6 @@ public sealed class JobSystem
 	void AddIfStanding(SimState s, int stand, int job, DesignationKind designation)
 	{
 		if (TileRules.CanDigFrom(s, stand, job, designation))
-			AddGoal(stand, job, haul: false);
+			AddGoal(stand, job);
 	}
 }
