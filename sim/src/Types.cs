@@ -26,6 +26,7 @@ public enum RoomKind : byte
 	GrubPit,
 	SleepingHeap,
 	FungusFarm,
+	Brewery,
 }
 
 /// <summary>
@@ -70,4 +71,8 @@ public enum GoblinTask : byte
 	Tending,
 	SeekingHeap,
 	Sleeping,
+	Gathering,
+	Taking,
+	Bringing,
+	Brewing,
 }

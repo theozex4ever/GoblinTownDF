@@ -14,10 +14,11 @@ public partial class Main : Node
 		Pile,
 		GrubPit,
 		FungusFarm,
+		Brewery,
 		Heap,
 	}
 
-	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. D digs, S makes stairs, P heaps things in a pile, G sets a pit aside for grubs, who need minding, F plants a fungus farm, but only down the stairs, since fungus will not grow where anyone can see it, and H lays out a heap to sleep on, which is a bed with the pretensions removed; drag a box. Right-drag unsays it. The Grunt takes it personally.";
+	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. D digs, S makes stairs, P heaps things in a pile, G sets a pit aside for grubs, who need minding, F plants a fungus farm, but only down the stairs, since fungus will not grow where anyone can see it, B sets up a brewery, where a goblin stands over the fungus until it gives in and becomes grog, and H lays out a heap to sleep on, which is a bed with the pretensions removed; drag a box. Right-drag unsays it. The Grunt takes it personally.";
 
 	Simulation _sim = null!;
 	WarrenView _view = null!;
@@ -142,7 +143,7 @@ public partial class Main : Node
 		{
 			Tool.Dig => new Designate(DesignationKind.Dig, _viewZ, from.X, from.Y, to.X, to.Y),
 			Tool.DigStairs => new Designate(DesignationKind.DigStairs, _viewZ, from.X, from.Y, to.X, to.Y),
-			Tool.Pile or Tool.GrubPit or Tool.FungusFarm or Tool.Heap => new PaintRoom(RoomOf(_tool), _viewZ, from.X, from.Y, to.X, to.Y),
+			Tool.Pile or Tool.GrubPit or Tool.FungusFarm or Tool.Brewery or Tool.Heap => new PaintRoom(RoomOf(_tool), _viewZ, from.X, from.Y, to.X, to.Y),
 			_ => throw new InvalidOperationException("A selection needs a tool."),
 		};
 		_sim.Apply(command);
@@ -153,7 +154,7 @@ public partial class Main : Node
 	// Right-drag removes what the active Tool makes: Designations for Dig and Dig stairs (and with no Tool), that Room for a Room's Tool.
 	void OnRemoved(Vector2I from, Vector2I to)
 	{
-		Command command = _tool is Tool.Pile or Tool.GrubPit or Tool.FungusFarm or Tool.Heap
+		Command command = _tool is Tool.Pile or Tool.GrubPit or Tool.FungusFarm or Tool.Brewery or Tool.Heap
 			? new RemoveRoom(RoomOf(_tool), _viewZ, from.X, from.Y, to.X, to.Y)
 			: new CancelDesignation(_viewZ, from.X, from.Y, to.X, to.Y);
 		_sim.Apply(command);
@@ -166,6 +167,7 @@ public partial class Main : Node
 		Tool.Pile => RoomKind.Pile,
 		Tool.GrubPit => RoomKind.GrubPit,
 		Tool.FungusFarm => RoomKind.FungusFarm,
+		Tool.Brewery => RoomKind.Brewery,
 		Tool.Heap => RoomKind.SleepingHeap,
 		_ => throw new ArgumentOutOfRangeException(nameof(tool), tool, "This Tool makes no Room."),
 	};
@@ -193,6 +195,7 @@ public partial class Main : Node
 			case Key.P: PickTool(Tool.Pile); break;
 			case Key.G: PickTool(Tool.GrubPit); break;
 			case Key.F: PickTool(Tool.FungusFarm); break;
+			case Key.B: PickTool(Tool.Brewery); break;
 			case Key.H: PickTool(Tool.Heap); break;
 			case Key.Escape: CancelSelection(); _tool = Tool.None; UpdateDepthLabel(); break;
 			case Key.Comma: ChangeLevel(-1); break;
@@ -229,6 +232,7 @@ public partial class Main : Node
 			Tool.Pile => " · pile",
 			Tool.GrubPit => " · grub pit",
 			Tool.FungusFarm => " · fungus farm",
+			Tool.Brewery => " · brewery",
 			Tool.Heap => " · sleeping heap",
 			_ => "",
 		};

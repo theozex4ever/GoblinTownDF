@@ -29,10 +29,13 @@ public partial class WarrenView : Node2D
 	static readonly Color GrubColor = new(0.93f, 0.52f, 0.48f);
 	static readonly Color FungusColor = new(0.64f, 0.42f, 0.82f);
 	static readonly Color GrogColor = new(0.18f, 0.72f, 0.74f);
-	static readonly Color WaitingHaulColor = new(0.55f, 0.55f, 0.55f);
+	public static readonly Color WaitingHaulColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
 	public static readonly Color GrubPitTint = new(0.82f, 0.60f, 0.28f, 0.6f);
 	public static readonly Color FungusFarmTint = new(0.30f, 0.58f, 0.42f, 0.6f);
+	public static readonly Color BreweryTint = new(0.75f, 0.32f, 0.28f, 0.6f);
+	// A Brewery whose Brews wait, because no Pile in reach has room for Grog.
+	public static readonly Color WaitingBreweryTint = new(0.55f, 0.55f, 0.55f, 0.6f);
 	public static readonly Color SleepingHeapTint = new(0.42f, 0.48f, 0.90f, 0.6f);
 	static readonly Color SleepColor = new(0.45f, 0.52f, 0.95f);
 	// The "zzz" over a sleeping goblin.
@@ -96,6 +99,8 @@ public partial class WarrenView : Node2D
 					DrawRect(rect, GrubPitTint);
 				else if (s.RoomAt(tile) == RoomKind.FungusFarm)
 					DrawRect(rect, FungusFarmTint);
+				else if (s.RoomAt(tile) == RoomKind.Brewery)
+					DrawRect(rect, BrewSystem.IsWaiting(s, tile) ? WaitingBreweryTint : BreweryTint);
 				else if (s.RoomAt(tile) == RoomKind.SleepingHeap)
 					DrawRect(rect, SleepingHeapTint);
 				for (var material = Goblins.Sim.Material.Dirt; (int)material <= SimState.CountedMaterials; material++)

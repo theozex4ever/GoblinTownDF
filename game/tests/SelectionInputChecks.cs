@@ -345,6 +345,81 @@ public partial class SelectionInputChecks : Node
 				Require(sawZ1 && tended, "No Grunt went underground to tend the farm.");
 			});
 
+			// The Brewery Tool follows the Pile's painting rules at any depth: Floor only, one Room per tile, right-drag removes only Breweries.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				sim.Apply(new PaintPile(0, 10, 10, 10, 10));
+				s.TileKinds[s.TileIndex(13, 10, 0)] = (byte)TileKind.Stairs;
+				sim.RecheckReachability();
+				Key(main, Godot.Key.B);
+				Drag(main, view, MouseButton.Left, 14, 10, 9, 10);
+				Require(CountRooms(s, RoomKind.Brewery) == 4, $"{CountRooms(s, RoomKind.Brewery)} Brewery tiles were painted, not 4.");
+				Require(s.RoomAt(s.TileIndex(10, 10, 0)) == RoomKind.Pile, "Painting a Brewery replaced a Pile.");
+				Require(s.RoomAt(s.TileIndex(13, 10, 0)) == RoomKind.None, "Painting a Brewery covered Stairs.");
+				Key(main, Godot.Key.P);
+				Drag(main, view, MouseButton.Right, 9, 10, 14, 10);
+				Require(CountRooms(s, RoomKind.Brewery) == 4 && s.RoomAt(s.TileIndex(10, 10, 0)) == RoomKind.None, "Right-drag with the Pile Tool did not take only the Pile.");
+				Key(main, Godot.Key.B);
+				Drag(main, view, MouseButton.Right, 9, 10, 14, 10);
+				Require(CountRooms(s, RoomKind.Brewery) == 0, "Right-drag with the Brewery Tool left Breweries behind.");
+			});
+
+			// The real game: Fungus is farmed on z1, brewed on z1 into Grog, the Grog is hauled up to a Pile on the Surface, and a thirsty Grunt drinks it.
+			// The starting Grub and Grog are cleared so that the Grog drunk can only be what the Grunts brewed.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Array.Clear(s.TileItems);
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinGrog, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinSleep, (byte)NeedRules.MeterMax);
+				var pile = s.TileIndex(10, 10, 0);
+				Key(main, Godot.Key.P);
+				Drag(main, view, MouseButton.Left, 10, 10, 10, 10);
+				Key(main, Godot.Key.S);
+				Drag(main, view, MouseButton.Left, 20, 16, 20, 16);
+				sim.Apply(new SetPaused(false));
+				sim.Apply(new SetSpeed(4));
+				var frames = 0;
+				var brewed = false;
+				void Run(Func<bool> done, string failure)
+				{
+					while (!done())
+					{
+						Require(frames++ < 1500, failure);
+						main._Process(0.25);
+						brewed |= Enumerable.Range(0, s.GoblinCount).Any(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Brewing && s.GoblinZ[g] == 1);
+						Require(GoblinTasks.FindViolation(s) is null, "A Task rule broke while the Grunts brewed.");
+					}
+				}
+
+				Run(() => s.KindAt(s.TileIndex(20, 16, 0)) == TileKind.Stairs, "The surface stairs were never dug.");
+				Key(main, Godot.Key.Period);
+				Drag(main, view, MouseButton.Left, 20, 16, 20, 16);
+				Run(() => s.KindAt(s.TileIndex(20, 16, 1)) == TileKind.Stairs, "The stairs down to z1 were never dug.");
+				Key(main, Godot.Key.D);
+				Drag(main, view, MouseButton.Left, 21, 16, 24, 16);
+				Run(() => Enumerable.Range(21, 4).All(x => s.KindAt(s.TileIndex(x, 16, 1)) == TileKind.Floor), "The z1 room was never dug.");
+				Key(main, Godot.Key.F);
+				Drag(main, view, MouseButton.Left, 21, 16, 22, 16);
+				Key(main, Godot.Key.B);
+				Drag(main, view, MouseButton.Left, 23, 16, 24, 16);
+				Require(CountRooms(s, RoomKind.FungusFarm) == 2 && CountRooms(s, RoomKind.Brewery) == 2, "The farm and the Brewery were not painted on z1.");
+				Run(() => brewed && s.StoredCount(pile, Goblins.Sim.Material.Grog) >= 1, "No brewed Grog reached the Pile.");
+
+				// A thirsty Grunt drinks the brewed Grog off the Pile.
+				s.GoblinGrog[0] = 29;
+				var drank = false;
+				Run(() =>
+				{
+					drank |= (GoblinTask)s.GoblinTask[0] == GoblinTask.Drinking;
+					return drank && s.GoblinGrog[0] > 60;
+				}, "The thirsty Grunt never drank the brewed Grog.");
+				sim.Apply(new SetPaused(true));
+				Require(brewed, "No Grunt brewed on z1.");
+			});
+
 			foreach (var button in new[] { MouseButton.Left, MouseButton.Right })
 			foreach (var key in new[] { Godot.Key.D, Godot.Key.S, Godot.Key.P, Godot.Key.G, Godot.Key.Escape, Godot.Key.Period, Godot.Key.Comma })
 				WithMain((main, view, sim) =>
@@ -544,7 +619,7 @@ public partial class SelectionInputChecks : Node
 			CountLabelChecks();
 			PileCountChecks();
 
-			GD.Print("Selection input checks passed (26 scenarios, count labels, pile counts).");
+			GD.Print($"Selection input checks passed ({_scenarios} scenarios, count labels, pile counts).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -611,8 +686,12 @@ public partial class SelectionInputChecks : Node
 		}
 	}
 
+	// Every scenario goes through here, so the passing line reports how many actually ran.
+	int _scenarios;
+
 	void WithMain(Action<Main, WarrenView, Simulation> check)
 	{
+		_scenarios++;
 		var main = new Main();
 		AddChild(main);
 		try

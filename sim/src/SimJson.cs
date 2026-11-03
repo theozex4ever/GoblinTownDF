@@ -43,7 +43,7 @@ public static class SimJson
 		for (var tile = 0; tile < s.Rooms!.Length; tile++)
 		{
 			var room = (RoomKind)s.Rooms[tile];
-			Require(room is RoomKind.None or RoomKind.GrubPit or RoomKind.SleepingHeap or RoomKind.FungusFarm, $"Tile {tile} has unknown Room {s.Rooms[tile]}.");
+			Require(room is RoomKind.None or RoomKind.GrubPit or RoomKind.SleepingHeap or RoomKind.FungusFarm or RoomKind.Brewery, $"Tile {tile} has unknown Room {s.Rooms[tile]}.");
 			Require(room != RoomKind.FungusFarm || tile / (s.Width * s.Height) >= ProductionRules.FungusFarmMinZ, $"Tile {tile} is a {room} on the Surface.");
 			Require(room == RoomKind.None || s.KindAt(tile) == TileKind.Floor, $"Tile {tile} is a {room} but not Floor.");
 			Require(room == RoomKind.None || s.Piles[tile] == 0, $"Tile {tile} is both a Pile and a {room}.");
