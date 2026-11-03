@@ -153,13 +153,13 @@ public class GrubPitTests
 		var pit = At(s, 16, 16);
 		PaintPit(sim, 16, 16);
 		RunTicks(sim, 20 + 50);
-		Assert.Equal(3, s.PitUnspawned[pit]);
-		Assert.Equal(50, s.PitSpawnTicks[pit]);
+		Assert.Equal(3, s.FarmUnspawned[pit]);
+		Assert.Equal(50, s.FarmTicks[pit]);
 
 		PaintPit(sim, 14, 14, 18, 18);
 
-		Assert.Equal(3, s.PitUnspawned[pit]);
-		Assert.Equal(50, s.PitSpawnTicks[pit]);
+		Assert.Equal(3, s.FarmUnspawned[pit]);
+		Assert.Equal(50, s.FarmTicks[pit]);
 	}
 
 	[Fact]
@@ -199,8 +199,8 @@ public class GrubPitTests
 		var pit = At(s, 20, 16);
 		PaintPit(sim, 20, 16);
 		// A Tend already done, with one Grub out and two to come.
-		s.PitUnspawned[pit] = 2;
-		s.PitSpawnTicks[pit] = 77;
+		s.FarmUnspawned[pit] = 2;
+		s.FarmTicks[pit] = 77;
 		s.AddItems(pit, Material.Grub, 1);
 		sim.RecheckReachability();
 		sim.Apply(new Designate(DesignationKind.DigStairs, 0, 20, 16, 20, 16));
@@ -209,8 +209,8 @@ public class GrubPitTests
 
 		Assert.Equal(TileKind.Stairs, s.KindAt(pit));
 		Assert.Equal(RoomKind.None, s.RoomAt(pit));
-		Assert.Equal(0, s.PitUnspawned[pit]);
-		Assert.Equal(0, s.PitSpawnTicks[pit]);
+		Assert.Equal(0, s.FarmUnspawned[pit]);
+		Assert.Equal(0, s.FarmTicks[pit]);
 		RunTicks(sim, 800);
 		Assert.Equal(1, Total(s, Material.Grub));
 	}
@@ -237,7 +237,7 @@ public class GrubPitTests
 		Assert.Equal(TileKind.Stairs, s.KindAt(pit));
 		Assert.Equal(RoomKind.None, s.RoomAt(pit));
 		Assert.False(IsTending(s, 0));
-		Assert.Equal(0, s.PitUnspawned[pit]);
+		Assert.Equal(0, s.FarmUnspawned[pit]);
 	}
 
 	[Fact]
@@ -300,7 +300,7 @@ public class GrubPitTests
 		for (var i = 0; i < 1000; i++)
 		{
 			RunTicks(sim, 1);
-			if (done < 0 && s.PitUnspawned[pit] == ProductionRules.GrubPerTend)
+			if (done < 0 && s.FarmUnspawned[pit] == ProductionRules.GrubPerTend)
 				done = s.Tick;
 			if (done >= 0)
 				Assert.False(IsTending(s, 0), $"Tick {s.Tick}: tended again while the pit still spawned or held Grub.");
@@ -314,7 +314,7 @@ public class GrubPitTests
 		Assert.Equal(20, done);
 		Assert.Equal([done + 200, done + 400, done + 600], spawns);
 		Assert.Equal(3, grub);
-		Assert.Equal(0, s.PitUnspawned[pit]);
+		Assert.Equal(0, s.FarmUnspawned[pit]);
 	}
 
 	[Fact]
@@ -338,7 +338,7 @@ public class GrubPitTests
 		for (var i = 0; i < 100 && done < 0; i++)
 		{
 			RunTicks(sim, 1);
-			if (s.PitUnspawned[pit] == 3)
+			if (s.FarmUnspawned[pit] == 3)
 				done = s.Tick;
 		}
 
@@ -384,7 +384,7 @@ public class GrubPitTests
 		RunTicks(sim, 300);
 
 		Assert.False(IsTending(s, 0));
-		Assert.Equal(0, s.PitUnspawned[pit]);
+		Assert.Equal(0, s.FarmUnspawned[pit]);
 	}
 
 	[Fact]
@@ -408,7 +408,7 @@ public class GrubPitTests
 		RunTicks(sim, 400);
 
 		Assert.Equal(1, s.StoredCount(At(s, 16, 20), Material.Grub));
-		Assert.True(s.PitUnspawned[pit] > 0, "The pit was not tended once its Grub was hauled.");
+		Assert.True(s.FarmUnspawned[pit] > 0, "The pit was not tended once its Grub was hauled.");
 	}
 
 	[Fact]
@@ -426,7 +426,7 @@ public class GrubPitTests
 
 		Assert.True(s.GoblinGrub[0] >= 70, $"The goblin never ate: Grub meter {s.GoblinGrub[0]}.");
 		Assert.Equal(0, s.ItemCount(pit, Material.Grub));
-		Assert.Equal(2, s.PitUnspawned[pit]);
+		Assert.Equal(2, s.FarmUnspawned[pit]);
 	}
 
 	[Fact]
@@ -592,14 +592,14 @@ public class GrubPitTests
 		RunTicks(sim, 10);
 		Assert.Equal(GoblinTask.Seeking, TaskOf(s, 0));
 		Assert.Equal(0, s.GoblinWorkTicks[0]);
-		Assert.Equal(0, s.PitUnspawned[pit]);
+		Assert.Equal(0, s.FarmUnspawned[pit]);
 		Assert.True(FarmSystem.IsTendOffered(s, pit));
 
 		// After the meal the whole 20 ticks must be worked again.
 		while (TaskOf(s, 0) != GoblinTask.Tending)
 			RunTicks(sim, 1);
 		var tendingTicks = 0;
-		while (s.PitUnspawned[pit] == 0)
+		while (s.FarmUnspawned[pit] == 0)
 		{
 			tendingTicks++;
 			RunTicks(sim, 1);
@@ -624,7 +624,7 @@ public class GrubPitTests
 		Assert.Null(GoblinTasks.FindViolation(s));
 		RunTicks(sim, 800);
 		Assert.Equal(0, Total(s, Material.Grub));
-		Assert.Equal(0, s.PitUnspawned[pit]);
+		Assert.Equal(0, s.FarmUnspawned[pit]);
 	}
 
 	[Fact]
@@ -637,18 +637,18 @@ public class GrubPitTests
 		// Tend done on tick 20, first Grub on tick 220.
 		RunTicks(sim, 250);
 		Assert.Equal(1, s.ItemCount(pit, Material.Grub));
-		Assert.Equal(2, s.PitUnspawned[pit]);
+		Assert.Equal(2, s.FarmUnspawned[pit]);
 
 		sim.Apply(new RemoveRoom(RoomKind.GrubPit, 0, 16, 16, 16, 16));
-		Assert.Equal(0, s.PitUnspawned[pit]);
-		Assert.Equal(0, s.PitSpawnTicks[pit]);
+		Assert.Equal(0, s.FarmUnspawned[pit]);
+		Assert.Equal(0, s.FarmTicks[pit]);
 
 		RunTicks(sim, 1000);
 		Assert.Equal(1, Total(s, Material.Grub));
 		// Painting it again starts clean: the old timer is not waiting to fire.
 		sim.Apply(new RemoveRoom(RoomKind.GrubPit, 0, 16, 16, 16, 16));
 		PaintPit(sim, 16, 16);
-		Assert.Equal(0, s.PitUnspawned[pit]);
+		Assert.Equal(0, s.FarmUnspawned[pit]);
 	}
 
 	// ---- Rules every tick
@@ -734,7 +734,7 @@ public class GrubPitTests
 		var s = Tender(out var pit);
 		s.GoblinTask[0] = (byte)GoblinTask.Approaching;
 		s.GoblinJobTile[0] = pit;
-		s.PitUnspawned[pit] = 1;
+		s.FarmUnspawned[pit] = 1;
 		Assert.NotNull(GoblinTasks.FindViolation(s));
 	}
 
@@ -845,7 +845,7 @@ public class GrubPitTests
 
 		// Some tile is part-way through spawning: units still to come, and a timer part-way round.
 		var s = original.State;
-		var mid = Enumerable.Range(0, s.PitUnspawned.Length).Where(t => s.PitUnspawned[t] > 0 && s.PitSpawnTicks[t] > 0).ToList();
+		var mid = Enumerable.Range(0, s.FarmUnspawned.Length).Where(t => s.FarmUnspawned[t] > 0 && s.FarmTicks[t] > 0).ToList();
 		Assert.NotEmpty(mid);
 		var restored = SimJson.Deserialize(SimJson.Serialize(original));
 		Assert.Equal(SimJson.Serialize(original), SimJson.Serialize(restored));
@@ -890,7 +890,7 @@ public class GrubPitTests
 	[InlineData("[0,0,0]")]
 	public void A_save_with_a_missing_or_wrong_length_Rooms_or_pit_array_is_rejected(string value)
 	{
-		foreach (var name in new[] { "Rooms", "PitUnspawned", "PitSpawnTicks" })
+		foreach (var name in new[] { "Rooms", "FarmUnspawned", "FarmTicks" })
 		{
 			var node = JsonNode.Parse(SimJson.Serialize(Simulation.NewWorld(seed: 1)))!;
 			node[name] = JsonNode.Parse(value);
@@ -909,9 +909,9 @@ public class GrubPitTests
 	[Fact]
 	public void A_save_with_unspawned_Grub_beyond_a_Tend_or_off_a_Grub_Pit_is_rejected()
 	{
-		AssertRejected(s => s.PitUnspawned[At(s, 5, 5)] = (byte)(ProductionRules.GrubPerTend + 1));
-		AssertRejected(s => s.PitUnspawned[At(s, 9, 9)] = 1);
-		AssertRejected(s => s.PitUnspawned[At(s, 6, 5)] = 1);
+		AssertRejected(s => s.FarmUnspawned[At(s, 5, 5)] = (byte)(ProductionRules.GrubPerTend + 1));
+		AssertRejected(s => s.FarmUnspawned[At(s, 9, 9)] = 1);
+		AssertRejected(s => s.FarmUnspawned[At(s, 6, 5)] = 1);
 	}
 
 	[Fact]
@@ -919,10 +919,10 @@ public class GrubPitTests
 	{
 		AssertRejected(s =>
 		{
-			s.PitUnspawned[At(s, 5, 5)] = 2;
-			s.PitSpawnTicks[At(s, 5, 5)] = (byte)ProductionRules.GrubSpawnTicks;
+			s.FarmUnspawned[At(s, 5, 5)] = 2;
+			s.FarmTicks[At(s, 5, 5)] = (byte)ProductionRules.GrubSpawnTicks;
 		});
-		AssertRejected(s => s.PitSpawnTicks[At(s, 5, 5)] = 4);
+		AssertRejected(s => s.FarmTicks[At(s, 5, 5)] = 4);
 	}
 
 	[Fact]
@@ -949,6 +949,6 @@ public class GrubPitTests
 		RunTicks(restored, 10);
 
 		Assert.Equal(SimJson.Serialize(sim), SimJson.Serialize(restored));
-		Assert.Equal(3, restored.State.PitUnspawned[At(restored.State, 16, 16)]);
+		Assert.Equal(3, restored.State.FarmUnspawned[At(restored.State, 16, 16)]);
 	}
 }

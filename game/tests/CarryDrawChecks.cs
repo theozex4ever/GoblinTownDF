@@ -43,7 +43,8 @@ public partial class CarryDrawChecks : Node
 			await NeedMarksCheck();
 			await RoomTintCheck();
 			await SleepMarksCheck();
-			GD.Print("Carry draw checks passed (layout, colours, count order, 8 pixel scenarios).");
+			await FungusFarmTintCheck();
+			GD.Print("Carry draw checks passed (layout, colours, count order, 9 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -202,6 +203,33 @@ public partial class CarryDrawChecks : Node
 		ExpectColor(image, 12 * WarrenView.CellSize + 9, 10 * WarrenView.CellSize + 9, floor, "A tile beside the Grub Pit is tinted.");
 		var square = WarrenView.LooseSquare(new Rect2(11 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize), (int)Material.Grub - 1).GetCenter();
 		ExpectColor(image, (int)square.X, (int)square.Y, WarrenView.MaterialColor(Material.Grub), "The Grub loose on a Grub Pit is hidden by its tint.");
+	}
+
+	// A Fungus Farm tile on z1 is tinted over the floor, its tint differs from the Grub Pit's, and the Fungus lying loose on it still shows over the tint.
+	async System.Threading.Tasks.Task FungusFarmTintCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		for (var x = 10; x <= 12; x++)
+			s.TileKinds[s.TileIndex(x, 10, 1)] = (byte)TileKind.Floor;
+		// Stairs down from the Surface and a Pile up there, so the Fungus has a Haul to wait for rather than greying out.
+		s.TileKinds[s.TileIndex(13, 10, 0)] = (byte)TileKind.Stairs;
+		s.TileKinds[s.TileIndex(13, 10, 1)] = (byte)TileKind.Stairs;
+		sim.Apply(new PaintPile(0, 20, 20, 20, 20));
+		sim.Apply(new PaintRoom(RoomKind.FungusFarm, 1, 10, 10, 11, 10));
+		s.AddItems(s.TileIndex(11, 10, 1), Material.Fungus, 1);
+		sim.RecheckReachability();
+		var image = await Render(sim, viewZ: 1);
+
+		Require(!IsNear(WarrenView.FungusFarmTint, WarrenView.GrubPitTint), "The Fungus Farm and Grub Pit tints are the same.");
+		var floor = new Color(0.62f, 0.62f, 0.64f);
+		var tint = WarrenView.FungusFarmTint;
+		var tinted = floor * (1 - tint.A) + tint * tint.A;
+		var centre = new Rect2(10 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize).GetCenter();
+		ExpectColor(image, (int)centre.X, (int)centre.Y, new Color(tinted.R, tinted.G, tinted.B), "A Fungus Farm tile is not tinted.");
+		ExpectColor(image, 12 * WarrenView.CellSize + 9, 10 * WarrenView.CellSize + 9, floor, "A tile beside the Fungus Farm is tinted.");
+		var square = WarrenView.LooseSquare(new Rect2(11 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize), (int)Material.Fungus - 1).GetCenter();
+		ExpectColor(image, (int)square.X, (int)square.Y, WarrenView.MaterialColor(Material.Fungus), "The Fungus loose on a Fungus Farm is hidden by its tint.");
 	}
 
 	// A Sleeping Heap tile is tinted over the floor, a sleeping goblin wears "zzz" and an awake one does not, and a goblin craving Sleep
@@ -368,11 +396,11 @@ public partial class CarryDrawChecks : Node
 		return ((int)center.X, (int)center.Y);
 	}
 
-	async System.Threading.Tasks.Task<Image> Render(Simulation sim)
+	async System.Threading.Tasks.Task<Image> Render(Simulation sim, int viewZ = 0)
 	{
 		var size = new Vector2I(sim.State.Width * WarrenView.CellSize, sim.State.Height * WarrenView.CellSize);
 		var viewport = new SubViewport { Size = size, RenderTargetUpdateMode = SubViewport.UpdateMode.Once };
-		viewport.AddChild(new WarrenView { Sim = sim });
+		viewport.AddChild(new WarrenView { Sim = sim, ViewZ = viewZ });
 		AddChild(viewport);
 		await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
 		var image = viewport.GetTexture().GetImage();

@@ -37,19 +37,19 @@ public static class SimJson
 			Require(s.Piles[tile] == 0 || s.KindAt(tile) == TileKind.Floor, $"Tile {tile} is a Pile but not Floor.");
 		}
 		Require(s.Rooms is not null && s.Rooms.LongLength == tiles, "Rooms does not match the map size.");
-		Require(s.PitUnspawned is not null && s.PitUnspawned.LongLength == tiles, "PitUnspawned does not match the map size.");
-		Require(s.PitSpawnTicks is not null && s.PitSpawnTicks.LongLength == tiles, "PitSpawnTicks does not match the map size.");
+		Require(s.FarmUnspawned is not null && s.FarmUnspawned.LongLength == tiles, "FarmUnspawned does not match the map size.");
+		Require(s.FarmTicks is not null && s.FarmTicks.LongLength == tiles, "FarmTicks does not match the map size.");
 		// Rooms holds every Room but the Pile, which Piles keeps; a tile holds one Room.
 		for (var tile = 0; tile < s.Rooms!.Length; tile++)
 		{
 			var room = (RoomKind)s.Rooms[tile];
-			Require(room is RoomKind.None or RoomKind.GrubPit or RoomKind.SleepingHeap, $"Tile {tile} has unknown Room {s.Rooms[tile]}.");
+			Require(room is RoomKind.None or RoomKind.GrubPit or RoomKind.SleepingHeap or RoomKind.FungusFarm, $"Tile {tile} has unknown Room {s.Rooms[tile]}.");
+			Require(room != RoomKind.FungusFarm || tile / (s.Width * s.Height) >= ProductionRules.FungusFarmMinZ, $"Tile {tile} is a {room} on the Surface.");
 			Require(room == RoomKind.None || s.KindAt(tile) == TileKind.Floor, $"Tile {tile} is a {room} but not Floor.");
 			Require(room == RoomKind.None || s.Piles[tile] == 0, $"Tile {tile} is both a Pile and a {room}.");
-			Require(s.PitUnspawned![tile] <= ProductionRules.GrubPerTend, $"Tile {tile} has {s.PitUnspawned[tile]} Grub to spawn, past {ProductionRules.GrubPerTend}.");
-			Require(s.PitUnspawned[tile] == 0 || room == RoomKind.GrubPit, $"Tile {tile} has Grub to spawn but is not a Grub Pit.");
-			Require(s.PitSpawnTicks![tile] < ProductionRules.GrubSpawnTicks, $"Tile {tile} has spawn ticks {s.PitSpawnTicks[tile]}, past {ProductionRules.GrubSpawnTicks}.");
-			Require(s.PitSpawnTicks[tile] == 0 || s.PitUnspawned[tile] > 0, $"Tile {tile} counts spawn ticks with nothing to spawn.");
+			Require(s.FarmUnspawned![tile] <= FarmSystem.YieldPerTend(room), $"Tile {tile} has {s.FarmUnspawned[tile]} units to spawn, past the {FarmSystem.YieldPerTend(room)} a {room} yields.");
+			Require(s.FarmTicks![tile] == 0 || s.FarmTicks[tile] < FarmSystem.SpawnTicks(room), $"Tile {tile} has spawn ticks {s.FarmTicks[tile]}, past the {FarmSystem.SpawnTicks(room)} of a {room}.");
+			Require(s.FarmTicks[tile] == 0 || s.FarmUnspawned[tile] > 0, $"Tile {tile} counts spawn ticks with nothing to spawn.");
 		}
 		foreach (var count in s.TileItems!)
 			Require(count >= 0, $"Item count {count} is negative.");

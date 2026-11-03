@@ -44,12 +44,16 @@ public sealed class SimState
 	/// </summary>
 	public byte[] Rooms { get; set; } = [];
 	/// <summary>
-	/// Per Grub Pit tile, the Grub its last Tend yielded that has not spawned yet, 0 to <see cref="ProductionRules.GrubPerTend"/>.
-	/// A tile with some left is still spawning and offers no Tend. <see cref="FarmSystem"/> counts it down.
+	/// Per farm tile (Grub Pit or Fungus Farm), the units its last Tend yielded that have not spawned yet: 0 to
+	/// <see cref="ProductionRules.GrubPerTend"/> on a Grub Pit, 0 or <see cref="ProductionRules.FungusPerTend"/> on a Fungus Farm.
+	/// A tile with some left is still producing and offers no Tend. <see cref="FarmSystem"/> counts it down.
 	/// </summary>
-	public byte[] PitUnspawned { get; set; } = [];
-	/// <summary>Ticks counted toward the next Grub of a spawning Grub Pit tile, 0 while nothing is left to spawn.</summary>
-	public byte[] PitSpawnTicks { get; set; } = [];
+	public byte[] FarmUnspawned { get; set; } = [];
+	/// <summary>
+	/// Ticks counted toward the next unit of a producing farm tile, 0 while nothing is left to spawn; below
+	/// <see cref="ProductionRules.GrubSpawnTicks"/> or <see cref="ProductionRules.FungusGrowTicks"/>, which is past a byte.
+	/// </summary>
+	public ushort[] FarmTicks { get; set; } = [];
 	// Per tile, the region (1 to MaxGoblins) of walkable tiles that a goblin stands in and can walk to, or 0 for a tile no
 	// goblin can path to. Goblins never leave their region, so a unit can only be stored on a Pile tile of its own region.
 	// Derived and not saved, like Reachable; loading rebuilds it. Read through IsHaulReachable.
@@ -155,7 +159,7 @@ public sealed class SimState
 
 	/// <summary>
 	/// Paints <paramref name="room"/> on a tile, or clears it with None, replacing any Room the tile held. A Grub Pit tile that goes
-	/// loses the Grub it has not yet spawned. The caller has checked the tile can take it; <see cref="RoomRules"/> does.
+	/// loses the units it has not yet spawned. The caller has checked the tile can take it; <see cref="RoomRules"/> does.
 	/// </summary>
 	public void SetRoom(int tile, RoomKind room)
 	{
@@ -163,8 +167,8 @@ public sealed class SimState
 			throw new ArgumentOutOfRangeException(nameof(room), room, "Unknown Room.");
 		Piles[tile] = (byte)(room == RoomKind.Pile ? 1 : 0);
 		Rooms[tile] = (byte)(room == RoomKind.Pile ? RoomKind.None : room);
-		PitUnspawned[tile] = 0;
-		PitSpawnTicks[tile] = 0;
+		FarmUnspawned[tile] = 0;
+		FarmTicks[tile] = 0;
 	}
 
 	/// <summary>Units of <paramref name="material"/> on a Pile tile; 0 anywhere else.</summary>

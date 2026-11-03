@@ -93,6 +93,12 @@ public static class ProductionRules
 	public const int GrubPerTend = 3;
 	/// <summary>Ticks from the end of a Tend to its first Grub, and between one Grub and the next.</summary>
 	public const int GrubSpawnTicks = 200;
+	/// <summary>Fungus one Tend yields, after <see cref="FungusGrowTicks"/>.</summary>
+	public const int FungusPerTend = 1;
+	/// <summary>Ticks from the end of a Tend to its Fungus.</summary>
+	public const int FungusGrowTicks = 300;
+	/// <summary>A Fungus Farm works only at this z-level or deeper; z0 is the Surface.</summary>
+	public const int FungusFarmMinZ = 1;
 }
 
 /// <summary>The Needs' own system: the slow drain of every goblin's meters. Cravings and meals are worked by <see cref="JobSystem"/>.</summary>
