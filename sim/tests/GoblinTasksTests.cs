@@ -593,4 +593,126 @@ public class GoblinTasksTests
 		s.GoblinWorkTicks[0] = (byte)NeedRules.EatTicks;
 		Assert.NotNull(GoblinTasks.FindViolation(s));
 	}
+
+	// ---- SeekingGrog and Drinking
+
+	static SimState ThirstyWorld(out int grog)
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		s.GoblinGrog[0] = 20;
+		grog = s.TileIndex(16, 16, 0);
+		s.AddItems(grog, Material.Grog, 2);
+		return s;
+	}
+
+	[Fact]
+	public void BeginSeek_for_Grog_starts_SeekingGrog_or_Drinking_and_a_drink_adds_50_and_takes_one_unit()
+	{
+		var s = ThirstyWorld(out var grog);
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false, Material.Grog);
+		Assert.Equal(GoblinTask.SeekingGrog, TaskOf(s, 0));
+		Assert.Null(GoblinTasks.FindViolation(s));
+
+		GoblinTasks.StartDrinking(s, 0);
+		Assert.Equal(GoblinTask.Drinking, TaskOf(s, 0));
+		for (var tick = 1; tick < NeedRules.EatTicks; tick++)
+			Assert.False(GoblinTasks.EatTick(s, 0));
+		Assert.Null(GoblinTasks.FindViolation(s));
+		Assert.True(GoblinTasks.EatTick(s, 0));
+		GoblinTasks.FinishDrinking(s, 0);
+
+		Assert.Equal(GoblinTask.Idle, TaskOf(s, 0));
+		Assert.Equal(70, s.GoblinGrog[0]);
+		Assert.Equal(1, s.ItemCount(grog, Material.Grog));
+		Assert.Equal(s.GoblinGrub[0], Simulation.NewWorld(seed: 7).State.GoblinGrub[0]);
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void BeginSeek_refuses_a_goblin_already_satisfying_a_Need_and_a_supply_that_is_no_Need()
+	{
+		var s = ThirstyWorld(out _);
+		s.GoblinGrub[0] = 20;
+
+		Assert.Throws<ArgumentOutOfRangeException>(() => GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false, Material.Dirt));
+
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false, Material.Grog);
+		Assert.Throws<InvalidOperationException>(() => GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false, Material.Grub));
+		GoblinTasks.StartDrinking(s, 0);
+		Assert.Throws<InvalidOperationException>(() => GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false));
+		Assert.Equal(GoblinTask.Drinking, TaskOf(s, 0));
+	}
+
+	[Fact]
+	public void FinishDrinking_refuses_a_tile_with_no_Grog_and_Grub_underfoot_is_no_drink()
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		s.GoblinGrog[0] = 20;
+		s.AddItems(s.TileIndex(16, 16, 0), Material.Grub, 1);
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false, Material.Grog);
+		GoblinTasks.StartDrinking(s, 0);
+
+		Assert.Throws<InvalidOperationException>(() => GoblinTasks.FinishDrinking(s, 0));
+		Assert.Equal(20, s.GoblinGrog[0]);
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FindViolation_judges_a_drinker_by_its_Grog_meter_and_the_Grog_underfoot_not_Grub()
+	{
+		var s = ThirstyWorld(out var grog);
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: true, Material.Grog);
+		Assert.Null(GoblinTasks.FindViolation(s));
+
+		// A Craving for Grub does not make a drinker's Craving.
+		s.GoblinGrog[0] = (byte)NeedRules.CravingThreshold;
+		s.GoblinGrub[0] = 5;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+		s.GoblinGrog[0] = 20;
+		Assert.Null(GoblinTasks.FindViolation(s));
+
+		s.RemoveItems(grog, Material.Grog, 2);
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+		s.AddItems(grog, Material.Grog, 1);
+		Assert.Null(GoblinTasks.FindViolation(s));
+
+		s.GoblinWorkTicks[0] = (byte)(NeedRules.EatTicks - 1);
+		Assert.Null(GoblinTasks.FindViolation(s));
+		s.GoblinWorkTicks[0] = (byte)NeedRules.EatTicks;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+		s.GoblinWorkTicks[0] = 0;
+
+		GoblinTasks.Release(s, 0);
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false, Material.Grog);
+		Assert.Null(GoblinTasks.FindViolation(s));
+		s.GoblinGrog[0] = 80;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void BeginSeek_for_Grog_puts_a_carried_unit_down_first()
+	{
+		var s = ThirstyWorld(out var here);
+		GoblinTasks.FinishPickUp(s, 0, Material.Stone);
+
+		GoblinTasks.BeginSeek(s, 0, here, eating: true, Material.Grog);
+
+		Assert.Equal(GoblinTask.Drinking, TaskOf(s, 0));
+		Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
+		Assert.Equal(1, s.LooseCount(here, Material.Stone));
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Theory]
+	[InlineData(10, 30, Material.Grub)]
+	[InlineData(30, 10, Material.Grog)]
+	[InlineData(20, 20, Material.Grub)]
+	[InlineData(29, 30, Material.Grub)]
+	[InlineData(30, 29, Material.Grog)]
+	[InlineData(30, 30, Material.None)]
+	[InlineData(100, 0, Material.Grog)]
+	public void The_leading_Craving_is_the_lowest_meter_below_30_with_Grub_on_a_tie(int grub, int grog, Material expected)
+	{
+		Assert.Equal(expected, NeedRules.LeadingCraving(grub, grog));
+	}
 }

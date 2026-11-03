@@ -42,4 +42,6 @@ public enum GoblinTask : byte
 	Dropping,
 	Seeking,
 	Eating,
+	SeekingGrog,
+	Drinking,
 }

@@ -73,7 +73,7 @@ public partial class Main : Node
 			UpdateDepthLabel();
 	}
 
-	/// <summary>The hover line: the Grub meter of the goblin under the cursor, else every count on the Pile tile under it, else empty.</summary>
+	/// <summary>The hover line: the Grub and Grog meters of the goblin under the cursor, else every count on the Pile tile under it, else empty.</summary>
 	public string HoverText => _hoverLabel.Text;
 
 	public override void _UnhandledInput(InputEvent @event)

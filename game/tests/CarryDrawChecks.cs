@@ -176,15 +176,21 @@ public partial class CarryDrawChecks : Node
 		}
 	}
 
-	// A craving goblin wears a Grub-coloured pip, a Starving one also a tinted body, and a fed one neither. The pip is drawn
-	// over a carried square without hiding it.
+	// A goblin craving Grub wears a Grub-coloured pip and one craving Grog a Grog-coloured one; with both, the lower meter's
+	// colour shows (Grub on a tie). A Starving goblin also has a tinted body, a fed one neither, and Grog at 0 tints nothing.
+	// The pip is drawn over a carried square without hiding it.
 	async System.Threading.Tasks.Task NeedMarksCheck()
 	{
 		var sim = Simulation.NewWorld(seed: 1);
 		var s = sim.State;
+		for (var g = 0; g < s.GoblinCount; g++)
+			(s.GoblinGrub[g], s.GoblinGrog[g]) = (100, 100);
 		s.GoblinGrub[0] = 29;
 		s.GoblinGrub[3] = 0;
-		s.GoblinGrub[4] = 100;
+		s.GoblinGrog[1] = 29;
+		(s.GoblinGrub[2], s.GoblinGrog[2]) = (25, 10);
+		(s.GoblinGrub[5], s.GoblinGrog[5]) = (20, 20);
+		s.GoblinGrog[6] = 0;
 		GoblinTasks.FinishPickUp(s, 3, Material.Dirt);
 		var image = await Render(sim);
 
@@ -196,13 +202,19 @@ public partial class CarryDrawChecks : Node
 		}
 
 		Require(IsNear(Body(0), GoblinBody), "A craving goblin's body should stay green.");
-		ExpectColor(image, Pip(0).X, Pip(0).Y, WarrenView.MaterialColor(Material.Grub), "A craving goblin has no Grub pip.");
+		ExpectColor(image, Pip(0).X, Pip(0).Y, WarrenView.MaterialColor(Material.Grub), "A goblin craving Grub has no Grub pip.");
+		ExpectColor(image, Pip(1).X, Pip(1).Y, WarrenView.MaterialColor(Material.Grog), "A goblin craving Grog has no Grog pip.");
+		Require(IsNear(Body(1), GoblinBody), "A goblin craving Grog should stay green.");
+		ExpectColor(image, Pip(2).X, Pip(2).Y, WarrenView.MaterialColor(Material.Grog), "With the lower Grog meter, the pip should be Grog's.");
+		ExpectColor(image, Pip(5).X, Pip(5).Y, WarrenView.MaterialColor(Material.Grub), "On a tie the pip should be Grub's.");
 		Require(IsNear(Body(3), WarrenView.StarvingGoblinColor), "A Starving goblin's body is not tinted.");
 		ExpectColor(image, Pip(3).X, Pip(3).Y, WarrenView.MaterialColor(Material.Grub), "A Starving goblin has no Grub pip.");
 		var square = Square(s, 3, slot: 0, carriers: 1);
 		ExpectColor(image, square.X, square.Y, DirtSquare, "The pip covered the Starving carrier's square.");
 		Require(IsNear(Body(4), GoblinBody), "A fed goblin's body should be green.");
 		ExpectColor(image, Pip(4).X, Pip(4).Y, GoblinBody, "A fed goblin has a pip.");
+		Require(IsNear(Body(6), GoblinBody), "Grog at 0 should not tint the goblin.");
+		ExpectColor(image, Pip(6).X, Pip(6).Y, WarrenView.MaterialColor(Material.Grog), "A goblin with Grog at 0 has no Grog pip.");
 	}
 
 	// The pip lies inside its tile, and clear of the carried square at the middle of the marker.

@@ -131,10 +131,14 @@ public partial class WarrenView : Node2D
 			DrawRect(CarriedRect(MarkerRect(s, g, 0), slot, carriers), MaterialColor(carried));
 		}
 
-		// A craving goblin wears a pip in the colour of its Need, over the body and anything it carries.
+		// A craving goblin wears a pip in the colour of its Need, over the body and anything it carries. With Cravings for
+		// both Grub and Grog it wears the one it would act on first.
 		for (var g = 0; g < s.GoblinCount; g++)
-			if (s.GoblinZ[g] == ViewZ && NeedRules.IsCraving(s.GoblinGrub[g]))
-				DrawRect(PipRect(MarkerRect(s, g, 0)), GrubColor);
+		{
+			var craving = NeedRules.LeadingCraving(s.GoblinGrub[g], s.GoblinGrog[g]);
+			if (s.GoblinZ[g] == ViewZ && craving != Goblins.Sim.Material.None)
+				DrawRect(PipRect(MarkerRect(s, g, 0)), MaterialColor(craving));
+		}
 
 		if (Selection is { } sel)
 		{
