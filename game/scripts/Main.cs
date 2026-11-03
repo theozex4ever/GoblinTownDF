@@ -12,9 +12,10 @@ public partial class Main : Node
 		Dig,
 		DigStairs,
 		Pile,
+		GrubPit,
 	}
 
-	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. D digs, S makes stairs, P heaps things in a pile; drag a box. Right-drag unsays it. The Grunt takes it personally.";
+	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. D digs, S makes stairs, P heaps things in a pile, G sets a pit aside for grubs, who need minding; drag a box. Right-drag unsays it. The Grunt takes it personally.";
 
 	Simulation _sim = null!;
 	WarrenView _view = null!;
@@ -139,7 +140,7 @@ public partial class Main : Node
 		{
 			Tool.Dig => new Designate(DesignationKind.Dig, _viewZ, from.X, from.Y, to.X, to.Y),
 			Tool.DigStairs => new Designate(DesignationKind.DigStairs, _viewZ, from.X, from.Y, to.X, to.Y),
-			Tool.Pile => new PaintPile(_viewZ, from.X, from.Y, to.X, to.Y),
+			Tool.Pile or Tool.GrubPit => new PaintRoom(RoomOf(_tool), _viewZ, from.X, from.Y, to.X, to.Y),
 			_ => throw new InvalidOperationException("A selection needs a tool."),
 		};
 		_sim.Apply(command);
@@ -147,16 +148,23 @@ public partial class Main : Node
 		UpdateHover();
 	}
 
-	// Right-drag removes what the active Tool makes: Designations for Dig and Dig stairs (and with no Tool), Piles for Pile.
+	// Right-drag removes what the active Tool makes: Designations for Dig and Dig stairs (and with no Tool), that Room for a Room's Tool.
 	void OnRemoved(Vector2I from, Vector2I to)
 	{
-		Command command = _tool == Tool.Pile
-			? new RemovePile(_viewZ, from.X, from.Y, to.X, to.Y)
+		Command command = _tool is Tool.Pile or Tool.GrubPit
+			? new RemoveRoom(RoomOf(_tool), _viewZ, from.X, from.Y, to.X, to.Y)
 			: new CancelDesignation(_viewZ, from.X, from.Y, to.X, to.Y);
 		_sim.Apply(command);
 		_view.QueueRedraw();
 		UpdateHover();
 	}
+
+	static RoomKind RoomOf(Tool tool) => tool switch
+	{
+		Tool.Pile => RoomKind.Pile,
+		Tool.GrubPit => RoomKind.GrubPit,
+		_ => throw new ArgumentOutOfRangeException(nameof(tool), tool, "This Tool makes no Room."),
+	};
 
 	void PickTool(Tool tool)
 	{
@@ -179,6 +187,7 @@ public partial class Main : Node
 			case Key.D: PickTool(Tool.Dig); break;
 			case Key.S: PickTool(Tool.DigStairs); break;
 			case Key.P: PickTool(Tool.Pile); break;
+			case Key.G: PickTool(Tool.GrubPit); break;
 			case Key.Escape: CancelSelection(); _tool = Tool.None; UpdateDepthLabel(); break;
 			case Key.Comma: ChangeLevel(-1); break;
 			case Key.Period: ChangeLevel(1); break;
@@ -212,6 +221,7 @@ public partial class Main : Node
 			Tool.Dig => " · dig",
 			Tool.DigStairs => " · stairs",
 			Tool.Pile => " · pile",
+			Tool.GrubPit => " · grub pit",
 			_ => "",
 		};
 		_depthLabel.Text = $"Depth {_viewZ} · {BandName(_viewZ)} · {pace}{tool}";

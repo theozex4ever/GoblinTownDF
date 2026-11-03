@@ -78,8 +78,80 @@ public partial class SelectionInputChecks : Node
 				ExpectPiles(s, 0, true, 10, 10, 12, 11);
 			});
 
+			// The Grub Pit Tool follows the Pile's painting rules: Floor only, a tile holds one Room, right-drag removes only pits, Dig stairs clears.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				sim.Apply(new PaintPile(0, 12, 10, 12, 10));
+				s.TileKinds[s.TileIndex(13, 10, 0)] = (byte)TileKind.Stairs;
+				Key(main, Godot.Key.G);
+				Drag(main, view, MouseButton.Left, 14, 10, 10, 11);
+				ExpectRooms(s, RoomKind.GrubPit, 10, 10, 11, 10);
+				ExpectRooms(s, RoomKind.GrubPit, 14, 10, 14, 10);
+				ExpectRooms(s, RoomKind.GrubPit, 10, 11, 14, 11);
+				Require(s.RoomAt(s.TileIndex(12, 10, 0)) == RoomKind.Pile, "Painting a Grub Pit replaced a Pile.");
+				Require(s.RoomAt(s.TileIndex(13, 10, 0)) == RoomKind.None, "Painting a Grub Pit covered Stairs.");
+
+				// Right-drag with the Grub Pit Tool takes the pits and leaves the Pile and Designations alone.
+				sim.Apply(new Designate(DesignationKind.DigStairs, 0, 10, 12, 11, 12));
+				Drag(main, view, MouseButton.Right, 9, 10, 15, 12);
+				Require(Enumerable.Range(10, 5).All(x => s.RoomAt(s.TileIndex(x, 11, 0)) == RoomKind.None), "Right-drag left Grub Pits behind.");
+				Require(s.RoomAt(s.TileIndex(12, 10, 0)) == RoomKind.Pile, "Right-drag with the Grub Pit Tool removed a Pile.");
+				ExpectRectangle(s, 0, DesignationKind.DigStairs, 10, 12, 11, 12);
+
+				// Right-drag with the Pile Tool leaves pits alone, and Dig stairs through a pit clears it.
+				Drag(main, view, MouseButton.Left, 10, 11, 10, 11);
+				Key(main, Godot.Key.P);
+				Drag(main, view, MouseButton.Right, 9, 10, 15, 12);
+				Require(s.RoomAt(s.TileIndex(10, 11, 0)) == RoomKind.GrubPit, "Right-drag with the Pile Tool removed a Grub Pit.");
+				Key(main, Godot.Key.S);
+				Drag(main, view, MouseButton.Left, 10, 11, 10, 11);
+				sim.Apply(new SetPaused(false));
+				var frames = 0;
+				while (s.KindAt(s.TileIndex(10, 11, 0)) != TileKind.Stairs && frames++ < 400)
+					main._Process(0.1);
+				Require(frames < 400, "The stairs through the Grub Pit were never dug.");
+				Require(s.RoomAt(s.TileIndex(10, 11, 0)) == RoomKind.None, "Dig stairs left a Grub Pit on a Stairs tile.");
+			});
+
+			// The real game: Grunts tend a painted Grub Pit, haul the three Grub it yields to a Pile, and a hungry Grunt eats one.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Array.Clear(s.TileItems);
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinGrog, (byte)NeedRules.MeterMax);
+				Key(main, Godot.Key.P);
+				Drag(main, view, MouseButton.Left, 10, 10, 10, 10);
+				Key(main, Godot.Key.P);
+				Key(main, Godot.Key.G);
+				Drag(main, view, MouseButton.Left, 14, 14, 14, 14);
+				var pit = s.TileIndex(14, 14, 0);
+				var pile = s.TileIndex(10, 10, 0);
+				sim.Apply(new SetPaused(false));
+				sim.Apply(new SetSpeed(4));
+				var tended = false;
+				for (var frame = 0; frame < 150 && s.StoredCount(pile, Goblins.Sim.Material.Grub) < ProductionRules.GrubPerTend; frame++)
+				{
+					main._Process(0.25);
+					tended |= Enumerable.Range(0, s.GoblinCount).Any(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Tending);
+					Require(GoblinTasks.FindViolation(s) is null, "A Task rule broke while the Grunts tended the pit.");
+				}
+				Require(tended, "No Grunt tended the Grub Pit.");
+				Require(s.StoredCount(pile, Goblins.Sim.Material.Grub) == ProductionRules.GrubPerTend,
+					$"The Pile holds {s.StoredCount(pile, Goblins.Sim.Material.Grub)} Grub from the pit, not {ProductionRules.GrubPerTend}.");
+				Require(s.LooseCount(pit, Goblins.Sim.Material.Grub) == 0, "Grub was left lying in the pit.");
+
+				sim.Apply(new SetSpeed(1));
+				s.GoblinGrub[0] = 29;
+				for (var frame = 0; frame < 200 && s.StoredCount(pile, Goblins.Sim.Material.Grub) == ProductionRules.GrubPerTend; frame++)
+					main._Process(0.1);
+				sim.Apply(new SetPaused(true));
+				Require(s.StoredCount(pile, Goblins.Sim.Material.Grub) == ProductionRules.GrubPerTend - 1, "A hungry Grunt did not eat a Grub from the Pile.");
+			});
+
 			foreach (var button in new[] { MouseButton.Left, MouseButton.Right })
-			foreach (var key in new[] { Godot.Key.D, Godot.Key.S, Godot.Key.P, Godot.Key.Escape, Godot.Key.Period, Godot.Key.Comma })
+			foreach (var key in new[] { Godot.Key.D, Godot.Key.S, Godot.Key.P, Godot.Key.G, Godot.Key.Escape, Godot.Key.Period, Godot.Key.Comma })
 				WithMain((main, view, sim) =>
 				{
 					Key(main, Godot.Key.S);
@@ -269,7 +341,7 @@ public partial class SelectionInputChecks : Node
 			CountLabelChecks();
 			PileCountChecks();
 
-			GD.Print("Selection input checks passed (21 scenarios, count labels, pile counts).");
+			GD.Print("Selection input checks passed (23 scenarios, count labels, pile counts).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -394,6 +466,13 @@ public partial class SelectionInputChecks : Node
 		for (var y = y0; y <= y1; y++)
 		for (var x = x0; x <= x1; x++)
 			Require(state.IsPile(state.TileIndex(x, y, z)) == piled, $"Expected Pile {(piled ? "set" : "clear")} at ({x}, {y}, {z}).");
+	}
+
+	static void ExpectRooms(SimState state, RoomKind room, int x0, int y0, int x1, int y1)
+	{
+		for (var y = y0; y <= y1; y++)
+		for (var x = x0; x <= x1; x++)
+			Require(state.RoomAt(state.TileIndex(x, y, 0)) == room, $"Expected {room} at ({x}, {y}, 0).");
 	}
 
 	static void Require(bool condition, string message)

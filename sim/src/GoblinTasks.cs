@@ -9,6 +9,8 @@ namespace Goblins.Sim;
 /// A goblin works one of two Jobs. A dig: Walking to a designated tile, then Digging it. A Haul: Fetching a loose unit,
 /// PickingUp, Carrying it to a Pile tile with room for its material (or waiting, still Carrying, while there is none),
 /// and Dropping it there.
+/// A Tend: Approaching a Grub Pit tile, then Tending it for <see cref="ProductionRules.TendTicks"/> working ticks, after which the tile
+/// spawns Grub and the goblin is Idle again.
 /// A Craving ends any of those Tasks at once, dropping what the goblin carries: it goes Seeking the nearest unit of Grub,
 /// then Eating it where it lies, or SeekingGrog and Drinking for a Craving for Grog. A goblin finishes the one Need it
 /// has begun before it considers the other.
@@ -44,6 +46,34 @@ public static class GoblinTasks
 		s.GoblinStepTicks[g] = 0;
 		s.GoblinTask[g] = (byte)GoblinTask.Digging;
 	}
+
+	/// <summary>
+	/// Idle or Wandering → Approaching the Grub Pit tile <paramref name="tile"/> it has claimed to Tend, or Tending at once when the
+	/// goblin already stands on it. Drops any wander.
+	/// </summary>
+	public static void BeginTend(SimState s, int g, int tile, bool tending)
+	{
+		s.GoblinJobTile[g] = tile;
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinWanderTile[g] = -1;
+		s.GoblinWanderTicks[g] = 0;
+		s.GoblinTask[g] = (byte)(tending ? GoblinTask.Tending : GoblinTask.Approaching);
+	}
+
+	/// <summary>Approaching → Tending, on arrival at the tile.</summary>
+	public static void StartTending(SimState s, int g)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.Tending;
+	}
+
+	/// <summary>
+	/// Counts one working tick of a Tend. True on the tick the <see cref="ProductionRules.TendTicks"/>th tick is counted, when the
+	/// caller must start the tile spawning and release the goblin.
+	/// </summary>
+	public static bool TendTick(SimState s, int g) => ++s.GoblinWorkTicks[g] >= ProductionRules.TendTicks;
 
 	/// <summary>Idle → Wandering to <paramref name="target"/>, a walkable tile on the goblin's own level.</summary>
 	public static void BeginWander(SimState s, int g, int target)
@@ -244,6 +274,9 @@ public static class GoblinTasks
 	/// </summary>
 	public static bool IsDigTask(GoblinTask task) => task is GoblinTask.Walking or GoblinTask.Digging;
 
+	/// <summary>True for Approaching and Tending: the Tasks that hold a claim on a Grub Pit tile.</summary>
+	public static bool IsTendTask(GoblinTask task) => task is GoblinTask.Approaching or GoblinTask.Tending;
+
 	/// <summary>True for Fetching and PickingUp: the Tasks that hold a claim on a loose unit.</summary>
 	public static bool IsFetchTask(GoblinTask task) => task is GoblinTask.Fetching or GoblinTask.PickingUp;
 
@@ -267,9 +300,9 @@ public static class GoblinTasks
 	/// stands where it can dig, a PickingUp goblin stands on its unit, a Dropping goblin stands on a Pile tile, a
 	/// goblin carries a unit exactly while Carrying or Dropping, a seeking or consuming goblin has a Craving for what it seeks and an Eating or Drinking goblin stands
 	/// on a unit of it, a wander target is walkable on the goblin's own
-	/// level and not its own tile, no two goblins claim one tile to dig it and no more claim a tile's loose units than it holds, step ticks are below
-	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> (<see cref="NeedRules.EatTicks"/> while Eating or Drinking) and only count while
-	/// PickingUp, Dropping, Eating or Drinking, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
+	/// level and not its own tile, a tender works a Grub Pit tile that is not spawning, and a Tending one stands on it, no two goblins claim one tile to dig it or to tend it and no more claim a tile's loose units than it holds, step ticks are below
+	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> (<see cref="NeedRules.EatTicks"/> while Eating or Drinking, <see cref="ProductionRules.TendTicks"/> while Tending) and only count while
+	/// PickingUp, Dropping, Eating, Drinking or Tending, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
 	/// Precondition: the state is structurally sound: array lengths match the map and goblin cap, tile, material
 	/// and designation values are defined, and every goblin stands on the map.
 	/// </summary>
@@ -293,9 +326,9 @@ public static class GoblinTasks
 				return $"Goblin {g} is {task} with nothing to carry.";
 			if (!carrying && carry != Material.None)
 				return $"Goblin {g} is {task} but carries {carry}.";
-			if (s.GoblinWorkTicks[g] >= (IsConsumingTask(task) ? NeedRules.EatTicks : HaulActionTicks))
+			if (s.GoblinWorkTicks[g] >= (IsConsumingTask(task) ? NeedRules.EatTicks : task == GoblinTask.Tending ? ProductionRules.TendTicks : HaulActionTicks))
 				return $"Goblin {g} has work ticks {s.GoblinWorkTicks[g]}.";
-			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking))
+			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Tending))
 				return $"Goblin {g} is {task} but has work ticks {s.GoblinWorkTicks[g]}.";
 
 			var job = s.GoblinJobTile[g];
@@ -350,6 +383,18 @@ public static class GoblinTasks
 						return $"Goblin {g} fetches a unit on tile {job}, which holds {s.LooseTotal(job)} and is claimed by others.";
 					break;
 
+				case GoblinTask.Approaching:
+				case GoblinTask.Tending:
+					if (wanderTile != -1 || wanderTicks != 0)
+						return $"Goblin {g} is working but wanders.";
+					if (!(job >= 0 && job < tiles && FarmSystem.IsTendTarget(s, job)))
+						return $"Goblin {g} tends tile {job}, which is not a Grub Pit that is free to tend.";
+					if (task == GoblinTask.Tending && job != here)
+						return $"Goblin {g} is tending tile {job} from tile {here}.";
+					if (FindOtherTender(s, g, job) is { } tendRival)
+						return $"Goblins {tendRival} and {g} both claim tile {job} to tend.";
+					break;
+
 				case GoblinTask.Carrying:
 				case GoblinTask.Dropping:
 					if (job != -1)
@@ -377,6 +422,15 @@ public static class GoblinTasks
 					break;
 			}
 		}
+		return null;
+	}
+
+	// The lower-numbered goblin that is tending the same tile as goblin g, or null.
+	static int? FindOtherTender(SimState s, int g, int job)
+	{
+		for (var other = 0; other < g; other++)
+			if (s.GoblinJobTile[other] == job && IsTendTask((GoblinTask)s.GoblinTask[other]))
+				return other;
 		return null;
 	}
 

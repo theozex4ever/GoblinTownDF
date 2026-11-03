@@ -31,6 +31,7 @@ public partial class WarrenView : Node2D
 	static readonly Color GrogColor = new(0.18f, 0.72f, 0.74f);
 	static readonly Color WaitingHaulColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
+	public static readonly Color GrubPitTint = new(0.82f, 0.60f, 0.28f, 0.6f);
 	// A material whose count has reached the Pile's capacity is drawn dark on a bright chip.
 	public static readonly Color FullCountChipColor = new(1f, 0.85f, 0.2f);
 	static readonly Color FullCountTextColor = new(0.12f, 0.10f, 0.06f);
@@ -72,7 +73,7 @@ public partial class WarrenView : Node2D
 					DrawLine(new Vector2(rect.Position.X + 3, ry), new Vector2(rect.End.X - 3, ry), StairsMarkColor, 2);
 				}
 
-			// A Pile tile is tinted and shows its two best stored counts, each in its material's colour: a full count first,
+			// A Room tile is tinted. A Pile tile shows its two best stored counts, each in its material's colour: a full count first,
 			// then the larger. A count at the Pile's capacity sits on a bright chip. A loose item is a small square in the
 			// same colour (stone matches solid stone), greyed while its Haul waits for a Pile with room for its material
 			// that it can be carried to.
@@ -84,9 +85,13 @@ public partial class WarrenView : Node2D
 				DrawPileCount(s, tile, second, 1, rect);
 			}
 			else
+			{
+				if (s.RoomAt(tile) == RoomKind.GrubPit)
+					DrawRect(rect, GrubPitTint);
 				for (var material = Goblins.Sim.Material.Dirt; (int)material <= SimState.CountedMaterials; material++)
 					if (s.LooseCount(tile, material) > 0)
 						DrawRect(LooseSquare(rect, (int)material - 1), s.IsHaulReachable(tile, material) ? MaterialColor(material) : WaitingHaulColor);
+			}
 
 			if (s.DesignationAt(tile) == DesignationKind.None)
 				continue;

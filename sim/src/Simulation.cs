@@ -67,6 +67,9 @@ public sealed class Simulation
 		s.DigProgress = new byte[layer * MapDepth];
 		s.TileItems = new int[layer * MapDepth * SimState.CountedMaterials];
 		s.Piles = new byte[layer * MapDepth];
+		s.Rooms = new byte[layer * MapDepth];
+		s.PitUnspawned = new byte[layer * MapDepth];
+		s.PitSpawnTicks = new byte[layer * MapDepth];
 		// The surface and z1 are dirt, so digging into them yields dirt; z2 is stone.
 		for (var z = 0; z < MapDepth; z++)
 		{
@@ -183,6 +186,7 @@ public sealed class Simulation
 	{
 		State.Tick++;
 		NeedsSystem.Drain(State);
+		FarmSystem.Grow(State);
 		_jobs.Step(State, _events);
 	}
 }

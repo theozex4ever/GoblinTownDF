@@ -36,6 +36,21 @@ public static class SimJson
 			Require(s.Piles[tile] <= 1, $"Tile {tile} has Pile flag {s.Piles[tile]}.");
 			Require(s.Piles[tile] == 0 || s.KindAt(tile) == TileKind.Floor, $"Tile {tile} is a Pile but not Floor.");
 		}
+		Require(s.Rooms is not null && s.Rooms.LongLength == tiles, "Rooms does not match the map size.");
+		Require(s.PitUnspawned is not null && s.PitUnspawned.LongLength == tiles, "PitUnspawned does not match the map size.");
+		Require(s.PitSpawnTicks is not null && s.PitSpawnTicks.LongLength == tiles, "PitSpawnTicks does not match the map size.");
+		// Rooms holds every Room but the Pile, which Piles keeps; a tile holds one Room.
+		for (var tile = 0; tile < s.Rooms!.Length; tile++)
+		{
+			var room = (RoomKind)s.Rooms[tile];
+			Require(room is RoomKind.None or RoomKind.GrubPit, $"Tile {tile} has unknown Room {s.Rooms[tile]}.");
+			Require(room == RoomKind.None || s.KindAt(tile) == TileKind.Floor, $"Tile {tile} is a {room} but not Floor.");
+			Require(room == RoomKind.None || s.Piles[tile] == 0, $"Tile {tile} is both a Pile and a {room}.");
+			Require(s.PitUnspawned![tile] <= ProductionRules.GrubPerTend, $"Tile {tile} has {s.PitUnspawned[tile]} Grub to spawn, past {ProductionRules.GrubPerTend}.");
+			Require(s.PitUnspawned[tile] == 0 || room == RoomKind.GrubPit, $"Tile {tile} has Grub to spawn but is not a Grub Pit.");
+			Require(s.PitSpawnTicks![tile] < ProductionRules.GrubSpawnTicks, $"Tile {tile} has spawn ticks {s.PitSpawnTicks[tile]}, past {ProductionRules.GrubSpawnTicks}.");
+			Require(s.PitSpawnTicks[tile] == 0 || s.PitUnspawned[tile] > 0, $"Tile {tile} counts spawn ticks with nothing to spawn.");
+		}
 		foreach (var count in s.TileItems!)
 			Require(count >= 0, $"Item count {count} is negative.");
 		// No save is migrated: a Pile tile over capacity is rejected, while loose items are uncapped.

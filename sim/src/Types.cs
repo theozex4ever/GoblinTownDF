@@ -23,6 +23,7 @@ public enum RoomKind : byte
 {
 	None,
 	Pile,
+	GrubPit,
 }
 
 public enum Role : byte
@@ -51,4 +52,6 @@ public enum GoblinTask : byte
 	Eating,
 	SeekingGrog,
 	Drinking,
+	Approaching,
+	Tending,
 }
