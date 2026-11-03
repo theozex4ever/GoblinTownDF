@@ -103,7 +103,7 @@ public class ChangingWarrenTests
 	[Fact]
 	public void A_tile_with_three_loose_units_is_hauled_in_three_trips_and_no_more_than_three_goblins_claim_it()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		var tile = s.TileIndex(12, 12, 0);
 		s.AddItems(tile, Material.Dirt, 2);
@@ -128,7 +128,7 @@ public class ChangingWarrenTests
 	[Fact]
 	public void With_more_goblins_than_units_the_spare_goblins_do_not_claim_the_tile()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		var tile = s.TileIndex(12, 12, 0);
 		s.AddItems(tile, Material.Dirt, 2);
@@ -144,7 +144,7 @@ public class ChangingWarrenTests
 	[Fact]
 	public void A_removed_Pile_tiles_stock_becomes_loose_units_that_are_each_hauled_to_another_Pile()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		var old = s.TileIndex(14, 14, 0);
 		Paint(sim, 14, 14);
@@ -163,7 +163,7 @@ public class ChangingWarrenTests
 	[Fact]
 	public void Painting_a_Pile_over_a_tile_with_several_claims_frees_every_claiming_goblin()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		var tile = s.TileIndex(12, 12, 0);
 		s.AddItems(tile, Material.Dirt, 2);
@@ -208,7 +208,7 @@ public class ChangingWarrenTests
 	[Fact]
 	public void FindViolation_allows_one_claim_per_loose_unit_and_flags_more()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		var tile = s.TileIndex(12, 12, 0);
 		s.AddItems(tile, Material.Dirt, 1);
@@ -229,7 +229,7 @@ public class ChangingWarrenTests
 		var waits = 0;
 		foreach (var seed in new[] { 1, 2, 3 })
 		{
-			var sim = Simulation.NewWorld(seed);
+			var sim = NewWorldWithFiveGrunts(seed);
 			var s = sim.State;
 			s.AddItems(s.TileIndex(10, 10, 0), Material.Stone, 3);
 			s.AddItems(s.TileIndex(20, 12, 0), Material.Dirt, 2);
@@ -267,7 +267,7 @@ public class ChangingWarrenTests
 	{
 		static string Run()
 		{
-			var sim = Simulation.NewWorld(seed: 9);
+			var sim = NewWorldWithFiveGrunts(seed: 9);
 			var rng = new Random(9);
 			for (var tick = 0; tick < 1500; tick++)
 			{

@@ -33,20 +33,20 @@ public class WorldTests
 	}
 
 	[Fact]
-	public void Five_grunts_stand_in_a_cluster_around_the_centre_of_z0()
+	public void Seven_grunts_stand_in_a_cluster_around_the_centre_of_z0()
 	{
 		var s = Simulation.NewWorld(seed: 7).State;
 
-		Assert.Equal(5, s.GoblinCount);
+		Assert.Equal(7, s.GoblinCount);
 		var spots = new HashSet<(int, int)>();
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			Assert.Equal(Role.Grunt, (Role)s.GoblinRole[g]);
 			Assert.Equal(0, s.GoblinZ[g]);
-			Assert.True(Math.Abs(s.GoblinX[g] - 16) + Math.Abs(s.GoblinY[g] - 16) <= 1);
+			Assert.True(Math.Abs(s.GoblinX[g] - 16) <= 1 && Math.Abs(s.GoblinY[g] - 16) <= 1);
 			spots.Add((s.GoblinX[g], s.GoblinY[g]));
 		}
-		Assert.Equal(5, spots.Count);
+		Assert.Equal(7, spots.Count);
 	}
 
 	[Fact]

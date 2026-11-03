@@ -9,7 +9,7 @@ public class HaulingTests
 	// The lone goblin stands at (16, 16, 0). A unit at (16, 14) is two steps away, a Pile at (20, 14) four more.
 	static Simulation WorldWithLooseUnit(int x, int y, Material material = Material.Dirt, bool oneGrunt = true)
 	{
-		var sim = oneGrunt ? NewWorldWithOneGrunt(seed: 1) : Simulation.NewWorld(seed: 1);
+		var sim = oneGrunt ? NewWorldWithOneGrunt(seed: 1) : NewWorldWithFiveGrunts(seed: 1);
 		sim.State.AddItems(sim.State.TileIndex(x, y, 0), material, 1);
 		sim.RecheckReachability();
 		return sim;
@@ -146,7 +146,7 @@ public class HaulingTests
 	[Fact]
 	public void A_Pile_on_another_level_is_reached_over_Stairs()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		s.GoblinCount = 1;
 		s.TileKinds[s.TileIndex(16, 15, 0)] = (byte)TileKind.Stairs;
@@ -242,7 +242,7 @@ public class HaulingTests
 	[Fact]
 	public void A_dig_and_a_haul_on_the_same_tile_are_claimed_by_two_goblins()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		s.GoblinCount = 2;
 		var tile = s.TileIndex(16, 15, 0);
@@ -358,7 +358,7 @@ public class HaulingTests
 	[Fact]
 	public void Cancelling_a_Designation_does_not_release_a_goblin_hauling_from_that_tile()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		s.GoblinCount = 2;
 		var tile = s.TileIndex(16, 15, 0);
@@ -438,7 +438,7 @@ public class HaulingTests
 	[Fact]
 	public void Digging_stairs_out_from_under_a_dropping_goblin_sends_it_on_carrying()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		s.GoblinCount = 2;
 		var pile = s.TileIndex(16, 16, 0);
@@ -484,7 +484,7 @@ public class HaulingTests
 	{
 		static Simulation Run()
 		{
-			var sim = Simulation.NewWorld(seed: 5);
+			var sim = NewWorldWithFiveGrunts(seed: 5);
 			sim.Apply(new PaintPile(0, 10, 10, 11, 11));
 			sim.Apply(new Designate(DesignationKind.DigStairs, 0, 14, 14, 18, 15));
 			RunTicks(sim, 300);
@@ -495,14 +495,14 @@ public class HaulingTests
 		var second = Run();
 
 		Assert.Equal(SimJson.Serialize(first), SimJson.Serialize(second));
-		Assert.True(first.State.Piles.Zip(first.State.TileItems.Chunk(2), (p, c) => p != 0 ? c.Sum() : 0).Sum() > 0,
+		Assert.True(first.State.Piles.Zip(first.State.TileItems.Chunk(SimState.CountedMaterials), (p, c) => p != 0 ? c.Sum() : 0).Sum() > 0,
 			"Nothing was hauled to the Pile.");
 	}
 
 	[Fact]
 	public void A_save_where_an_idle_goblin_carries_a_unit_is_rejected()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		sim.State.GoblinCarry[0] = (byte)Material.Dirt;
 
 		Assert.Throws<System.Text.Json.JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));

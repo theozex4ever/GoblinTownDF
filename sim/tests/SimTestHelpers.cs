@@ -9,12 +9,26 @@ static class SimTestHelpers
 	const double OneTick = 0.1;
 
 	/// <summary>
-	/// A new world trimmed to goblin 0 alone, for tests that script one goblin's route and would
-	/// otherwise share the work with the other four Grunts.
+	/// A new world as P2 made it: the first five Grunts of the cluster and no starting Grub or Grog on the ground. For
+	/// tests that script hauls, claims or item counts and would otherwise be thrown off by the two extra Grunts and
+	/// the 21 loose units P3 adds.
+	/// </summary>
+	public static Simulation NewWorldWithFiveGrunts(int seed)
+	{
+		var sim = Simulation.NewWorld(seed);
+		sim.State.GoblinCount = 5;
+		Array.Clear(sim.State.TileItems);
+		sim.RecheckReachability();
+		return sim;
+	}
+
+	/// <summary>
+	/// A new world trimmed to goblin 0 alone, with no starting supplies, for tests that script one goblin's route and
+	/// would otherwise share the work with the other Grunts.
 	/// </summary>
 	public static Simulation NewWorldWithOneGrunt(int seed)
 	{
-		var sim = Simulation.NewWorld(seed);
+		var sim = NewWorldWithFiveGrunts(seed);
 		sim.State.GoblinCount = 1;
 		sim.RecheckReachability();
 		return sim;

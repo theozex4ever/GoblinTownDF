@@ -10,7 +10,7 @@ public class PileCapacityTests
 	// The lone goblin stands at (16, 16, 0). A unit at (16, 14) is two steps away, a Pile at (20, 14) four more.
 	static Simulation WorldWithLooseUnit(int x, int y, Material material = Material.Dirt, bool oneGrunt = true)
 	{
-		var sim = oneGrunt ? NewWorldWithOneGrunt(seed: 1) : Simulation.NewWorld(seed: 1);
+		var sim = oneGrunt ? NewWorldWithOneGrunt(seed: 1) : NewWorldWithFiveGrunts(seed: 1);
 		sim.State.AddItems(sim.State.TileIndex(x, y, 0), material, 1);
 		sim.RecheckReachability();
 		return sim;
@@ -137,7 +137,7 @@ public class PileCapacityTests
 	[Fact]
 	public void The_goblin_that_finishes_dropping_first_takes_the_last_slot_and_the_other_keeps_its_unit_and_waits()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		var pile = s.TileIndex(20, 14, 0);
 		PaintStocked(sim, 20, 14, Material.Dirt, 29);
@@ -164,7 +164,7 @@ public class PileCapacityTests
 	[Fact]
 	public void Two_goblins_racing_for_the_last_slot_never_overfill_and_the_loser_reroutes_to_another_Pile()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		s.GoblinCount = 2;
 		s.AddItems(s.TileIndex(14, 16, 0), Material.Dirt, 1);
@@ -186,7 +186,7 @@ public class PileCapacityTests
 	[Fact]
 	public void Painting_skips_a_whole_tile_holding_more_than_30_of_any_material_and_paints_the_rest()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		var over = s.TileIndex(10, 10, 0);
 		var overStone = s.TileIndex(11, 10, 0);
@@ -233,7 +233,7 @@ public class PileCapacityTests
 	[Fact]
 	public void Blocked_dirt_does_not_stop_stone_from_the_same_tile_being_hauled()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		var source = s.TileIndex(14, 16, 0);
 		s.AddItems(source, Material.Dirt, 1);
@@ -284,7 +284,7 @@ public class PileCapacityTests
 	[Fact]
 	public void The_goblin_that_fills_a_materials_last_slot_makes_the_rest_of_that_material_wait()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		s.AddItems(s.TileIndex(14, 16, 0), Material.Dirt, 3);
 		PaintStocked(sim, 20, 14, Material.Dirt, 29);
@@ -301,7 +301,7 @@ public class PileCapacityTests
 	[Fact]
 	public void Loose_items_above_30_are_not_capped()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		var tile = s.TileIndex(10, 10, 0);
 
@@ -316,7 +316,7 @@ public class PileCapacityTests
 	[Fact]
 	public void A_Pile_removed_under_a_stocked_tile_leaves_its_full_stock_loose()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		PaintStocked(sim, 20, 14, Material.Dirt, 30);
 		PaintStocked(sim, 20, 14, Material.Stone, 30);
@@ -332,7 +332,7 @@ public class PileCapacityTests
 	{
 		foreach (var material in new[] { Material.Dirt, Material.Stone })
 		{
-			var sim = Simulation.NewWorld(seed: 1);
+			var sim = NewWorldWithFiveGrunts(seed: 1);
 			PaintStocked(sim, 20, 14, material, 31);
 
 			var error = Assert.Throws<System.Text.Json.JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));
@@ -343,7 +343,7 @@ public class PileCapacityTests
 	[Fact]
 	public void A_save_with_30_of_each_material_on_a_Pile_and_over_30_loose_is_accepted()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		PaintStocked(sim, 20, 14, Material.Dirt, 30);
 		PaintStocked(sim, 20, 14, Material.Stone, 30);
@@ -383,7 +383,7 @@ public class PileCapacityTests
 	// Round-tripped through a save, as a loaded state with disconnected regions would be.
 	static Simulation SplitWarren(Action<Simulation> stock)
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		s.GoblinCount = 2;
 		(s.GoblinX[0], s.GoblinY[0]) = (5, 5);
