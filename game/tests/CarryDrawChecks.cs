@@ -1,11 +1,13 @@
 using System;
+using System.Linq;
 using Godot;
 using Goblins.Sim;
+using Material = Goblins.Sim.Material;
 
 namespace AThousandGoblinsDeep;
 
 /// <summary>
-/// Checks where carried-material squares and full Pile counts are drawn. The layout is pure geometry and always runs. The pixel checks
+/// Checks where carried-material squares, loose squares and Pile counts are drawn. The layout is pure geometry and always runs. The pixel checks
 /// render the warren into an image and read pixels, so they need a real renderer: with --headless they print a skip
 /// and pass, which means a run with no display does not check drawing.
 /// </summary>
@@ -13,6 +15,7 @@ public partial class CarryDrawChecks : Node
 {
 	static readonly Color DirtSquare = new(0.55f, 0.36f, 0.18f);
 	static readonly Color StoneSquare = new(0.36f, 0.40f, 0.48f);
+	static readonly Material[] Materials = Enum.GetValues<Material>()[1..];
 	static readonly Color GoblinBody = new(0.35f, 0.75f, 0.30f);
 
 	public override async void _Ready()
@@ -20,6 +23,8 @@ public partial class CarryDrawChecks : Node
 		try
 		{
 			LayoutChecks();
+			ColourChecks();
+			LooseLayoutChecks();
 
 			if (DisplayServer.GetName() == "headless")
 			{
@@ -31,7 +36,9 @@ public partial class CarryDrawChecks : Node
 			await CoveredByBodyCheck();
 			await FullTileCheck();
 			await FullCountCheck();
-			GD.Print("Carry draw checks passed (layout, 3 pixel scenarios).");
+			await TwoCountsCheck();
+			await LooseSquaresCheck();
+			GD.Print("Carry draw checks passed (layout, colours, count order, 5 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -81,14 +88,14 @@ public partial class CarryDrawChecks : Node
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			(s.GoblinX[g], s.GoblinY[g]) = (tileX, tileY);
-			GoblinTasks.FinishPickUp(s, g, g % 2 == 0 ? Goblins.Sim.Material.Dirt : Goblins.Sim.Material.Stone);
+			GoblinTasks.FinishPickUp(s, g, Materials[g % Materials.Length]);
 		}
 		var image = await Render(sim);
 
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			var square = Square(s, g, slot: g, carriers: s.GoblinCount);
-			ExpectColor(image, square.X, square.Y, g % 2 == 0 ? DirtSquare : StoneSquare, $"Carrier {g}'s slot does not show its material.");
+			ExpectColor(image, square.X, square.Y, WarrenView.MaterialColor(Materials[g % Materials.Length]), $"Carrier {g}'s slot does not show its material.");
 		}
 
 		var cell = WarrenView.CellSize;
@@ -99,31 +106,120 @@ public partial class CarryDrawChecks : Node
 			if (inMarker)
 				continue;
 			var pixel = image.GetPixel(x, y);
-			Require(!IsNear(pixel, DirtSquare) && !IsNear(pixel, StoneSquare), $"A carried colour was drawn at ({x}, {y}), outside the carrier's marker.");
+			Require(!Materials.Any(m => IsNear(pixel, WarrenView.MaterialColor(m))), $"A carried colour was drawn at ({x}, {y}), outside the carrier's marker.");
 		}
 	}
 
-	// A Pile count is highlighted at 30 and only for its own material: 30 dirt with 5 stone, and 5 dirt with 30 stone.
+	// A Pile count is highlighted at 30 and only for its own material. A full count comes first, so the chip is always
+	// in the top slot: 30 dirt with 5 stone, and 5 dirt with 30 stone, where stone moves ahead of the smaller dirt.
 	async System.Threading.Tasks.Task FullCountCheck()
 	{
 		var sim = Simulation.NewWorld(seed: 1);
 		var s = sim.State;
 		sim.Apply(new PaintPile(0, 4, 4, 5, 4));
-		s.AddItems(s.TileIndex(4, 4, 0), Goblins.Sim.Material.Dirt, SimState.PileCapacity);
-		s.AddItems(s.TileIndex(4, 4, 0), Goblins.Sim.Material.Stone, 5);
-		s.AddItems(s.TileIndex(5, 4, 0), Goblins.Sim.Material.Dirt, 5);
-		s.AddItems(s.TileIndex(5, 4, 0), Goblins.Sim.Material.Stone, SimState.PileCapacity);
+		s.AddItems(s.TileIndex(4, 4, 0), Material.Dirt, SimState.PileCapacity);
+		s.AddItems(s.TileIndex(4, 4, 0), Material.Stone, 5);
+		s.AddItems(s.TileIndex(5, 4, 0), Material.Dirt, 5);
+		s.AddItems(s.TileIndex(5, 4, 0), Material.Stone, SimState.PileCapacity);
 		var image = await Render(sim);
 
-		var cell = WarrenView.CellSize;
-		foreach (var (tileX, dirtFull, stoneFull) in new[] { (4, true, false), (5, false, true) })
+		foreach (var tileX in new[] { 4, 5 })
 		{
-			var dirtChip = WarrenView.CountChipRect(new Vector2(tileX * cell + 2, 4 * cell + 9), 0);
-			var stoneChip = WarrenView.CountChipRect(new Vector2(tileX * cell + 2, 4 * cell + cell - 2), 0);
-			Require(IsNear(image.GetPixel((int)dirtChip.Position.X, (int)dirtChip.Position.Y), WarrenView.FullCountChipColor) == dirtFull,
-				$"Tile {tileX}: the dirt count is {(dirtFull ? "not " : "")}highlighted.");
-			Require(IsNear(image.GetPixel((int)stoneChip.Position.X, (int)stoneChip.Position.Y), WarrenView.FullCountChipColor) == stoneFull,
-				$"Tile {tileX}: the stone count is {(stoneFull ? "not " : "")}highlighted.");
+			Require(HasChip(image, tileX, 4, slot: 0), $"Tile {tileX}: the full count is not highlighted in the top slot.");
+			Require(!HasChip(image, tileX, 4, slot: 1), $"Tile {tileX}: the count below the full one is highlighted.");
+		}
+	}
+
+	// Five materials stored on one tile: only the two best are drawn, each in its own colour. Tile 4 has two full counts
+	// ahead of a larger count that is not full; tile 5 has no full count, so the two largest show, in Material order on a tie.
+	async System.Threading.Tasks.Task TwoCountsCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		sim.Apply(new PaintPile(0, 4, 4, 5, 4));
+		var full = s.TileIndex(4, 4, 0);
+		(Material Material, int Count)[] fullTile = [(Material.Dirt, 29), (Material.Stone, 28), (Material.Grub, 30), (Material.Fungus, 1), (Material.Grog, 30)];
+		foreach (var (material, count) in fullTile)
+			s.AddItems(full, material, count);
+		var plain = s.TileIndex(5, 4, 0);
+		(Material Material, int Count)[] plainTile = [(Material.Dirt, 3), (Material.Stone, 20), (Material.Grub, 7), (Material.Fungus, 20), (Material.Grog, 2)];
+		foreach (var (material, count) in plainTile)
+			s.AddItems(plain, material, count);
+		var image = await Render(sim);
+
+		ExpectCount(image, 4, slot: 0, Material.Grub, chip: true);
+		ExpectCount(image, 4, slot: 1, Material.Grog, chip: true);
+		ExpectCount(image, 5, slot: 0, Material.Stone, chip: false);
+		ExpectCount(image, 5, slot: 1, Material.Fungus, chip: false);
+	}
+
+	// Loose units of every material on one tile each get their own square, in their own colour. Each has a Pile with room
+	// to go to, so none is greyed out as waiting.
+	async System.Threading.Tasks.Task LooseSquaresCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		var tile = s.TileIndex(4, 4, 0);
+		sim.Apply(new PaintPile(0, 10, 10, 10, 10));
+		foreach (var material in Materials)
+			s.AddItems(tile, material, 1);
+		sim.RecheckReachability();
+		var image = await Render(sim);
+
+		var rect = new Rect2(4 * WarrenView.CellSize, 4 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
+		foreach (var material in Materials)
+		{
+			var center = WarrenView.LooseSquare(rect, (int)material - 1).GetCenter();
+			ExpectColor(image, (int)center.X, (int)center.Y, WarrenView.MaterialColor(material), $"The loose {material} square is missing or the wrong colour.");
+		}
+	}
+
+	// The first lit pixel of a count's chip, or its text colour, is read at the count's baseline.
+	static bool HasChip(Image image, int tileX, int tileY, int slot)
+	{
+		var rect = new Rect2(tileX * WarrenView.CellSize, tileY * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
+		var chip = WarrenView.CountChipRect(WarrenView.CountBaseline(rect, slot), 0);
+		return IsNear(image.GetPixel((int)chip.Position.X, (int)chip.Position.Y), WarrenView.FullCountChipColor);
+	}
+
+	// A count in the right slot is drawn in its material's colour, or on the chip when full: some pixel of the slot's band has it.
+	static void ExpectCount(Image image, int tileX, int slot, Material material, bool chip)
+	{
+		Require(HasChip(image, tileX, 4, slot) == chip, $"Tile {tileX}, slot {slot}: the chip is {(chip ? "missing" : "present")}.");
+		if (chip)
+			return;
+		var rect = new Rect2(tileX * WarrenView.CellSize, 4 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
+		var baseline = WarrenView.CountBaseline(rect, slot);
+		var found = false;
+		for (var y = (int)baseline.Y - (WarrenView.CountFontSize - 2); y <= (int)baseline.Y && !found; y++)
+		for (var x = (int)baseline.X; x < (int)baseline.X + 8 && !found; x++)
+			found = IsNear(image.GetPixel(x, y), WarrenView.MaterialColor(material));
+		Require(found, $"Tile {tileX}, slot {slot}: no {material}-coloured count was drawn.");
+	}
+
+	// Every material has a colour of its own, so a loose square or a carried square says what it is.
+	static void ColourChecks()
+	{
+		foreach (var a in Materials)
+		foreach (var b in Materials)
+		{
+			if (a >= b)
+				continue;
+			var (ca, cb) = (WarrenView.MaterialColor(a), WarrenView.MaterialColor(b));
+			Require(Math.Abs(ca.R - cb.R) + Math.Abs(ca.G - cb.G) + Math.Abs(ca.B - cb.B) > 0.3f, $"{a} and {b} have colours too close to tell apart.");
+		}
+	}
+
+	// The loose squares of every material fit one tile without overlap.
+	static void LooseLayoutChecks()
+	{
+		var rect = new Rect2(0, 0, WarrenView.CellSize, WarrenView.CellSize);
+		for (var i = 0; i < Materials.Length; i++)
+		{
+			var square = WarrenView.LooseSquare(rect, i);
+			Require(rect.Encloses(square), $"Loose square {i} leaves the tile.");
+			for (var j = 0; j < i; j++)
+				Require(!square.Intersects(WarrenView.LooseSquare(rect, j)), $"Loose squares {i} and {j} overlap.");
 		}
 	}
 

@@ -94,9 +94,63 @@ public partial class SelectionInputChecks : Node
 					Require(SimJson.Serialize(sim) == before, $"{key} allowed a cancelled {button} drag to submit.");
 				});
 
-			CountLabelChecks();
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				sim.Apply(new PaintPile(0, 4, 4, 5, 4));
+				s.AddItems(s.TileIndex(4, 4, 0), Goblins.Sim.Material.Grub, 14);
+				s.AddItems(s.TileIndex(4, 4, 0), Goblins.Sim.Material.Stone, SimState.PileCapacity);
+				s.AddItems(s.TileIndex(4, 4, 0), Goblins.Sim.Material.Grog, 7);
+				s.AddItems(s.TileIndex(6, 4, 0), Goblins.Sim.Material.Dirt, 2);
 
-			GD.Print("Selection input checks passed (16 scenarios, count labels).");
+				// One line names every count on the Pile tile under the cursor, in Material order, full ones marked.
+				Move(main, view, 4, 4);
+				ExpectHover(main, "A Pile, counted solemnly: Stone 30 (full), Grub 14, Grog 7.");
+				Move(main, view, 5, 4);
+				ExpectHover(main, "An empty Pile, waiting with great dignity.");
+				// A loose item is not on a Pile, and neither is bare floor or somewhere off the map.
+				Move(main, view, 6, 4);
+				ExpectHover(main, "");
+				Move(main, view, 4, 4);
+				Move(main, view, -1, 4);
+				ExpectHover(main, "");
+				// The line follows the count as the Pile fills, and goes when the level changes.
+				Move(main, view, 5, 4);
+				s.AddItems(s.TileIndex(5, 4, 0), Goblins.Sim.Material.Fungus, 3);
+				sim.Apply(new SetPaused(false));
+				main._Process(0.1);
+				sim.Apply(new SetPaused(true));
+				ExpectHover(main, "A Pile, counted solemnly: Fungus 3.");
+				Key(main, Godot.Key.Period);
+				ExpectHover(main, "");
+			});
+
+			// The real game: the starting Grub and Grog are hauled to a Pile painted with the Pile Tool, and the hover line reads it.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Require(s.GoblinCount == 7, $"A new warren has {s.GoblinCount} Grunts, not 7.");
+				Key(main, Godot.Key.P);
+				Drag(main, view, MouseButton.Left, 12, 12, 13, 13);
+				sim.Apply(new SetPaused(false));
+				sim.Apply(new SetSpeed(4));
+				for (var frame = 0; frame < 120; frame++)
+					main._Process(0.25);
+				int Stored(Goblins.Sim.Material material) =>
+					new[] { (12, 12), (13, 12), (12, 13), (13, 13) }.Sum(p => s.StoredCount(s.TileIndex(p.Item1, p.Item2, 0), material));
+				Require(Stored(Goblins.Sim.Material.Grub) == 14 && Stored(Goblins.Sim.Material.Grog) == 7,
+					$"The Pile holds {Stored(Goblins.Sim.Material.Grub)} Grub and {Stored(Goblins.Sim.Material.Grog)} Grog, not 14 and 7.");
+				sim.Apply(new SetPaused(true));
+				var (stockedX, stockedY) = new[] { (12, 12), (13, 12), (12, 13), (13, 13) }
+					.First(p => s.StoredCount(s.TileIndex(p.Item1, p.Item2, 0), Goblins.Sim.Material.Grub) > 0);
+				Move(main, view, stockedX, stockedY);
+				Require(main.HoverText.StartsWith("A Pile, counted solemnly:"), $"The hover line over the stocked Pile was \"{main.HoverText}\".");
+			});
+
+			CountLabelChecks();
+			PileCountChecks();
+
+			GD.Print("Selection input checks passed (18 scenarios, count labels, pile counts).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -122,6 +176,44 @@ public partial class SelectionInputChecks : Node
 			Require(actual == label, $"CountLabel.Format({count}) was \"{actual}\", expected \"{label}\".");
 			var width = font.GetStringSize(actual, HorizontalAlignment.Left, -1, WarrenView.CountFontSize).X;
 			Require(width + 2 <= WarrenView.CellSize, $"Count {count} (\"{actual}\") is {width} px wide and overflows its cell.");
+		}
+	}
+
+	static void ExpectHover(Main main, string expected) =>
+		Require(main.HoverText == expected, $"The hover line was \"{main.HoverText}\", expected \"{expected}\".");
+
+	// A Pile tile draws two counts: full materials first, then the larger count, and Material order on a tie. Counts are
+	// given in Material order: Dirt, Stone, Grub, Fungus, Grog.
+	static void PileCountChecks()
+	{
+		var (none, dirt, stone, grub, fungus, grog) = (Goblins.Sim.Material.None, Goblins.Sim.Material.Dirt, Goblins.Sim.Material.Stone,
+			Goblins.Sim.Material.Grub, Goblins.Sim.Material.Fungus, Goblins.Sim.Material.Grog);
+		var cases = new (int[] Counts, Goblins.Sim.Material First, Goblins.Sim.Material Second)[]
+		{
+			([0, 0, 0, 0, 0], none, none),
+			([0, 0, 0, 0, 5], grog, none),
+			([5, 30, 0, 0, 0], stone, dirt),
+			([30, 30, 0, 0, 0], dirt, stone),
+			([29, 28, 30, 1, 30], grub, grog),
+			([3, 20, 7, 20, 2], stone, fungus),
+			([10, 10, 10, 10, 10], dirt, stone),
+			([29, 30, 29, 29, 29], stone, dirt),
+			([1, 2, 3, 4, 5], grog, fungus),
+			([30, 1, 0, 0, 0], dirt, stone),
+			([0, 0, 29, 30, 0], fungus, grub),
+			([0, 0, 0, 30, 30], fungus, grog),
+		};
+		foreach (var (counts, first, second) in cases)
+		{
+			var s = Simulation.NewWorld(seed: 1).State;
+			var tile = s.TileIndex(4, 4, 0);
+			Array.Clear(s.TileItems);
+			s.Piles[tile] = 1;
+			for (var i = 0; i < counts.Length; i++)
+				s.AddItems(tile, (Goblins.Sim.Material)(i + 1), counts[i]);
+			PileCounts.Pick(s, tile, out var actualFirst, out var actualSecond);
+			Require(actualFirst == first && actualSecond == second,
+				$"Counts [{string.Join(", ", counts)}] drew {actualFirst}, {actualSecond}; expected {first}, {second}.");
 		}
 	}
 

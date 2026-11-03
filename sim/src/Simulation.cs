@@ -40,10 +40,15 @@ public sealed class Simulation
 
 	public static bool IsValidSpeed(int speed) => speed is 1 or 2 or 4;
 
-	// The starting cluster on z0: a plus around the map centre, as (dx, dy) from the centre tile.
-	static readonly (int Dx, int Dy)[] StartingCluster = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)];
+	// The starting cluster on z0: a plus around the map centre with its top corners filled in, as (dx, dy) from the centre tile.
+	static readonly (int Dx, int Dy)[] StartingCluster = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1)];
 
-	/// <summary>The P2 warren: flat and identical for every seed. The seed only seeds <see cref="SimRandom"/>.</summary>
+	// The tile beside the cluster, as (dx, dy) from the centre tile, where the starting Grub and Grog lie loose.
+	static readonly (int Dx, int Dy) StartingSupplies = (2, 0);
+	const int StartingGrub = 14;
+	const int StartingGrog = 7;
+
+	/// <summary>The P3 warren: flat and identical for every seed. The seed only seeds <see cref="SimRandom"/>.</summary>
 	public static Simulation NewWorld(int seed)
 	{
 		var s = new SimState
@@ -79,6 +84,10 @@ public sealed class Simulation
 			s.GoblinY[g] = MapHeight / 2 + StartingCluster[g].Dy;
 			s.GoblinZ[g] = 0;
 		}
+
+		var supplies = s.TileIndex(MapWidth / 2 + StartingSupplies.Dx, MapHeight / 2 + StartingSupplies.Dy, 0);
+		s.AddItems(supplies, Material.Grub, StartingGrub);
+		s.AddItems(supplies, Material.Grog, StartingGrog);
 
 		return new Simulation(s);
 	}

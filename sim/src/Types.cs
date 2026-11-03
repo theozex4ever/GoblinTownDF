@@ -13,6 +13,9 @@ public enum Material : byte
 	None,
 	Dirt,
 	Stone,
+	Grub,
+	Fungus,
+	Grog,
 }
 
 public enum Role : byte

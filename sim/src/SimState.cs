@@ -29,7 +29,7 @@ public sealed class SimState
 	public byte[] Designations { get; set; } = [];
 	public byte[] DigProgress { get; set; } = [];
 	/// <summary>
-	/// Units of each material on each tile: <see cref="CountedMaterials"/> counts per tile, Dirt then Stone, at
+	/// Units of each material on each tile: <see cref="CountedMaterials"/> counts per tile, in Material order, at
 	/// tile * CountedMaterials + (material - 1). Read through <see cref="ItemCount"/>, add through <see cref="AddItems"/>.
 	/// </summary>
 	public int[] TileItems { get; set; } = [];
@@ -47,7 +47,7 @@ public sealed class SimState
 	// Derived and not saved; loading rebuilds it. Read through IsHaulReachable, which also checks the unit's storage.
 	[JsonIgnore]
 	public byte[] HaulReachable { get; set; } = [];
-	// Per region and counted material (Dirt, then Stone), at (region - 1) * CountedMaterials + (material - 1): 1 when some
+	// Per region and counted material (in Material order), at (region - 1) * CountedMaterials + (material - 1): 1 when some
 	// Pile tile of the region has room for one more unit of the material. Derived and not saved; loading rebuilds it. Read through HasStorageRoom.
 	[JsonIgnore]
 	public byte[] StorageRoom { get; set; } = new byte[MaxGoblins * CountedMaterials];
@@ -85,8 +85,8 @@ public sealed class SimState
 	/// <summary>Ticks spent so far picking a unit up or dropping it off. Change through <see cref="GoblinTasks"/> only.</summary>
 	public byte[] GoblinWorkTicks { get; set; } = new byte[MaxGoblins];
 
-	/// <summary>The materials a tile keeps a count for: Dirt and Stone (every Material but None).</summary>
-	public const int CountedMaterials = 2;
+	/// <summary>The materials a tile keeps a count for: every <see cref="Goblins.Sim.Material"/> but None, which the enum numbers 1 upward without gaps.</summary>
+	public static readonly int CountedMaterials = Enum.GetValues<Material>().Length - 1;
 
 	public int TileIndex(int x, int y, int z) => x + y * Width + z * Width * Height;
 
@@ -118,7 +118,7 @@ public sealed class SimState
 	/// <summary>Units of <paramref name="material"/> on a tile that is not a Pile; 0 on a Pile tile.</summary>
 	public int LooseCount(int tile, Material material) => IsPile(tile) ? 0 : ItemCount(tile, material);
 
-	/// <summary>The first material (Dirt, then Stone) with a loose unit on the tile, or None when it holds none or is a Pile.</summary>
+	/// <summary>The first material (in Material order) with a loose unit on the tile, or None when it holds none or is a Pile.</summary>
 	public Material LooseMaterial(int tile)
 	{
 		for (var material = Material.Dirt; (int)material <= CountedMaterials; material++)
@@ -149,7 +149,7 @@ public sealed class SimState
 	/// <summary>Whether a Pile tile has room for one more unit of <paramref name="material"/>. A tile that is not a Pile has none.</summary>
 	public bool PileHasRoom(int tile, Material material) => IsPile(tile) && ItemCount(tile, material) < PileCapacity;
 
-	/// <summary>The first material (Dirt, then Stone) with a loose unit on the tile that has storage to go to, or None.</summary>
+	/// <summary>The first material (in Material order) with a loose unit on the tile that has storage to go to, or None.</summary>
 	public Material HaulableMaterial(int tile)
 	{
 		for (var material = Material.Dirt; (int)material <= CountedMaterials; material++)
@@ -171,7 +171,7 @@ public sealed class SimState
 	static int ItemSlot(int tile, Material material)
 	{
 		if ((int)material < 1 || (int)material > CountedMaterials)
-			throw new ArgumentOutOfRangeException(nameof(material), material, "Tiles count Dirt and Stone only.");
+			throw new ArgumentOutOfRangeException(nameof(material), material, "Tiles count a real Material only, not None.");
 		return tile * CountedMaterials + (int)material - 1;
 	}
 

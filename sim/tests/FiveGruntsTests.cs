@@ -34,7 +34,7 @@ public class FiveGruntsTests
 	[Fact]
 	public void Five_goblins_digging_a_room_never_claim_the_same_Designation()
 	{
-		var sim = Simulation.NewWorld(seed: 3);
+		var sim = NewWorldWithFiveGrunts(seed: 3);
 		var s = sim.State;
 		sim.Apply(new Designate(DesignationKind.DigStairs, 0, 12, 12, 20, 20));
 
@@ -64,7 +64,7 @@ public class FiveGruntsTests
 
 	static Simulation Replay(int seed, int ticks)
 	{
-		var sim = Simulation.NewWorld(seed);
+		var sim = NewWorldWithFiveGrunts(seed);
 		var next = 0;
 		for (var tick = 0; tick < ticks; tick++)
 		{

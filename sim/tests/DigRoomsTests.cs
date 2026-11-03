@@ -93,7 +93,7 @@ public class DigRoomsTests
 	[InlineData(TileKind.OpenAir)]
 	public void Dig_on_a_tile_that_is_not_Solid_creates_no_designation(TileKind kind)
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		var tile = s.TileIndex(16, 15, 0);
 		s.TileKinds[tile] = (byte)kind;
@@ -109,7 +109,7 @@ public class DigRoomsTests
 	[Fact]
 	public void Dig_on_a_rectangle_of_Floor_designates_nothing()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 
 		sim.Apply(DigRect(z: 0, x0: 10, y0: 10, x1: 14, y1: 14));
 
@@ -158,7 +158,7 @@ public class DigRoomsTests
 	[Fact]
 	public void Dig_is_dug_from_beside_and_never_from_Stairs_directly_above()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		// Stairs at (16, 15, 0) with Solid under it. Dig stairs could be dug from there; Dig cannot.
 		s.TileKinds[s.TileIndex(16, 15, 0)] = (byte)TileKind.Stairs;

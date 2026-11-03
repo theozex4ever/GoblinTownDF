@@ -14,7 +14,7 @@ public class LooseItemsTests
 	[Fact]
 	public void A_fresh_world_holds_no_items()
 	{
-		var s = Simulation.NewWorld(seed: 1).State;
+		var s = NewWorldWithFiveGrunts(seed: 1).State;
 
 		for (var tile = 0; tile < s.TileKinds.Length; tile++)
 		{
@@ -120,7 +120,7 @@ public class LooseItemsTests
 	[Fact]
 	public void A_save_with_a_negative_item_count_is_rejected()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		sim.State.TileItems[5] = -1;
 
 		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));
@@ -132,7 +132,7 @@ public class LooseItemsTests
 	[InlineData("[0,0,0]")]
 	public void A_save_with_a_missing_or_wrong_length_item_array_is_rejected(string value)
 	{
-		var node = JsonNode.Parse(SimJson.Serialize(Simulation.NewWorld(seed: 1)))!;
+		var node = JsonNode.Parse(SimJson.Serialize(NewWorldWithFiveGrunts(seed: 1)))!;
 		node["TileItems"] = JsonNode.Parse(value);
 
 		Assert.Throws<JsonException>(() => SimJson.Deserialize(node.ToJsonString()));
@@ -141,7 +141,7 @@ public class LooseItemsTests
 	[Fact]
 	public void An_item_array_one_entry_too_long_is_rejected()
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		sim.State.TileItems = [.. sim.State.TileItems, 0];
 
 		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));
@@ -168,7 +168,7 @@ public class LooseItemsTests
 	[Fact]
 	public void Looking_up_the_count_of_no_material_is_rejected()
 	{
-		var s = Simulation.NewWorld(seed: 1).State;
+		var s = NewWorldWithFiveGrunts(seed: 1).State;
 
 		Assert.Throws<ArgumentOutOfRangeException>(() => s.ItemCount(0, Material.None));
 		Assert.Throws<ArgumentOutOfRangeException>(() => s.AddItems(0, Material.None, 1));
@@ -177,7 +177,7 @@ public class LooseItemsTests
 	[Fact]
 	public void Adding_a_negative_number_of_units_is_rejected()
 	{
-		var s = Simulation.NewWorld(seed: 1).State;
+		var s = NewWorldWithFiveGrunts(seed: 1).State;
 
 		Assert.Throws<ArgumentOutOfRangeException>(() => s.AddItems(0, Material.Dirt, -1));
 		Assert.Equal(0, s.ItemCount(0, Material.Dirt));
@@ -186,7 +186,7 @@ public class LooseItemsTests
 	[Fact]
 	public void RemoveItems_takes_units_off_a_tile_and_never_goes_below_zero()
 	{
-		var s = Simulation.NewWorld(seed: 1).State;
+		var s = NewWorldWithFiveGrunts(seed: 1).State;
 		s.AddItems(7, Material.Stone, 2);
 
 		s.RemoveItems(7, Material.Stone, 1);
@@ -201,7 +201,7 @@ public class LooseItemsTests
 	[Fact]
 	public void LooseMaterial_names_the_first_loose_material_on_a_tile_and_none_on_a_Pile()
 	{
-		var s = Simulation.NewWorld(seed: 1).State;
+		var s = NewWorldWithFiveGrunts(seed: 1).State;
 		Assert.Equal(Material.None, s.LooseMaterial(7));
 
 		s.AddItems(7, Material.Stone, 1);
@@ -216,7 +216,7 @@ public class LooseItemsTests
 
 	static Simulation WorldWithShaftAt(int x, int y)
 	{
-		var sim = Simulation.NewWorld(seed: 1);
+		var sim = NewWorldWithFiveGrunts(seed: 1);
 		var s = sim.State;
 		s.TileKinds[s.TileIndex(x, y, 0)] = (byte)TileKind.Stairs;
 		s.TileKinds[s.TileIndex(x, y, 1)] = (byte)TileKind.Stairs;
@@ -228,7 +228,7 @@ public class LooseItemsTests
 
 	static Simulation Replay(int seed, (int Tick, Command Command)[] log, int ticks)
 	{
-		var sim = Simulation.NewWorld(seed);
+		var sim = NewWorldWithFiveGrunts(seed);
 		var next = 0;
 		for (var tick = 0; tick < ticks; tick++)
 		{
