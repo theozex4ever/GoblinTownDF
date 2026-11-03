@@ -167,7 +167,12 @@ public class GrogTests
 	{
 		var sim = Lone(grog: 0);
 
-		RunTicks(sim, 3000);
+		// Sleep is kept topped up so that the goblin's only Craving is the Grog nobody can fetch.
+		for (var i = 0; i < 30; i++)
+		{
+			sim.State.GoblinSleep[0] = 100;
+			RunTicks(sim, 100);
+		}
 
 		Assert.Equal(0, sim.State.GoblinGrog[0]);
 		Assert.Equal(1, sim.State.GoblinCount);

@@ -12,8 +12,10 @@ namespace Goblins.Sim;
 /// A Tend: Approaching a Grub Pit tile, then Tending it for <see cref="ProductionRules.TendTicks"/> working ticks, after which the tile
 /// spawns Grub and the goblin is Idle again.
 /// A Craving ends any of those Tasks at once, dropping what the goblin carries: it goes Seeking the nearest unit of Grub,
-/// then Eating it where it lies, or SeekingGrog and Drinking for a Craving for Grog. A goblin finishes the one Need it
-/// has begun before it considers the other.
+/// then Eating it where it lies, or SeekingGrog and Drinking for a Craving for Grog, or SeekingHeap (walking to the
+/// nearest Sleeping Heap tile) and Sleeping there, or Sleeping where it stands when no Heap is in reach. A goblin finishes the one Need it
+/// has begun before it considers another. Sleeping lasts until the Sleep meter is full, whatever else is craved; the one
+/// thing that ends a Task already satisfying a Need is Collapse, at Sleep 0, which puts the goblin to sleep on the spot.
 /// A new Task is added here and nowhere else. Movement along a path stays in <see cref="JobSystem"/>,
 /// which only counts <see cref="SimState.GoblinStepTicks"/>.
 /// </summary>
@@ -164,8 +166,43 @@ public static class GoblinTasks
 	{
 		if (supply is not (Material.Grub or Material.Grog))
 			throw new ArgumentOutOfRangeException(nameof(supply), supply, "A Need is met with Grub or Grog.");
-		if (IsSeekingTask((GoblinTask)s.GoblinTask[g]) || IsConsumingTask((GoblinTask)s.GoblinTask[g]))
+		if (IsSatisfyingTask((GoblinTask)s.GoblinTask[g]))
 			throw new InvalidOperationException($"Goblin {g} is already satisfying a Need and finishes it before considering another.");
+		BeginNeedTask(s, g, dropTile, supply == Material.Grub
+			? eating ? GoblinTask.Eating : GoblinTask.Seeking
+			: eating ? GoblinTask.Drinking : GoblinTask.SeekingGrog);
+	}
+
+	/// <summary>
+	/// Any Task but a seeking, consuming or sleeping one → SeekingHeap, walking to the nearest Sleeping Heap tile, or Sleeping at once
+	/// when <paramref name="asleep"/> (the goblin already stands on a Heap, or no Heap is in reach and it sleeps where it stands).
+	/// Drops any wander and abandons any Job, as <see cref="BeginSeek"/> does, and puts a carried unit down on <paramref name="dropTile"/> first.
+	/// </summary>
+	public static void BeginSleep(SimState s, int g, int dropTile, bool asleep)
+	{
+		if (IsSatisfyingTask((GoblinTask)s.GoblinTask[g]))
+			throw new InvalidOperationException($"Goblin {g} is already satisfying a Need and finishes it before considering another.");
+		BeginNeedTask(s, g, dropTile, asleep ? GoblinTask.Sleeping : GoblinTask.SeekingHeap);
+	}
+
+	/// <summary>
+	/// Any Task but Sleeping → Sleeping where the goblin stands, because its Sleep meter has reached 0. Unlike a Craving this takes the goblin
+	/// off a Task that satisfies a Need as well, a meal or a walk to a Heap included; the unit it was about to eat stays where it is.
+	/// A carried unit is put down on <paramref name="dropTile"/> first, as in <see cref="BeginSleep"/>.
+	/// </summary>
+	public static void BeginCollapse(SimState s, int g, int dropTile)
+	{
+		if (s.GoblinSleep[g] != 0)
+			throw new InvalidOperationException($"Goblin {g} has Sleep {s.GoblinSleep[g]}, not 0, so it does not Collapse.");
+		if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Sleeping)
+			throw new InvalidOperationException($"Goblin {g} is already asleep.");
+		BeginNeedTask(s, g, dropTile, GoblinTask.Sleeping);
+	}
+
+	// The common start of a Task that satisfies a Need: any carried unit goes down on dropTile, which the caller has chosen as
+	// a walkable tile that can take it, the Job and wander are dropped, and the counters start from nothing.
+	static void BeginNeedTask(SimState s, int g, int dropTile, GoblinTask task)
+	{
 		var carried = (Material)s.GoblinCarry[g];
 		if (carried != Material.None)
 		{
@@ -181,9 +218,7 @@ public static class GoblinTasks
 		s.GoblinWorkTicks[g] = 0;
 		s.GoblinWanderTile[g] = -1;
 		s.GoblinWanderTicks[g] = 0;
-		s.GoblinTask[g] = (byte)(supply == Material.Grub
-			? eating ? GoblinTask.Eating : GoblinTask.Seeking
-			: eating ? GoblinTask.Drinking : GoblinTask.SeekingGrog);
+		s.GoblinTask[g] = (byte)task;
 	}
 
 	/// <summary>Seeking → Eating, on arrival at a tile holding Grub.</summary>
@@ -191,6 +226,30 @@ public static class GoblinTasks
 
 	/// <summary>SeekingGrog → Drinking, on arrival at a tile holding Grog.</summary>
 	public static void StartDrinking(SimState s, int g) => StartConsuming(s, g, GoblinTask.Drinking);
+
+	/// <summary>SeekingHeap → Sleeping, on arrival at a Heap tile, or when no Heap is left in reach and the goblin sleeps where it stands.</summary>
+	public static void StartSleeping(SimState s, int g)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.Sleeping;
+	}
+
+	/// <summary>
+	/// Counts one tick of sleep. The goblin gains a point of Sleep on the <see cref="NeedRules.HeapRecoveryTicks"/>th counted tick if it lies on a
+	/// Sleeping Heap tile now, and on the <see cref="NeedRules.FloorRecoveryTicks"/>th anywhere else, so the rate follows the tile under it,
+	/// whatever it was when the sleep began. A goblin whose meter reaches <see cref="NeedRules.MeterMax"/> wakes, Idle.
+	/// </summary>
+	public static void SleepTick(SimState s, int g)
+	{
+		var here = s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]);
+		if (++s.GoblinWorkTicks[g] < NeedRules.RecoveryTicks(s.RoomAt(here) == RoomKind.SleepingHeap))
+			return;
+
+		s.GoblinWorkTicks[g] = 0;
+		if (++s.GoblinSleep[g] >= NeedRules.MeterMax)
+			Release(s, g);
+	}
 
 	static void StartConsuming(SimState s, int g, GoblinTask task)
 	{
@@ -229,6 +288,21 @@ public static class GoblinTasks
 
 	/// <summary>True for Eating and Drinking: consuming a unit on the spot.</summary>
 	public static bool IsConsumingTask(GoblinTask task) => task is GoblinTask.Eating or GoblinTask.Drinking;
+
+	/// <summary>True for SeekingHeap and Sleeping: the Tasks that satisfy the Sleep Need.</summary>
+	public static bool IsSleepTask(GoblinTask task) => task is GoblinTask.SeekingHeap or GoblinTask.Sleeping;
+
+	/// <summary>True for every Task that satisfies a Need, which a goblin finishes before it considers another.</summary>
+	public static bool IsSatisfyingTask(GoblinTask task) => IsSeekingTask(task) || IsConsumingTask(task) || IsSleepTask(task);
+
+	/// <summary>The Need a Need-satisfying Task serves, or None for any other Task.</summary>
+	public static Need NeedOf(GoblinTask task) => task switch
+	{
+		GoblinTask.Seeking or GoblinTask.Eating => Need.Grub,
+		GoblinTask.SeekingGrog or GoblinTask.Drinking => Need.Grog,
+		GoblinTask.SeekingHeap or GoblinTask.Sleeping => Need.Sleep,
+		_ => Need.None,
+	};
 
 	/// <summary>The Material a Need-satisfying Task consumes: Grub for Seeking and Eating, Grog for SeekingGrog and Drinking, None for any other Task.</summary>
 	public static Material SupplyOf(GoblinTask task) => task switch
@@ -299,10 +373,11 @@ public static class GoblinTasks
 	/// shape of each Task, and the world rules (a claimed tile is designated or holds a loose unit, a Digging goblin
 	/// stands where it can dig, a PickingUp goblin stands on its unit, a Dropping goblin stands on a Pile tile, a
 	/// goblin carries a unit exactly while Carrying or Dropping, a seeking or consuming goblin has a Craving for what it seeks and an Eating or Drinking goblin stands
-	/// on a unit of it, a wander target is walkable on the goblin's own
+	/// on a unit of it, a Sleeping goblin's meter is below <see cref="NeedRules.MeterMax"/> (it has climbed past any Craving, or Collapsed), a wander target is walkable on the goblin's own
 	/// level and not its own tile, a tender works a Grub Pit tile that is not spawning, and a Tending one stands on it, no two goblins claim one tile to dig it or to tend it and no more claim a tile's loose units than it holds, step ticks are below
-	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> (<see cref="NeedRules.EatTicks"/> while Eating or Drinking, <see cref="ProductionRules.TendTicks"/> while Tending) and only count while
-	/// PickingUp, Dropping, Eating, Drinking or Tending, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
+	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> (<see cref="NeedRules.EatTicks"/> while Eating or Drinking, <see cref="ProductionRules.TendTicks"/> while Tending,
+	/// <see cref="NeedRules.FloorRecoveryTicks"/> while Sleeping) and only count while
+	/// PickingUp, Dropping, Eating, Drinking, Tending or Sleeping, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
 	/// Precondition: the state is structurally sound: array lengths match the map and goblin cap, tile, material
 	/// and designation values are defined, and every goblin stands on the map.
 	/// </summary>
@@ -326,9 +401,9 @@ public static class GoblinTasks
 				return $"Goblin {g} is {task} with nothing to carry.";
 			if (!carrying && carry != Material.None)
 				return $"Goblin {g} is {task} but carries {carry}.";
-			if (s.GoblinWorkTicks[g] >= (IsConsumingTask(task) ? NeedRules.EatTicks : task == GoblinTask.Tending ? ProductionRules.TendTicks : HaulActionTicks))
+			if (s.GoblinWorkTicks[g] >= (IsConsumingTask(task) ? NeedRules.EatTicks : task == GoblinTask.Tending ? ProductionRules.TendTicks : task == GoblinTask.Sleeping ? NeedRules.FloorRecoveryTicks : HaulActionTicks))
 				return $"Goblin {g} has work ticks {s.GoblinWorkTicks[g]}.";
-			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Tending))
+			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Tending or GoblinTask.Sleeping))
 				return $"Goblin {g} is {task} but has work ticks {s.GoblinWorkTicks[g]}.";
 
 			var job = s.GoblinJobTile[g];
@@ -409,16 +484,21 @@ public static class GoblinTasks
 				case GoblinTask.Eating:
 				case GoblinTask.SeekingGrog:
 				case GoblinTask.Drinking:
-					var supply = SupplyOf(task);
-					var meter = s.MeterOf(supply)[g];
+				case GoblinTask.SeekingHeap:
+				case GoblinTask.Sleeping:
+					var need = NeedOf(task);
+					var meter = s.MeterOf(need)[g];
 					if (job != -1)
 						return $"Goblin {g} is not working but holds job tile {job}.";
 					if (wanderTile != -1 || wanderTicks != 0)
 						return $"Goblin {g} is {task} but wanders.";
-					if (!NeedRules.IsCraving(meter))
-						return $"Goblin {g} is {task} with a {supply} meter of {meter}, which is no Craving.";
-					if (IsConsumingTask(task) && s.ItemCount(here, supply) == 0)
-						return $"Goblin {g} is {task} on tile {here}, which holds no {supply}.";
+					// A sleeper's meter climbs past the Craving that sent it to bed, so only the walk to bed needs one.
+					if (task == GoblinTask.Sleeping ? meter >= NeedRules.MeterMax : !NeedRules.IsCraving(meter))
+						return task == GoblinTask.Sleeping
+							? $"Goblin {g} is Sleeping with a Sleep meter of {meter}, which is full."
+							: $"Goblin {g} is {task} with a {need} meter of {meter}, which is no Craving.";
+					if (IsConsumingTask(task) && s.ItemCount(here, SupplyOf(task)) == 0)
+						return $"Goblin {g} is {task} on tile {here}, which holds no {SupplyOf(task)}.";
 					break;
 			}
 		}

@@ -376,7 +376,9 @@ public class PileCapacityTests
 		RunTicks(restored, 100);
 		Assert.Equal(SimJson.Serialize(sim), SimJson.Serialize(restored));
 		Assert.Equal(1, Count(restored.State, 25, 25, Material.Dirt));
-		Assert.Equal(GoblinTask.Idle, TaskOf(restored.State, 0));
+		// Done and carrying nothing; the Sleep meters drawn at the start of a world moved the Rng, so the pause before its next wander may already be over.
+		Assert.True(TaskOf(restored.State, 0) is GoblinTask.Idle or GoblinTask.Wandering);
+		Assert.Equal((byte)Material.None, restored.State.GoblinCarry[0]);
 	}
 
 	// Two goblins in rooms split by a Solid wall at x=10 on z0: goblin 0 at (5, 5) on the west, goblin 1 at (20, 5) on the east.
