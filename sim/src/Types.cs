@@ -25,6 +25,7 @@ public enum RoomKind : byte
 	Pile,
 	GrubPit,
 	SleepingHeap,
+	FungusFarm,
 }
 
 /// <summary>

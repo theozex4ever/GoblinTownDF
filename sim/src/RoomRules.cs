@@ -3,6 +3,7 @@ namespace Goblins.Sim;
 /// <summary>
 /// Painting and removing Rooms. Every Room follows the Pile's rules: Floor tiles only, one Room per tile (painting over a
 /// different Room skips the tile), a typed removal that takes only that Room, and Dig stairs clearing whatever Room it digs.
+/// A Fungus Farm also skips the Surface, where nothing grows.
 /// </summary>
 public static class RoomRules
 {
@@ -10,7 +11,7 @@ public static class RoomRules
 
 	/// <summary>
 	/// Paints <paramref name="room"/> on every Floor tile in the rectangle that holds no Room yet; a tile that holds a different
-	/// Room is skipped. A Pile also skips a tile holding more than <see cref="SimState.PileCapacity"/> of any material, which keeps
+	/// Room is skipped, and so is a tile on the Surface for a Fungus Farm. A Pile also skips a tile holding more than <see cref="SimState.PileCapacity"/> of any material, which keeps
 	/// its items loose; units already on a painted Pile tile become stored.
 	/// </summary>
 	public static void Paint(SimState s, RoomKind room, int z, int cx0, int cy0, int cx1, int cy1)
@@ -22,7 +23,7 @@ public static class RoomRules
 		for (var x = x0; x <= x1; x++)
 		{
 			var tile = s.TileIndex(x, y, z);
-			if (CanPaint(s.KindAt(tile)) && s.RoomAt(tile) == RoomKind.None && Accepts(s, room, tile))
+			if (CanPaint(s.KindAt(tile)) && s.RoomAt(tile) == RoomKind.None && Accepts(s, room, z, tile))
 				s.SetRoom(tile, room);
 		}
 		Settle(s);
@@ -51,7 +52,7 @@ public static class RoomRules
 	/// Brings the goblins' hauls and meals in line after a Pile appeared or went, or a unit of Grub or Grog was consumed or picked
 	/// up: a goblin fetching a unit that is now stored is freed, a goblin dropping a unit on a tile that is no longer a Pile carries
 	/// it on to the next nearest Pile, a goblin eating or drinking a unit that is gone is freed to look for another, and a goblin
-	/// tending a tile that is no longer a Grub Pit free to tend is freed.
+	/// tending a tile that is no longer a farm free to tend is freed.
 	/// Run after anything that clears or sets a Room (painting, removing, digging stairs on one) or takes a unit of Grub
 	/// or Grog off a tile, so <see cref="GoblinTasks.FindViolation"/> holds between ticks.
 	/// </summary>
@@ -73,7 +74,7 @@ public static class RoomRules
 					break;
 				case GoblinTask.Approaching:
 				case GoblinTask.Tending:
-					// A Grub Pit tile cleared or repainted under a tender takes its Job with it, and the tender's progress.
+					// A farm tile cleared or repainted under a tender takes its Job with it, and the tender's progress.
 					if (!FarmSystem.IsTendTarget(s, s.GoblinJobTile[g]))
 						GoblinTasks.Release(s, g);
 					break;
@@ -87,7 +88,12 @@ public static class RoomRules
 	}
 
 	// Whether a tile can take the Room beyond being Floor with no other Room on it.
-	static bool Accepts(SimState s, RoomKind room, int tile) => room != RoomKind.Pile || !PileRules.IsOverCapacity(s, tile);
+	static bool Accepts(SimState s, RoomKind room, int z, int tile) => room switch
+	{
+		RoomKind.Pile => !PileRules.IsOverCapacity(s, tile),
+		RoomKind.FungusFarm => z >= ProductionRules.FungusFarmMinZ,
+		_ => true,
+	};
 
 	static void RequireRoom(RoomKind room)
 	{

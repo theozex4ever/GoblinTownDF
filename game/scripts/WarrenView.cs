@@ -32,6 +32,7 @@ public partial class WarrenView : Node2D
 	static readonly Color WaitingHaulColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
 	public static readonly Color GrubPitTint = new(0.82f, 0.60f, 0.28f, 0.6f);
+	public static readonly Color FungusFarmTint = new(0.30f, 0.58f, 0.42f, 0.6f);
 	public static readonly Color SleepingHeapTint = new(0.42f, 0.48f, 0.90f, 0.6f);
 	static readonly Color SleepColor = new(0.45f, 0.52f, 0.95f);
 	// The "zzz" over a sleeping goblin.
@@ -93,6 +94,8 @@ public partial class WarrenView : Node2D
 			{
 				if (s.RoomAt(tile) == RoomKind.GrubPit)
 					DrawRect(rect, GrubPitTint);
+				else if (s.RoomAt(tile) == RoomKind.FungusFarm)
+					DrawRect(rect, FungusFarmTint);
 				else if (s.RoomAt(tile) == RoomKind.SleepingHeap)
 					DrawRect(rect, SleepingHeapTint);
 				for (var material = Goblins.Sim.Material.Dirt; (int)material <= SimState.CountedMaterials; material++)

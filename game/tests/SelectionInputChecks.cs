@@ -270,6 +270,81 @@ public partial class SelectionInputChecks : Node
 				Require(s.StoredCount(pile, Goblins.Sim.Material.Grub) == ProductionRules.GrubPerTend - 1, "A hungry Grunt did not eat a Grub from the Pile.");
 			});
 
+			// The Fungus Farm Tool follows the Pile's painting rules, and skips the Surface: Floor only, z1 or deeper, one Room per tile, right-drag removes only farms.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				for (var x = 9; x <= 14; x++)
+					s.TileKinds[s.TileIndex(x, 10, 1)] = (byte)TileKind.Floor;
+				s.TileKinds[s.TileIndex(13, 10, 1)] = (byte)TileKind.Stairs;
+				sim.Apply(new PaintPile(1, 10, 10, 10, 10));
+				sim.RecheckReachability();
+				Key(main, Godot.Key.F);
+				Drag(main, view, MouseButton.Left, 9, 10, 14, 10);
+				Require(CountRooms(s, RoomKind.FungusFarm) == 0, "A Fungus Farm was painted on the Surface.");
+				Key(main, Godot.Key.Period);
+				Drag(main, view, MouseButton.Left, 14, 10, 9, 10);
+				Require(CountRooms(s, RoomKind.FungusFarm) == 4, $"{CountRooms(s, RoomKind.FungusFarm)} Fungus Farm tiles were painted on z1, not 4.");
+				Require(s.RoomAt(s.TileIndex(10, 10, 1)) == RoomKind.Pile, "Painting a Fungus Farm replaced a Pile.");
+				Require(s.RoomAt(s.TileIndex(13, 10, 1)) == RoomKind.None, "Painting a Fungus Farm covered Stairs.");
+
+				// Right-drag with the Pile Tool leaves farms alone; with the farm Tool it takes them and leaves the Pile.
+				Key(main, Godot.Key.P);
+				Drag(main, view, MouseButton.Right, 9, 10, 14, 10);
+				Require(CountRooms(s, RoomKind.FungusFarm) == 4 && s.RoomAt(s.TileIndex(10, 10, 1)) == RoomKind.None, "Right-drag with the Pile Tool did not take only the Pile.");
+				Key(main, Godot.Key.F);
+				Drag(main, view, MouseButton.Right, 9, 10, 14, 10);
+				Require(CountRooms(s, RoomKind.FungusFarm) == 0, "Right-drag with the Fungus Farm Tool left farms behind.");
+			});
+
+			// The real game: Grunts take stairs they dug down to z1, dig a room, tend a Fungus Farm painted there, and haul its Fungus up to a Pile on the Surface.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Array.Clear(s.TileItems);
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinGrog, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinSleep, (byte)NeedRules.MeterMax);
+				var pile = s.TileIndex(10, 10, 0);
+				Key(main, Godot.Key.P);
+				Drag(main, view, MouseButton.Left, 10, 10, 10, 10);
+				Key(main, Godot.Key.S);
+				Drag(main, view, MouseButton.Left, 20, 16, 20, 16);
+				sim.Apply(new SetPaused(false));
+				sim.Apply(new SetSpeed(4));
+				var sawZ1 = false;
+				var frames = 0;
+				void Run(Func<bool> done, string failure)
+				{
+					for (var frame = 0; !done(); frame++)
+					{
+						Require(frame < 300 && frames++ < 600, failure);
+						main._Process(0.25);
+						sawZ1 |= Enumerable.Range(0, s.GoblinCount).Any(g => s.GoblinZ[g] == 1);
+						Require(GoblinTasks.FindViolation(s) is null, "A Task rule broke while the Grunts went underground.");
+					}
+				}
+
+				Run(() => s.KindAt(s.TileIndex(20, 16, 0)) == TileKind.Stairs, "The surface stairs were never dug.");
+				Key(main, Godot.Key.Period);
+				Drag(main, view, MouseButton.Left, 20, 16, 20, 16);
+				Run(() => s.KindAt(s.TileIndex(20, 16, 1)) == TileKind.Stairs, "The stairs down to z1 were never dug.");
+				Key(main, Godot.Key.D);
+				Drag(main, view, MouseButton.Left, 21, 16, 22, 16);
+				Run(() => s.KindAt(s.TileIndex(21, 16, 1)) == TileKind.Floor && s.KindAt(s.TileIndex(22, 16, 1)) == TileKind.Floor, "The z1 room was never dug.");
+				Key(main, Godot.Key.F);
+				Drag(main, view, MouseButton.Left, 21, 16, 22, 16);
+				Require(CountRooms(s, RoomKind.FungusFarm) == 2, "The Fungus Farm was not painted on z1.");
+				var tended = false;
+				Run(() =>
+				{
+					tended |= Enumerable.Range(0, s.GoblinCount).Any(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Tending && s.GoblinZ[g] == 1);
+					return s.StoredCount(pile, Goblins.Sim.Material.Fungus) >= 1;
+				}, "No Fungus reached the Pile.");
+				sim.Apply(new SetPaused(true));
+				Require(sawZ1 && tended, "No Grunt went underground to tend the farm.");
+			});
+
 			foreach (var button in new[] { MouseButton.Left, MouseButton.Right })
 			foreach (var key in new[] { Godot.Key.D, Godot.Key.S, Godot.Key.P, Godot.Key.G, Godot.Key.Escape, Godot.Key.Period, Godot.Key.Comma })
 				WithMain((main, view, sim) =>
@@ -602,6 +677,9 @@ public partial class SelectionInputChecks : Node
 		for (var x = x0; x <= x1; x++)
 			Require(state.RoomAt(state.TileIndex(x, y, 0)) == room, $"Expected {room} at ({x}, {y}, 0).");
 	}
+
+	static int CountRooms(SimState state, RoomKind room) =>
+		Enumerable.Range(0, state.TileKinds.Length).Count(tile => state.RoomAt(tile) == room);
 
 	static void Require(bool condition, string message)
 	{
