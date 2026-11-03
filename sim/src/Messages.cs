@@ -22,6 +22,20 @@ public sealed record Designate(DesignationKind Kind, int Z, int X0, int Y0, int 
 public sealed record CancelDesignation(int Z, int X0, int Y0, int X1, int Y1) : Command;
 
 /// <summary>
+/// Paints a Room on every Floor tile in the rectangle from (X0, Y0) to (X1, Y1) on level Z, corners in any order,
+/// clipped to the map. A single click is a 1×1 rectangle. Stairs, Solid and Open air tiles are skipped, and so is a
+/// tile that already holds a different Room. <c>PaintRoom(RoomKind.Pile, …)</c> is <see cref="PaintPile"/>.
+/// </summary>
+public sealed record PaintRoom(RoomKind Room, int Z, int X0, int Y0, int X1, int Y1) : Command;
+
+/// <summary>
+/// Removes the Room from every tile in the rectangle from (X0, Y0) to (X1, Y1) on level Z, corners in any order,
+/// clipped to the map. A single click is a 1×1 rectangle. Tiles that hold no Room, or a different one, are skipped.
+/// <c>RemoveRoom(RoomKind.Pile, …)</c> is <see cref="RemovePile"/>.
+/// </summary>
+public sealed record RemoveRoom(RoomKind Room, int Z, int X0, int Y0, int X1, int Y1) : Command;
+
+/// <summary>
 /// Paints a Pile on every Floor tile in the rectangle from (X0, Y0) to (X1, Y1) on level Z, corners in any order,
 /// clipped to the map. A single click is a 1×1 rectangle. Stairs, Solid and Open air tiles are skipped, and so is
 /// a tile holding more than <see cref="SimState.PileCapacity"/> of any material, whose items stay loose. Loose

@@ -33,7 +33,7 @@ public sealed class Simulation
 
 	/// <summary>
 	/// The one hook for reachability: call it after opening paths or adding Designations outside digging.
-	/// Digging a tile, the Designate command, and the Pile commands already call it. Cancellation needs no recheck because
+	/// Digging a tile, the Designate command, and the Room commands already call it. Cancellation needs no recheck because
 	/// IsReachable also checks that the Designation still exists.
 	/// </summary>
 	public void RecheckReachability() => _jobs.RecheckReachability(State);
@@ -124,11 +124,19 @@ public sealed class Simulation
 				_jobs.Cancel(State, c);
 				break;
 			case PaintPile c:
-				PileRules.Paint(State, c);
+				RoomRules.Paint(State, RoomKind.Pile, c.Z, c.X0, c.Y0, c.X1, c.Y1);
 				RecheckReachability();
 				break;
 			case RemovePile c:
-				PileRules.Remove(State, c);
+				RoomRules.Remove(State, RoomKind.Pile, c.Z, c.X0, c.Y0, c.X1, c.Y1);
+				RecheckReachability();
+				break;
+			case PaintRoom c:
+				RoomRules.Paint(State, c.Room, c.Z, c.X0, c.Y0, c.X1, c.Y1);
+				RecheckReachability();
+				break;
+			case RemoveRoom c:
+				RoomRules.Remove(State, c.Room, c.Z, c.X0, c.Y0, c.X1, c.Y1);
 				RecheckReachability();
 				break;
 			default:

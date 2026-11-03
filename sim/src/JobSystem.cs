@@ -587,14 +587,14 @@ public sealed class JobSystem
 		s.TileKinds[job] = (byte)TileRules.DugKind(s.DesignationAt(job));
 		s.Designations[job] = (byte)DesignationKind.None;
 		s.DigProgress[job] = 0;
-		// Only Floor can hold a Pile; its stock stays on the tile, loose.
-		var wasPile = s.Piles[job] != 0;
-		s.Piles[job] = 0;
+		// Only Floor can hold a Room; a Pile's stock stays on the tile, loose.
+		var hadRoom = s.RoomAt(job) != RoomKind.None;
+		RoomRules.Clear(s, job);
 		s.AddItems(job, material, 1);
 		var layer = s.Width * s.Height;
 		events.Add(new TileDug(job % s.Width, job / s.Width % s.Height, job / layer, material));
 		GoblinTasks.Release(s, goblin);
-		if (wasPile)
+		if (hadRoom)
 			PileRules.Settle(s);
 		RecheckReachability(s);
 	}

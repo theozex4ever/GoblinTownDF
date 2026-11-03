@@ -128,6 +128,23 @@ public sealed class SimState
 
 	public bool IsPile(int tile) => Piles[tile] != 0;
 
+	/// <summary>The Room painted on a tile, or None. A tile holds one Room.</summary>
+	public RoomKind RoomAt(int tile) => IsPile(tile) ? RoomKind.Pile : RoomKind.None;
+
+	/// <summary>Paints <paramref name="room"/> on a tile, or clears it with None. The caller has checked the tile can take it; <see cref="RoomRules"/> does.</summary>
+	public void SetRoom(int tile, RoomKind room)
+	{
+		switch (room)
+		{
+			case RoomKind.None:
+			case RoomKind.Pile:
+				Piles[tile] = (byte)(room == RoomKind.Pile ? 1 : 0);
+				break;
+			default:
+				throw new ArgumentOutOfRangeException(nameof(room), room, "Unknown Room.");
+		}
+	}
+
 	/// <summary>Units of <paramref name="material"/> on a Pile tile; 0 anywhere else.</summary>
 	public int StoredCount(int tile, Material material) => IsPile(tile) ? ItemCount(tile, material) : 0;
 
