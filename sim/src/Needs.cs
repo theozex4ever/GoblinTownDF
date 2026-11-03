@@ -1,9 +1,9 @@
 namespace Goblins.Sim;
 
 /// <summary>
-/// Every number of the Needs and of the production that feeds them (<see cref="ProductionRules"/> below), kept together so they can be tuned after play and shared with the Sleep Need that follows.
+/// Every number of the Needs and of the production that feeds them (<see cref="ProductionRules"/> below), kept together so they can be tuned after play.
 /// A Need is a 0 to <see cref="MeterMax"/> meter that drains over time; below <see cref="CravingThreshold"/> the
-/// goblin has a Craving, and at 0 it is Starving (Grub only).
+/// goblin has a Craving, at 0 Grub it is Starving, and at 0 Sleep it Collapses.
 /// </summary>
 public static class NeedRules
 {
@@ -16,6 +16,8 @@ public static class NeedRules
 
 	/// <summary>The Grub meter loses 1 point every this many ticks.</summary>
 	public const int GrubDrainTicks = 25;
+	/// <summary>The Sleep meter loses 1 point every this many ticks, except while the goblin sleeps.</summary>
+	public const int SleepDrainTicks = 45;
 	/// <summary>The Grog meter loses 1 point every this many ticks, and a waiting carrier's loses <see cref="WaitingGrogDrain"/>.</summary>
 	public const int GrogDrainTicks = 35;
 	/// <summary>Points a waiting carrier's Grog meter loses on each <see cref="GrogDrainTicks"/>th tick: double the rate of any other goblin.</summary>
@@ -24,6 +26,10 @@ public static class NeedRules
 	/// <summary>Ticks to eat one unit, and what it adds to the meter.</summary>
 	public const int EatTicks = 10;
 	public const int EatRestore = 50;
+
+	/// <summary>A sleeping goblin gains 1 point of Sleep every this many ticks on a Sleeping Heap, and every <see cref="FloorRecoveryTicks"/> anywhere else.</summary>
+	public const int HeapRecoveryTicks = 5;
+	public const int FloorRecoveryTicks = 10;
 
 	/// <summary>A Starving goblin walks and works on every this many ticks, so at half speed.</summary>
 	public const int StarvingActEvery = 2;
@@ -41,21 +47,40 @@ public static class NeedRules
 	/// <summary>False on the ticks a Starving goblin sits out; it acts on every <see cref="StarvingActEvery"/>th tick.</summary>
 	public static bool ActsThisTick(int grub, long tick) => !IsStarving(grub) || tick % StarvingActEvery == 0;
 
-	/// <summary>
-	/// The Need that wins when a goblin has Cravings for both: the lower meter, and Grub on a tie. Returns Grub or Grog, the
-	/// Material that satisfies the Need; the loser is <see cref="Other"/>.
-	/// </summary>
-	public static Material WinningNeed(int grub, int grog) => grub <= grog ? Material.Grub : Material.Grog;
+	/// <summary>Ticks of sleep per point of Sleep, for a sleeper on a Sleeping Heap or off one.</summary>
+	public static int RecoveryTicks(bool onHeap) => onHeap ? HeapRecoveryTicks : FloorRecoveryTicks;
 
-	public static Material Other(Material need) => need == Material.Grub ? Material.Grog : Material.Grub;
-
-	/// <summary>The Need a goblin would act on now, or None when it has no Craving: the lower of the Cravings, Grub on a tie.</summary>
-	public static Material LeadingCraving(int grub, int grog)
+	/// <summary>The Material that satisfies a Need, or None for Sleep, which is satisfied by lying down and needs no supply.</summary>
+	public static Material SupplyOf(Need need) => need switch
 	{
-		var winner = WinningNeed(grub, grog);
-		var winning = winner == Material.Grub ? grub : grog;
-		var other = winner == Material.Grub ? grog : grub;
-		return IsCraving(winning) ? winner : IsCraving(other) ? Other(winner) : Material.None;
+		Need.Grub => Material.Grub,
+		Need.Grog => Material.Grog,
+		_ => Material.None,
+	};
+
+	/// <summary>The bit a Need takes in the <c>passedOver</c> set of <see cref="LeadingCraving"/>.</summary>
+	public static int Bit(Need need) => 1 << (int)need;
+
+	/// <summary>
+	/// The Need a goblin acts on first: the lowest meter below <see cref="CravingThreshold"/>, and on a tie Grub, then Grog, then
+	/// Sleep. Needs in the <paramref name="passedOver"/> set (made of <see cref="Bit"/>s) are skipped, which is how a caller
+	/// moves on from a Craving it cannot satisfy. None when no Craving is left.
+	/// </summary>
+	public static Need LeadingCraving(int grub, int grog, int sleep, int passedOver = 0)
+	{
+		var leading = Need.None;
+		var lowest = CravingThreshold;
+		Consider(Need.Grub, grub, passedOver, ref leading, ref lowest);
+		Consider(Need.Grog, grog, passedOver, ref leading, ref lowest);
+		Consider(Need.Sleep, sleep, passedOver, ref leading, ref lowest);
+		return leading;
+	}
+
+	// Strictly lower only, so a tie keeps the Need considered first.
+	static void Consider(Need need, int meter, int passedOver, ref Need leading, ref int lowest)
+	{
+		if ((passedOver & Bit(need)) == 0 && meter < lowest)
+			(leading, lowest) = (need, meter);
 	}
 }
 
@@ -75,8 +100,9 @@ public static class NeedsSystem
 {
 	/// <summary>
 	/// Runs once per tick, after the tick counter has advanced: Grub drops 1 point on every <see cref="NeedRules.GrubDrainTicks"/>th
-	/// tick, and Grog 1 point on every <see cref="NeedRules.GrogDrainTicks"/>th, or <see cref="NeedRules.WaitingGrogDrain"/> for a
-	/// waiting carrier. Nothing is stored beyond the meters, so a save taken at any tick drains the same.
+	/// tick, Grog 1 point on every <see cref="NeedRules.GrogDrainTicks"/>th, or <see cref="NeedRules.WaitingGrogDrain"/> for a
+	/// waiting carrier, and Sleep 1 point on every <see cref="NeedRules.SleepDrainTicks"/>th, except for a goblin asleep, whose Sleep
+	/// only climbs. Nothing is stored beyond the meters, so a save taken at any tick drains the same.
 	/// </summary>
 	public static void Drain(SimState s)
 	{
@@ -87,6 +113,10 @@ public static class NeedsSystem
 		if (s.Tick % NeedRules.GrogDrainTicks == 0)
 			for (var g = 0; g < s.GoblinCount; g++)
 				s.GoblinGrog[g] = (byte)Math.Max(0, s.GoblinGrog[g] - (IsWaitingCarrier(s, g) ? NeedRules.WaitingGrogDrain : 1));
+		if (s.Tick % NeedRules.SleepDrainTicks == 0)
+			for (var g = 0; g < s.GoblinCount; g++)
+				if (s.GoblinSleep[g] > 0 && (GoblinTask)s.GoblinTask[g] != GoblinTask.Sleeping)
+					s.GoblinSleep[g]--;
 	}
 
 	/// <summary>

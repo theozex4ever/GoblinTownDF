@@ -7,7 +7,9 @@ namespace Goblins.Sim;
 /// carries it to the nearest Pile tile with room for its material and drops it (5 ticks); with no such tile it waits holding
 /// the unit; or walks to the Grub Pit tile and tends it (20 ticks), which starts the tile spawning Grub. A goblin with no reachable Job wanders instead.
 /// A goblin with a Craving for Grub or Grog that can reach a unit of it drops everything and goes to eat or drink it, whatever
-/// it was doing. With both, the lower meter wins (Grub on a tie), and a Craving with no unit in reach does not count.
+/// it was doing. A Craving for Sleep always can be met: the goblin walks to the nearest Sleeping Heap tile and sleeps there, or sleeps
+/// where it stands when none is in reach. With several Cravings the lowest meter wins (Grub, then Grog, then Sleep on a tie),
+/// and a Craving with no unit in reach does not count. A goblin at Sleep 0 collapses and sleeps on the spot, whatever else it was doing.
 /// Loops over the state arrays; the only memory it owns is reused scratch lists.
 /// </summary>
 public sealed class JobSystem
@@ -173,13 +175,14 @@ public sealed class JobSystem
 	{
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
-			// A Craving comes before any Job, and before a Starving goblin sits a tick out. Eating and drinking are not slowed.
+			// A Craving comes before any Job, and before a Starving goblin sits a tick out. Eating, drinking and sleeping are not slowed.
 			TryCraving(s, g);
-			if (!GoblinTasks.IsConsumingTask((GoblinTask)s.GoblinTask[g]) && !NeedRules.ActsThisTick(s.GoblinGrub[g], s.Tick))
+			var task = (GoblinTask)s.GoblinTask[g];
+			if (!GoblinTasks.IsConsumingTask(task) && task != GoblinTask.Sleeping && !NeedRules.ActsThisTick(s.GoblinGrub[g], s.Tick))
 				continue;
 
 			// An idle or wandering goblin takes any Job it can reach; with none, it wanders on.
-			if ((GoblinTask)s.GoblinTask[g] is GoblinTask.Idle or GoblinTask.Wandering && !TryClaim(s, g))
+			if (task is GoblinTask.Idle or GoblinTask.Wandering && !TryClaim(s, g))
 			{
 				Wander(s, g);
 				continue;
@@ -223,46 +226,86 @@ public sealed class JobSystem
 				case GoblinTask.Drinking:
 					Consume(s, g);
 					break;
+				case GoblinTask.SeekingHeap:
+					SeekHeap(s, g);
+					break;
+				case GoblinTask.Sleeping:
+					GoblinTasks.SleepTick(s, g);
+					break;
 			}
 		}
 	}
 
-	// A goblin with a Craving drops its Job at once when it can reach a unit of what it craves, Pile or loose. With Cravings for
-	// both, the lower meter is tried first (Grub on a tie) and a Craving with nothing in reach is passed over for the other.
-	// Anything carried is put down first, where a legal drop is found; a carrier with nowhere to put its unit keeps working.
-	// With nothing in reach nothing happens, and the goblin looks again next tick, which is how it notices supply or
-	// reachability changing. A goblin already satisfying a Need finishes it before it considers another.
+	// A goblin at Sleep 0 collapses at once, whatever it is doing, so long as it has somewhere to put down what it carries.
+	// Otherwise a goblin with a Craving drops its Job at once when it can meet it: it can reach a unit of what it craves, Pile or loose,
+	// or the Craving is for Sleep, which always can be met. The lowest meter is tried first (Grub, then Grog, then Sleep on a tie)
+	// and a Craving that cannot be met is passed over for the next. Anything carried is put down first, where a legal drop is found;
+	// a carrier with nowhere to put its unit keeps working, and a collapse waits for such a place. With nothing to do nothing
+	// happens, and the goblin looks again next tick, which is how it notices supply or reachability changing. A goblin already
+	// satisfying a Need finishes it before it considers another.
 	void TryCraving(SimState s, int goblin)
 	{
 		var task = (GoblinTask)s.GoblinTask[goblin];
-		if (GoblinTasks.IsSeekingTask(task) || GoblinTasks.IsConsumingTask(task))
+		if (s.GoblinSleep[goblin] == 0 && task != GoblinTask.Sleeping)
+		{
+			TryMeet(s, goblin, Need.Sleep, collapse: true);
+			return;
+		}
+		if (GoblinTasks.IsSatisfyingTask(task))
 			return;
 
-		var first = NeedRules.WinningNeed(s.GoblinGrub[goblin], s.GoblinGrog[goblin]);
-		if (!TryCraving(s, goblin, first))
-			TryCraving(s, goblin, NeedRules.Other(first));
+		var passedOver = 0;
+		for (var need = NeedRules.LeadingCraving(s.GoblinGrub[goblin], s.GoblinGrog[goblin], s.GoblinSleep[goblin]);
+			need != Need.None;
+			need = NeedRules.LeadingCraving(s.GoblinGrub[goblin], s.GoblinGrog[goblin], s.GoblinSleep[goblin], passedOver))
+		{
+			if (TryMeet(s, goblin, need, collapse: false))
+				return;
+			passedOver |= NeedRules.Bit(need);
+		}
 	}
 
-	// True when the goblin set out for a unit of the supply.
-	bool TryCraving(SimState s, int goblin, Material supply)
+	// True when the goblin set out to meet the Need: for a unit of Grub or Grog, or for a bed (the nearest Heap, or the floor under it).
+	bool TryMeet(SimState s, int goblin, Need need, bool collapse)
 	{
-		if (!NeedRules.IsCraving(s.MeterOf(supply)[goblin]))
-			return false;
-
-		ClearGoals();
-		AddSupplyGoals(s, supply);
+		var supply = NeedRules.SupplyOf(need);
 		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
-		if (_goals.Count == 0
-			|| !_pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _))
-			return false;
+		// Whether the goblin already has what it needs where it stands: a unit underfoot, or a bed (a Heap underfoot, or no Heap at all).
+		bool here;
+		if (supply != Material.None)
+		{
+			ClearGoals();
+			AddSupplyGoals(s, supply);
+			if (_goals.Count == 0
+				|| !_pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _))
+				return false;
+			here = _path.Count == 0;
+		}
+		else
+		{
+			// With no Heap in reach, or after a collapse, the bed is the floor underfoot.
+			here = true;
+			if (!collapse)
+			{
+				ClearGoals();
+				AddHeapGoals(s);
+				if (_goals.Count > 0
+					&& _pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _))
+					here = _path.Count == 0;
+			}
+		}
 
-		var onSupply = _path.Count == 0;
 		var carried = (Material)s.GoblinCarry[goblin];
 		var dropTile = -1;
 		if (carried != Material.None && !TryFindDropTile(s, goblin, carried, out dropTile))
 			return false;
 
-		GoblinTasks.BeginSeek(s, goblin, dropTile, eating: onSupply, supply);
+		if (collapse)
+			GoblinTasks.BeginCollapse(s, goblin, dropTile);
+		else if (supply == Material.None)
+			GoblinTasks.BeginSleep(s, goblin, dropTile, asleep: here);
+		else
+			GoblinTasks.BeginSeek(s, goblin, dropTile, eating: here, supply);
 		// The unit put down is a new loose Haul, or has taken a Pile tile's last slot of its material.
 		if (carried != Material.None)
 			RecheckReachability(s);
@@ -301,6 +344,27 @@ public sealed class JobSystem
 		for (var tile = 0; tile < s.Piles.Length; tile++)
 			if (s.ItemCount(tile, supply) > 0)
 				AddGoal(tile, tile);
+	}
+
+	// Every Sleeping Heap tile as a goal, in tile order, so a tie goes to the lowest tile index.
+	void AddHeapGoals(SimState s)
+	{
+		for (var tile = 0; tile < s.Rooms.Length; tile++)
+			if (s.Rooms[tile] == (byte)RoomKind.SleepingHeap)
+				AddGoal(tile, tile);
+	}
+
+	// Walks toward the nearest Sleeping Heap tile, found afresh at every step so a Heap painted or removed on the way changes the goal.
+	// The goblin lies down once it stands on one, and where it stands if no Heap is left in reach: the floor is always a bed.
+	void SeekHeap(SimState s, int goblin)
+	{
+		if (!StepDue(s, goblin))
+			return;
+
+		ClearGoals();
+		AddHeapGoals(s);
+		if (MoveToward(s, goblin) != Move.Moved)
+			GoblinTasks.StartSleeping(s, goblin);
 	}
 
 	// Walks toward the nearest unit of what the goblin seeks, found afresh at every step so a unit eaten, drunk or hauled off

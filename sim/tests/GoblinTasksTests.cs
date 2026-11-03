@@ -703,16 +703,17 @@ public class GoblinTasksTests
 		Assert.Null(GoblinTasks.FindViolation(s));
 	}
 
+	// Sleep sits at 100 here, so only Grub and Grog crave; SleepTests covers the three-way tie-break.
 	[Theory]
-	[InlineData(10, 30, Material.Grub)]
-	[InlineData(30, 10, Material.Grog)]
-	[InlineData(20, 20, Material.Grub)]
-	[InlineData(29, 30, Material.Grub)]
-	[InlineData(30, 29, Material.Grog)]
-	[InlineData(30, 30, Material.None)]
-	[InlineData(100, 0, Material.Grog)]
-	public void The_leading_Craving_is_the_lowest_meter_below_30_with_Grub_on_a_tie(int grub, int grog, Material expected)
+	[InlineData(10, 30, Need.Grub)]
+	[InlineData(30, 10, Need.Grog)]
+	[InlineData(20, 20, Need.Grub)]
+	[InlineData(29, 30, Need.Grub)]
+	[InlineData(30, 29, Need.Grog)]
+	[InlineData(30, 30, Need.None)]
+	[InlineData(100, 0, Need.Grog)]
+	public void The_leading_Craving_is_the_lowest_meter_below_30_with_Grub_on_a_tie(int grub, int grog, Need expected)
 	{
-		Assert.Equal(expected, NeedRules.LeadingCraving(grub, grog));
+		Assert.Equal(expected, NeedRules.LeadingCraving(grub, grog, sleep: 100));
 	}
 }

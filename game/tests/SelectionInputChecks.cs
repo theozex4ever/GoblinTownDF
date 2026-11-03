@@ -114,6 +114,126 @@ public partial class SelectionInputChecks : Node
 				Require(s.RoomAt(s.TileIndex(10, 11, 0)) == RoomKind.None, "Dig stairs left a Grub Pit on a Stairs tile.");
 			});
 
+			// The Sleeping Heap Tool follows the Pile's painting rules too: Floor only, a tile holds one Room, right-drag removes only Heaps, Dig stairs clears.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				sim.Apply(new PaintPile(0, 12, 10, 12, 10));
+				sim.Apply(new PaintRoom(RoomKind.GrubPit, 0, 11, 10, 11, 10));
+				s.TileKinds[s.TileIndex(13, 10, 0)] = (byte)TileKind.Stairs;
+				Key(main, Godot.Key.H);
+				Drag(main, view, MouseButton.Left, 14, 10, 10, 11);
+				ExpectRooms(s, RoomKind.SleepingHeap, 10, 10, 10, 10);
+				ExpectRooms(s, RoomKind.SleepingHeap, 14, 10, 14, 10);
+				ExpectRooms(s, RoomKind.SleepingHeap, 10, 11, 14, 11);
+				Require(s.RoomAt(s.TileIndex(12, 10, 0)) == RoomKind.Pile, "Painting a Heap replaced a Pile.");
+				Require(s.RoomAt(s.TileIndex(11, 10, 0)) == RoomKind.GrubPit, "Painting a Heap replaced a Grub Pit.");
+				Require(s.RoomAt(s.TileIndex(13, 10, 0)) == RoomKind.None, "Painting a Heap covered Stairs.");
+
+				// Right-drag with the Heap Tool takes the Heaps and leaves the Pile, the pit and Designations alone.
+				sim.Apply(new Designate(DesignationKind.DigStairs, 0, 10, 12, 11, 12));
+				Drag(main, view, MouseButton.Right, 9, 10, 15, 12);
+				Require(Enumerable.Range(10, 5).All(x => s.RoomAt(s.TileIndex(x, 11, 0)) == RoomKind.None), "Right-drag left Heaps behind.");
+				Require(s.RoomAt(s.TileIndex(12, 10, 0)) == RoomKind.Pile && s.RoomAt(s.TileIndex(11, 10, 0)) == RoomKind.GrubPit,
+					"Right-drag with the Heap Tool removed another Room.");
+				ExpectRectangle(s, 0, DesignationKind.DigStairs, 10, 12, 11, 12);
+
+				// Right-drag with the Pile Tool leaves Heaps alone, and Dig stairs through a Heap clears it.
+				Drag(main, view, MouseButton.Left, 10, 11, 10, 11);
+				Key(main, Godot.Key.P);
+				Drag(main, view, MouseButton.Right, 9, 10, 15, 12);
+				Require(s.RoomAt(s.TileIndex(10, 11, 0)) == RoomKind.SleepingHeap, "Right-drag with the Pile Tool removed a Heap.");
+				Key(main, Godot.Key.S);
+				Drag(main, view, MouseButton.Left, 10, 11, 10, 11);
+				sim.Apply(new SetPaused(false));
+				var frames = 0;
+				while (s.KindAt(s.TileIndex(10, 11, 0)) != TileKind.Stairs && frames++ < 400)
+					main._Process(0.1);
+				Require(frames < 400, "The stairs through the Heap were never dug.");
+				Require(s.RoomAt(s.TileIndex(10, 11, 0)) == RoomKind.None, "Dig stairs left a Heap on a Stairs tile.");
+			});
+
+			// The real game: Grunts craving Sleep walk to a painted Heap, share its one tile, and sleep there to a full meter.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Array.Clear(s.TileItems);
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinGrog, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinSleep, (byte)NeedRules.MeterMax);
+				Key(main, Godot.Key.H);
+				Drag(main, view, MouseButton.Left, 12, 12, 12, 12);
+				var heap = s.TileIndex(12, 12, 0);
+				Require(s.RoomAt(heap) == RoomKind.SleepingHeap, "The Heap was not painted.");
+				(s.GoblinSleep[0], s.GoblinSleep[1], s.GoblinSleep[2]) = (25, 20, 29);
+				sim.Apply(new SetPaused(false));
+				sim.Apply(new SetSpeed(4));
+				var shared = 0;
+				var frames = 0;
+				while (frames++ < 200 && !(shared == 3 && Enumerable.Range(0, 3).All(g => (GoblinTask)s.GoblinTask[g] != GoblinTask.Sleeping)))
+				{
+					main._Process(0.25);
+					Require(GoblinTasks.FindViolation(s) is null, "A Task rule broke while the Grunts went to bed.");
+					shared = Math.Max(shared, Enumerable.Range(0, 3).Count(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Sleeping
+						&& s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]) == heap));
+					Require(Enumerable.Range(0, 3).All(g => (GoblinTask)s.GoblinTask[g] != GoblinTask.Sleeping
+						|| s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]) == heap), "A Grunt slept off the Heap.");
+				}
+				Require(shared == 3, $"{shared} Grunts slept on the Heap at once, not 3.");
+				Require(frames < 200, "The Grunts never woke from the Heap.");
+				sim.Apply(new SetPaused(true));
+				// Waking means a full meter, which then drains again at the usual rate.
+				Require(Enumerable.Range(0, 3).All(g => s.GoblinSleep[g] >= 90), "A Grunt woke without a full Sleep meter.");
+			});
+
+			// The real game: with no Heap a Grunt lies down where it stands, and a digging Grunt whose Sleep reaches 0 collapses on the spot and sleeps uninterrupted.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Array.Clear(s.TileItems);
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinGrog, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinSleep, (byte)NeedRules.MeterMax);
+				Key(main, Godot.Key.S);
+				Drag(main, view, MouseButton.Left, 6, 6, 9, 7);
+				sim.Apply(new SetPaused(false));
+				var frames = 0;
+				while (!Enumerable.Range(0, s.GoblinCount).Any(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Digging) && frames++ < 200)
+					main._Process(0.1);
+				Require(frames < 200, "No Grunt started digging.");
+				var digger = Enumerable.Range(0, s.GoblinCount).First(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Digging);
+				// A few ticks into the dig, so it has progress to keep.
+				for (var tick = 0; tick < 5; tick++)
+					main._Process(0.1);
+				var dug = s.GoblinJobTile[digger];
+				var progress = s.DigProgress[dug];
+				Require(progress > 0 && (GoblinTask)s.GoblinTask[digger] == GoblinTask.Digging, "The digger is not mid-dig.");
+				var (x, y) = (s.GoblinX[digger], s.GoblinY[digger]);
+				var spare = Enumerable.Range(0, s.GoblinCount).First(g => g != digger);
+				var (spareX, spareY) = (s.GoblinX[spare], s.GoblinY[spare]);
+				(s.GoblinSleep[digger], s.GoblinSleep[spare]) = (0, 29);
+				main._Process(0.1);
+				Require((GoblinTask)s.GoblinTask[digger] == GoblinTask.Sleeping, $"The digger went on as {(GoblinTask)s.GoblinTask[digger]} at Sleep 0.");
+				Require((GoblinTask)s.GoblinTask[spare] == GoblinTask.Sleeping, $"The Grunt at Sleep 29 went on as {(GoblinTask)s.GoblinTask[spare]}.");
+				Require(s.DigProgress[dug] == progress && s.DesignationAt(dug) != DesignationKind.None, "The collapse threw the dig away.");
+
+				sim.Apply(new SetSpeed(4));
+				// Hunger and thirst arrive mid-sleep and wait their turn: the sleepers stay put until their meters are full.
+				for (frames = 0; frames < 140 && ((GoblinTask)s.GoblinTask[digger] == GoblinTask.Sleeping || (GoblinTask)s.GoblinTask[spare] == GoblinTask.Sleeping); frames++)
+				{
+					main._Process(0.25);
+					Require(GoblinTasks.FindViolation(s) is null, "A Task rule broke while the Grunts slept on the floor.");
+					if ((GoblinTask)s.GoblinTask[digger] == GoblinTask.Sleeping)
+						Require((s.GoblinX[digger], s.GoblinY[digger]) == (x, y), "The collapsed Grunt moved in its sleep.");
+					if ((GoblinTask)s.GoblinTask[spare] == GoblinTask.Sleeping)
+						Require((s.GoblinX[spare], s.GoblinY[spare]) == (spareX, spareY), "The Grunt with no Heap moved in its sleep.");
+				}
+				sim.Apply(new SetPaused(true));
+				Require(frames < 140, "The Grunts never woke.");
+				// Waking means a full meter, which then drains again at the usual rate.
+				Require(s.GoblinSleep[digger] >= 90 && s.GoblinSleep[spare] >= 90, $"The sleepers woke at {s.GoblinSleep[digger]} and {s.GoblinSleep[spare]}, not full.");
+			});
+
 			// The real game: Grunts tend a painted Grub Pit, haul the three Grub it yields to a Pile, and a hungry Grunt eats one.
 			WithMain((main, view, sim) =>
 			{
@@ -224,23 +344,31 @@ public partial class SelectionInputChecks : Node
 				Require(main.HoverText.StartsWith("A Pile, counted solemnly:"), $"The hover line over the stocked Pile was \"{main.HoverText}\".");
 			});
 
-			// The hover line names the Grub and Grog meters of the goblin under the cursor, ahead of any Pile under it.
+			// The hover line names the Grub, Grog and Sleep meters of the goblin under the cursor, ahead of any Pile under it.
 			WithMain((main, view, sim) =>
 			{
 				var s = sim.State;
 				(s.GoblinGrub[0], s.GoblinGrub[1], s.GoblinGrub[2], s.GoblinGrub[3]) = (74, 12, 0, 90);
 				(s.GoblinGrog[0], s.GoblinGrog[1], s.GoblinGrog[2], s.GoblinGrog[3]) = (91, 80, 100, 8);
+				(s.GoblinSleep[0], s.GoblinSleep[1], s.GoblinSleep[2], s.GoblinSleep[3]) = (85, 60, 100, 45);
+				(s.GoblinGrub[4], s.GoblinGrog[4], s.GoblinSleep[4]) = (100, 100, 12);
+				(s.GoblinGrub[5], s.GoblinGrog[5], s.GoblinSleep[5]) = (100, 100, 40);
+				GoblinTasks.BeginSleep(s, 5, dropTile: -1, asleep: true);
 				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
-				ExpectHover(main, "A Grunt. Grub 74/100, Grog 91/100. At peace with the world, and with lunch.");
+				ExpectHover(main, "A Grunt. Grub 74/100, Grog 91/100, Sleep 85/100. At peace with the world, and with lunch.");
 				Move(main, view, s.GoblinX[1], s.GoblinY[1]);
-				ExpectHover(main, "A Grunt. Grub 12/100, Grog 80/100. Thinking about nothing but Grub.");
+				ExpectHover(main, "A Grunt. Grub 12/100, Grog 80/100, Sleep 60/100. Thinking about nothing but Grub.");
 				Move(main, view, s.GoblinX[2], s.GoblinY[2]);
-				ExpectHover(main, "A Grunt. Grub 0/100, Grog 100/100. Starving, and bearing it at half speed with great dignity.");
+				ExpectHover(main, "A Grunt. Grub 0/100, Grog 100/100, Sleep 100/100. Starving, and bearing it at half speed with great dignity.");
 				Move(main, view, s.GoblinX[3], s.GoblinY[3]);
-				ExpectHover(main, "A Grunt. Grub 90/100, Grog 8/100. Thinking about nothing but Grog.");
+				ExpectHover(main, "A Grunt. Grub 90/100, Grog 8/100, Sleep 45/100. Thinking about nothing but Grog.");
+				Move(main, view, s.GoblinX[4], s.GoblinY[4]);
+				ExpectHover(main, "A Grunt. Grub 100/100, Grog 100/100, Sleep 12/100. Thinking about nothing but a lie-down, on anything flat.");
+				Move(main, view, s.GoblinX[5], s.GoblinY[5]);
+				ExpectHover(main, "A Grunt. Grub 100/100, Grog 100/100, Sleep 40/100. Fast asleep. Hunger and thirst may take a number.");
 				sim.Apply(new PaintPile(0, s.GoblinX[0], s.GoblinY[0], s.GoblinX[0], s.GoblinY[0]));
 				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
-				Require(main.HoverText.StartsWith("A Grunt. Grub 74/100, Grog 91/100."), $"A Pile hid the goblin on it: \"{main.HoverText}\".");
+				Require(main.HoverText.StartsWith("A Grunt. Grub 74/100, Grog 91/100, Sleep 85/100."), $"A Pile hid the goblin on it: \"{main.HoverText}\".");
 				// The line follows the meters as the sim drains them, and a goblin on another level is not under the cursor.
 				s.GoblinGrub[0] = 74;
 				s.GoblinGrog[0] = 91;
@@ -248,7 +376,7 @@ public partial class SelectionInputChecks : Node
 				sim.Apply(new SetPaused(false));
 				main._Process(0.1);
 				sim.Apply(new SetPaused(true));
-				ExpectHover(main, "A Grunt. Grub 74/100, Grog 90/100. At peace with the world, and with lunch.");
+				ExpectHover(main, "A Grunt. Grub 74/100, Grog 90/100, Sleep 85/100. At peace with the world, and with lunch.");
 				Key(main, Godot.Key.Period);
 				ExpectHover(main, "");
 			});
@@ -341,7 +469,7 @@ public partial class SelectionInputChecks : Node
 			CountLabelChecks();
 			PileCountChecks();
 
-			GD.Print("Selection input checks passed (23 scenarios, count labels, pile counts).");
+			GD.Print("Selection input checks passed (26 scenarios, count labels, pile counts).");
 			GetTree().Quit();
 		}
 		catch (Exception error)

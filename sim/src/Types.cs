@@ -24,6 +24,19 @@ public enum RoomKind : byte
 	None,
 	Pile,
 	GrubPit,
+	SleepingHeap,
+}
+
+/// <summary>
+/// What a goblin can crave. Grub and Grog are met with a Material of the same name; Sleep is met with no supply at all,
+/// only a place to lie down. The order is the tie-break when meters are equal: Grub, then Grog, then Sleep.
+/// </summary>
+public enum Need : byte
+{
+	None,
+	Grub,
+	Grog,
+	Sleep,
 }
 
 public enum Role : byte
@@ -54,4 +67,6 @@ public enum GoblinTask : byte
 	Drinking,
 	Approaching,
 	Tending,
+	SeekingHeap,
+	Sleeping,
 }

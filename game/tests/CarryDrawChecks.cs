@@ -26,6 +26,7 @@ public partial class CarryDrawChecks : Node
 			ColourChecks();
 			LooseLayoutChecks();
 			PipLayoutCheck();
+			ZzzLayoutCheck();
 
 			if (DisplayServer.GetName() == "headless")
 			{
@@ -41,7 +42,8 @@ public partial class CarryDrawChecks : Node
 			await LooseSquaresCheck();
 			await NeedMarksCheck();
 			await RoomTintCheck();
-			GD.Print("Carry draw checks passed (layout, colours, count order, 7 pixel scenarios).");
+			await SleepMarksCheck();
+			GD.Print("Carry draw checks passed (layout, colours, count order, 8 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -200,6 +202,65 @@ public partial class CarryDrawChecks : Node
 		ExpectColor(image, 12 * WarrenView.CellSize + 9, 10 * WarrenView.CellSize + 9, floor, "A tile beside the Grub Pit is tinted.");
 		var square = WarrenView.LooseSquare(new Rect2(11 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize), (int)Material.Grub - 1).GetCenter();
 		ExpectColor(image, (int)square.X, (int)square.Y, WarrenView.MaterialColor(Material.Grub), "The Grub loose on a Grub Pit is hidden by its tint.");
+	}
+
+	// A Sleeping Heap tile is tinted over the floor, a sleeping goblin wears "zzz" and an awake one does not, and a goblin craving Sleep
+	// wears a Sleep-coloured pip (Grub's on a three-way tie, Sleep's when it is lowest), over its "zzz" when it craves in its sleep.
+	async System.Threading.Tasks.Task SleepMarksCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		sim.Apply(new PaintRoom(RoomKind.SleepingHeap, 0, 10, 10, 10, 10));
+		for (var g = 0; g < s.GoblinCount; g++)
+			(s.GoblinGrub[g], s.GoblinGrog[g], s.GoblinSleep[g]) = (100, 100, 100);
+		(s.GoblinSleep[0], s.GoblinSleep[1], s.GoblinSleep[3]) = (50, 15, 15);
+		GoblinTasks.BeginSleep(s, 0, dropTile: -1, asleep: true);
+		GoblinTasks.BeginSleep(s, 1, dropTile: -1, asleep: true);
+		(s.GoblinGrub[2], s.GoblinGrog[2], s.GoblinSleep[2]) = (20, 20, 20);
+		(s.GoblinGrub[4], s.GoblinGrog[4], s.GoblinSleep[4]) = (25, 25, 10);
+		var image = await Render(sim);
+
+		var floor = new Color(0.62f, 0.62f, 0.64f);
+		var tint = WarrenView.SleepingHeapTint;
+		var tinted = floor * (1 - tint.A) + tint * tint.A;
+		var centre = new Rect2(10 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize).GetCenter();
+		ExpectColor(image, (int)centre.X, (int)centre.Y, new Color(tinted.R, tinted.G, tinted.B), "A Sleeping Heap tile is not tinted.");
+		ExpectColor(image, 11 * WarrenView.CellSize + 9, 10 * WarrenView.CellSize + 9, floor, "A tile beside the Heap is tinted.");
+
+		Rect2 Marker(int g) => new(s.GoblinX[g] * WarrenView.CellSize + 3, s.GoblinY[g] * WarrenView.CellSize + 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+		bool HasZzz(int g)
+		{
+			var marker = Marker(g);
+			var baseline = WarrenView.ZzzBaseline(marker);
+			for (var y = (int)baseline.Y - (WarrenView.ZzzFontSize - 2); y <= (int)baseline.Y; y++)
+			for (var x = (int)baseline.X; x < (int)baseline.X + 10; x++)
+				if (IsNear(image.GetPixel(x, y), WarrenView.ZzzColor))
+					return true;
+			return false;
+		}
+		Color PipAt(int g) => image.GetPixel((int)WarrenView.PipRect(Marker(g)).GetCenter().X, (int)WarrenView.PipRect(Marker(g)).GetCenter().Y);
+
+		Require(HasZzz(0), "A sleeping goblin has no \"zzz\".");
+		Require(HasZzz(1), "A goblin asleep and craving Sleep has no \"zzz\".");
+		Require(!HasZzz(2) && !HasZzz(3), "An awake goblin wears \"zzz\".");
+		Require(IsNear(PipAt(0), GoblinBody), "A sleeping goblin with a comfortable meter has a pip.");
+		Require(IsNear(PipAt(1), WarrenView.NeedColor(Need.Sleep)), "A goblin craving Sleep in its sleep has no Sleep pip over its \"zzz\".");
+		Require(IsNear(PipAt(3), WarrenView.NeedColor(Need.Sleep)), "A goblin craving Sleep has no Sleep pip.");
+		Require(IsNear(PipAt(2), WarrenView.NeedColor(Need.Grub)), "On a three-way tie the pip should be Grub's.");
+		Require(IsNear(PipAt(4), WarrenView.NeedColor(Need.Sleep)), "With the lowest meter Sleep's pip should show over Grub's and Grog's.");
+		Require(!IsNear(WarrenView.NeedColor(Need.Sleep), WarrenView.NeedColor(Need.Grub)) && !IsNear(WarrenView.NeedColor(Need.Sleep), WarrenView.NeedColor(Need.Grog)),
+			"The Sleep pip is too close to the others in colour.");
+	}
+
+	// The "zzz" lies inside its tile, from the left edge of the goblin marker.
+	static void ZzzLayoutCheck()
+	{
+		var tile = new Rect2(0, 0, WarrenView.CellSize, WarrenView.CellSize);
+		var marker = new Rect2(3, 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+		var baseline = WarrenView.ZzzBaseline(marker);
+		var width = ThemeDB.FallbackFont.GetStringSize("zzz", HorizontalAlignment.Left, -1, WarrenView.ZzzFontSize).X;
+		var text = new Rect2(baseline.X, baseline.Y - (WarrenView.ZzzFontSize - 2), width, WarrenView.ZzzFontSize - 2);
+		Require(tile.Encloses(text), $"The \"zzz\" {text} leaves its tile.");
 	}
 
 	async System.Threading.Tasks.Task NeedMarksCheck()

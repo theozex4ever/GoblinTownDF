@@ -32,6 +32,11 @@ public partial class WarrenView : Node2D
 	static readonly Color WaitingHaulColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
 	public static readonly Color GrubPitTint = new(0.82f, 0.60f, 0.28f, 0.6f);
+	public static readonly Color SleepingHeapTint = new(0.42f, 0.48f, 0.90f, 0.6f);
+	static readonly Color SleepColor = new(0.45f, 0.52f, 0.95f);
+	// The "zzz" over a sleeping goblin.
+	public static readonly Color ZzzColor = new(0.92f, 0.96f, 1f);
+	public const int ZzzFontSize = 9;
 	// A material whose count has reached the Pile's capacity is drawn dark on a bright chip.
 	public static readonly Color FullCountChipColor = new(1f, 0.85f, 0.2f);
 	static readonly Color FullCountTextColor = new(0.12f, 0.10f, 0.06f);
@@ -88,6 +93,8 @@ public partial class WarrenView : Node2D
 			{
 				if (s.RoomAt(tile) == RoomKind.GrubPit)
 					DrawRect(rect, GrubPitTint);
+				else if (s.RoomAt(tile) == RoomKind.SleepingHeap)
+					DrawRect(rect, SleepingHeapTint);
 				for (var material = Goblins.Sim.Material.Dirt; (int)material <= SimState.CountedMaterials; material++)
 					if (s.LooseCount(tile, material) > 0)
 						DrawRect(LooseSquare(rect, (int)material - 1), s.IsHaulReachable(tile, material) ? MaterialColor(material) : WaitingHaulColor);
@@ -136,13 +143,18 @@ public partial class WarrenView : Node2D
 			DrawRect(CarriedRect(MarkerRect(s, g, 0), slot, carriers), MaterialColor(carried));
 		}
 
-		// A craving goblin wears a pip in the colour of its Need, over the body and anything it carries. With Cravings for
-		// both Grub and Grog it wears the one it would act on first.
+		// A sleeping goblin carries nothing, so its "zzz" has the body to itself.
+		for (var g = 0; g < s.GoblinCount; g++)
+			if (s.GoblinZ[g] == ViewZ && (GoblinTask)s.GoblinTask[g] == GoblinTask.Sleeping)
+				DrawString(ThemeDB.FallbackFont, ZzzBaseline(MarkerRect(s, g, 0)), "zzz", HorizontalAlignment.Left, -1, ZzzFontSize, ZzzColor);
+
+		// A craving goblin wears a pip in the colour of its Need, over the body, anything it carries and its "zzz". With
+		// Cravings for several Needs it wears the one it would act on first.
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
-			var craving = NeedRules.LeadingCraving(s.GoblinGrub[g], s.GoblinGrog[g]);
-			if (s.GoblinZ[g] == ViewZ && craving != Goblins.Sim.Material.None)
-				DrawRect(PipRect(MarkerRect(s, g, 0)), MaterialColor(craving));
+			var craving = NeedRules.LeadingCraving(s.GoblinGrub[g], s.GoblinGrog[g], s.GoblinSleep[g]);
+			if (s.GoblinZ[g] == ViewZ && craving != Need.None)
+				DrawRect(PipRect(MarkerRect(s, g, 0)), NeedColor(craving));
 		}
 
 		if (Selection is { } sel)
@@ -160,6 +172,18 @@ public partial class WarrenView : Node2D
 
 	/// <summary>The pip of a craving goblin, in the top right corner of its <paramref name="marker"/>, half outside it.</summary>
 	public static Rect2 PipRect(Rect2 marker) => new(marker.End.X - PipSize + 1, marker.Position.Y - 1, PipSize, PipSize);
+
+	/// <summary>Where the "zzz" of a sleeping goblin starts: along the lower part of its <paramref name="marker"/>, clear of the pip in the top right corner.</summary>
+	public static Vector2 ZzzBaseline(Rect2 marker) => marker.Position + new Vector2(0, ZzzFontSize + 2);
+
+	/// <summary>The colour of a Need's pip: its material's colour for Grub and Grog.</summary>
+	public static Color NeedColor(Need need) => need switch
+	{
+		Need.Grub => GrubColor,
+		Need.Grog => GrogColor,
+		Need.Sleep => SleepColor,
+		_ => throw new ArgumentOutOfRangeException(nameof(need), need, "No colour for this Need."),
+	};
 
 	/// <summary>The colour of a material's loose squares, its Pile counts and the square on a carrying goblin.</summary>
 	public static Color MaterialColor(Goblins.Sim.Material material) => material switch

@@ -43,7 +43,7 @@ public static class SimJson
 		for (var tile = 0; tile < s.Rooms!.Length; tile++)
 		{
 			var room = (RoomKind)s.Rooms[tile];
-			Require(room is RoomKind.None or RoomKind.GrubPit, $"Tile {tile} has unknown Room {s.Rooms[tile]}.");
+			Require(room is RoomKind.None or RoomKind.GrubPit or RoomKind.SleepingHeap, $"Tile {tile} has unknown Room {s.Rooms[tile]}.");
 			Require(room == RoomKind.None || s.KindAt(tile) == TileKind.Floor, $"Tile {tile} is a {room} but not Floor.");
 			Require(room == RoomKind.None || s.Piles[tile] == 0, $"Tile {tile} is both a Pile and a {room}.");
 			Require(s.PitUnspawned![tile] <= ProductionRules.GrubPerTend, $"Tile {tile} has {s.PitUnspawned[tile]} Grub to spawn, past {ProductionRules.GrubPerTend}.");
@@ -89,7 +89,8 @@ public static class SimJson
 			&& s.GoblinCarry is { Length: SimState.MaxGoblins }
 			&& s.GoblinWorkTicks is { Length: SimState.MaxGoblins }
 			&& s.GoblinGrub is { Length: SimState.MaxGoblins }
-			&& s.GoblinGrog is { Length: SimState.MaxGoblins },
+			&& s.GoblinGrog is { Length: SimState.MaxGoblins }
+			&& s.GoblinSleep is { Length: SimState.MaxGoblins },
 			$"Goblin arrays must hold {SimState.MaxGoblins} entries.");
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
@@ -100,6 +101,7 @@ public static class SimJson
 			Require(Enum.IsDefined((Role)s.GoblinRole[g]), $"Goblin {g} has unknown role {s.GoblinRole[g]}.");
 			Require(s.GoblinGrub[g] <= NeedRules.MeterMax, $"Goblin {g} has Grub meter {s.GoblinGrub[g]}, past {NeedRules.MeterMax}.");
 			Require(s.GoblinGrog[g] <= NeedRules.MeterMax, $"Goblin {g} has Grog meter {s.GoblinGrog[g]}, past {NeedRules.MeterMax}.");
+			Require(s.GoblinSleep[g] <= NeedRules.MeterMax, $"Goblin {g} has Sleep meter {s.GoblinSleep[g]}, past {NeedRules.MeterMax}.");
 		}
 
 		// The structure is sound, so the Task rules can read it.

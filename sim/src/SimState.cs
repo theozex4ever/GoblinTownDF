@@ -94,7 +94,10 @@ public sealed class SimState
 	public byte[] GoblinWanderTicks { get; set; } = new byte[MaxGoblins];
 	/// <summary>The <see cref="Goblins.Sim.Material"/> a goblin carries while Carrying or Dropping; None otherwise. Change through <see cref="GoblinTasks"/> only.</summary>
 	public byte[] GoblinCarry { get; set; } = new byte[MaxGoblins];
-	/// <summary>Ticks spent so far picking a unit up, dropping it off, eating it or drinking it. Change through <see cref="GoblinTasks"/> only.</summary>
+	/// <summary>
+	/// Ticks spent so far picking a unit up, dropping it off, eating it, drinking it, tending or sleeping; while Sleeping, ticks counted
+	/// toward the next point of Sleep. Change through <see cref="GoblinTasks"/> only.
+	/// </summary>
 	public byte[] GoblinWorkTicks { get; set; } = new byte[MaxGoblins];
 	/// <summary>
 	/// The Grub Need per goblin, 0 to <see cref="NeedRules.MeterMax"/>. <see cref="NeedsSystem"/> drains it and a meal in
@@ -104,13 +107,20 @@ public sealed class SimState
 	/// <summary>The Grog Need per goblin, kept as <see cref="GoblinGrub"/> is. A waiting carrier drains it at double rate.
 	/// Empty until a world fills it, so a save written before Grog existed is rejected rather than read as every goblin at 0.</summary>
 	public byte[] GoblinGrog { get; set; } = [];
+	/// <summary>
+	/// The Sleep Need per goblin, kept as <see cref="GoblinGrub"/> is. A sleeping goblin does not drain it: it only climbs, one
+	/// point per <see cref="NeedRules.HeapRecoveryTicks"/> or <see cref="NeedRules.FloorRecoveryTicks"/> ticks. Empty until a world
+	/// fills it, so a save written before Sleep existed is rejected rather than read as every goblin at 0.
+	/// </summary>
+	public byte[] GoblinSleep { get; set; } = [];
 
-	/// <summary>The per-goblin meter of the Need that <paramref name="supply"/> (Grub or Grog) satisfies.</summary>
-	public byte[] MeterOf(Material supply) => supply switch
+	/// <summary>The per-goblin meter of a Need.</summary>
+	public byte[] MeterOf(Need need) => need switch
 	{
-		Material.Grub => GoblinGrub,
-		Material.Grog => GoblinGrog,
-		_ => throw new ArgumentOutOfRangeException(nameof(supply), supply, "Only Grub and Grog have a Need."),
+		Need.Grub => GoblinGrub,
+		Need.Grog => GoblinGrog,
+		Need.Sleep => GoblinSleep,
+		_ => throw new ArgumentOutOfRangeException(nameof(need), need, "Only Grub, Grog and Sleep have a meter."),
 	};
 
 	/// <summary>The materials a tile keeps a count for: every <see cref="Goblins.Sim.Material"/> but None, which the enum numbers 1 upward without gaps.</summary>
