@@ -19,6 +19,9 @@ public partial class Main : Node
 	Simulation _sim = null!;
 	WarrenView _view = null!;
 	Label _depthLabel = null!;
+	Label _hoverLabel = null!;
+	// The map cell under the cursor, from the last mouse motion; kept so the hover line follows the counts as the sim changes them.
+	Vector2I _hoverCell = new(-1, -1);
 	SelectionGesture _selection = null!;
 	SelectionGesture _removal = null!;
 	int _viewZ;
@@ -44,6 +47,8 @@ public partial class Main : Node
 
 		_depthLabel = new Label { Position = new Vector2(288, 8) };
 		AddChild(_depthLabel);
+		_hoverLabel = new Label { Position = new Vector2(288, 36 + s.Height * WarrenView.CellSize + 4) };
+		AddChild(_hoverLabel);
 		// The hint wraps in the margin left of the map: unwrapped it is about 1070 px wide, and two lines
 		// under the map would run past the bottom of the 648 px window.
 		AddChild(new Label
@@ -60,13 +65,25 @@ public partial class Main : Node
 	public override void _Process(double delta)
 	{
 		if (_sim.Advance(delta) > 0)
+		{
 			_view.QueueRedraw();
+			UpdateHover();
+		}
 		if (_sim.DrainEvents().Count > 0)
 			UpdateDepthLabel();
 	}
 
+	/// <summary>The hover line: every count on the Pile tile under the cursor, or empty over anything else.</summary>
+	public string HoverText => _hoverLabel.Text;
+
 	public override void _UnhandledInput(InputEvent @event)
 	{
+		if (@event is InputEventMouseMotion motion)
+		{
+			_hoverCell = CellAt(motion.Position);
+			UpdateHover();
+		}
+
 		// Only one button owns a drag; removal is available with no tool picked.
 		if (_selection.Dragging)
 		{
@@ -80,6 +97,13 @@ public partial class Main : Node
 		}
 		else if (_removal.Handle(@event) || (_tool != Tool.None && _selection.Handle(@event)))
 			GetViewport().SetInputAsHandled();
+	}
+
+	void UpdateHover()
+	{
+		var s = _sim.State;
+		var inMap = _hoverCell.X >= 0 && _hoverCell.Y >= 0 && _hoverCell.X < s.Width && _hoverCell.Y < s.Height;
+		_hoverLabel.Text = inMap ? PileCounts.HoverLine(s, s.TileIndex(_hoverCell.X, _hoverCell.Y, _viewZ)) : "";
 	}
 
 	void UpdateSelection()
@@ -113,6 +137,7 @@ public partial class Main : Node
 		};
 		_sim.Apply(command);
 		_view.QueueRedraw();
+		UpdateHover();
 	}
 
 	// Right-drag removes what the active Tool makes: Designations for Dig and Dig stairs (and with no Tool), Piles for Pile.
@@ -123,6 +148,7 @@ public partial class Main : Node
 			: new CancelDesignation(_viewZ, from.X, from.Y, to.X, to.Y);
 		_sim.Apply(command);
 		_view.QueueRedraw();
+		UpdateHover();
 	}
 
 	void PickTool(Tool tool)
@@ -167,6 +193,7 @@ public partial class Main : Node
 		_view.ViewZ = _viewZ;
 		_view.QueueRedraw();
 		UpdateDepthLabel();
+		UpdateHover();
 	}
 
 	void UpdateDepthLabel()
