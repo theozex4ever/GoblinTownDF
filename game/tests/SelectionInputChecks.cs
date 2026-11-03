@@ -130,6 +130,8 @@ public partial class SelectionInputChecks : Node
 			{
 				var s = sim.State;
 				Require(s.GoblinCount == 7, $"A new warren has {s.GoblinCount} Grunts, not 7.");
+				// The haul runs 1200 ticks; fed to the brim, no Grunt is hungry enough to eat the Grub it is hauling.
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
 				Key(main, Godot.Key.P);
 				Drag(main, view, MouseButton.Left, 12, 12, 13, 13);
 				sim.Apply(new SetPaused(false));
@@ -141,16 +143,73 @@ public partial class SelectionInputChecks : Node
 				Require(Stored(Goblins.Sim.Material.Grub) == 14 && Stored(Goblins.Sim.Material.Grog) == 7,
 					$"The Pile holds {Stored(Goblins.Sim.Material.Grub)} Grub and {Stored(Goblins.Sim.Material.Grog)} Grog, not 14 and 7.");
 				sim.Apply(new SetPaused(true));
+				// A goblin standing on the tile would put its own meter on the line, so pick a stocked tile with none.
 				var (stockedX, stockedY) = new[] { (12, 12), (13, 12), (12, 13), (13, 13) }
-					.First(p => s.StoredCount(s.TileIndex(p.Item1, p.Item2, 0), Goblins.Sim.Material.Grub) > 0);
+					.First(p => s.StoredCount(s.TileIndex(p.Item1, p.Item2, 0), Goblins.Sim.Material.Grub) > 0
+						&& GoblinHover.GoblinAt(s, s.TileIndex(p.Item1, p.Item2, 0)) < 0);
 				Move(main, view, stockedX, stockedY);
 				Require(main.HoverText.StartsWith("A Pile, counted solemnly:"), $"The hover line over the stocked Pile was \"{main.HoverText}\".");
+			});
+
+			// The hover line names the Grub meter of the goblin under the cursor, ahead of any Pile under it.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				(s.GoblinGrub[0], s.GoblinGrub[1], s.GoblinGrub[2]) = (74, 12, 0);
+				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
+				ExpectHover(main, "A Grunt. Grub 74/100. At peace with the world, and with lunch.");
+				Move(main, view, s.GoblinX[1], s.GoblinY[1]);
+				ExpectHover(main, "A Grunt. Grub 12/100. Thinking about nothing but Grub.");
+				Move(main, view, s.GoblinX[2], s.GoblinY[2]);
+				ExpectHover(main, "A Grunt. Grub 0/100. Starving, and bearing it at half speed with great dignity.");
+				sim.Apply(new PaintPile(0, s.GoblinX[0], s.GoblinY[0], s.GoblinX[0], s.GoblinY[0]));
+				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
+				Require(main.HoverText.StartsWith("A Grunt. Grub 74/100."), $"A Pile hid the goblin on it: \"{main.HoverText}\".");
+				// The line follows the meter as the sim drains it, and a goblin on another level is not under the cursor.
+				s.GoblinGrub[0] = 74;
+				s.Tick = 24;
+				sim.Apply(new SetPaused(false));
+				main._Process(0.1);
+				sim.Apply(new SetPaused(true));
+				ExpectHover(main, "A Grunt. Grub 73/100. At peace with the world, and with lunch.");
+				Key(main, Godot.Key.Period);
+				ExpectHover(main, "");
+			});
+
+			// The real game: hungry Grunts leave a dig for the starting Grub, which is eaten where it lies, and the dig carries on.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				Key(main, Godot.Key.S);
+				Drag(main, view, MouseButton.Left, 6, 6, 9, 7);
+				sim.Apply(new SetPaused(false));
+				var frames = 0;
+				while (!Enumerable.Range(0, s.GoblinCount).Any(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Digging) && frames++ < 200)
+					main._Process(0.1);
+				Require(frames < 200, "No Grunt started digging.");
+				var digger = Enumerable.Range(0, s.GoblinCount).First(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Digging);
+				// Hunger strikes mid-dig.
+				Array.Fill(s.GoblinGrub, (byte)29, 0, s.GoblinCount);
+				main._Process(0.1);
+				Require((GoblinTask)s.GoblinTask[digger] is GoblinTask.Seeking or GoblinTask.Eating,
+					$"The digging Grunt went on as {(GoblinTask)s.GoblinTask[digger]} instead of going to eat.");
+				Require(GoblinTasks.FindViolation(s) is null, "A Task rule broke while the Grunts went to eat.");
+				sim.Apply(new SetSpeed(4));
+				for (var frame = 0; frame < 40; frame++)
+					main._Process(0.25);
+				sim.Apply(new SetPaused(true));
+				var grub = Enumerable.Range(0, s.Piles.Length).Sum(t => s.ItemCount(t, Goblins.Sim.Material.Grub));
+				Require(grub == 14 - 7, $"{14 - grub} units of Grub were eaten by seven hungry Grunts, not 7.");
+				Require(Enumerable.Range(0, s.GoblinCount).All(g => !NeedRules.IsCraving(s.GoblinGrub[g])), "A Grunt is still hungry after the meal.");
+				Require(Enumerable.Range(0, 4 * 2).All(i => s.DesignationAt(s.TileIndex(6 + i % 4, 6 + i / 4, 0)) == DesignationKind.None),
+					"The dig was never finished after the meals.");
 			});
 
 			CountLabelChecks();
 			PileCountChecks();
 
-			GD.Print("Selection input checks passed (18 scenarios, count labels, pile counts).");
+			GD.Print("Selection input checks passed (20 scenarios, count labels, pile counts).");
 			GetTree().Quit();
 		}
 		catch (Exception error)

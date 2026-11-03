@@ -9,6 +9,8 @@ namespace Goblins.Sim;
 /// A goblin works one of two Jobs. A dig: Walking to a designated tile, then Digging it. A Haul: Fetching a loose unit,
 /// PickingUp, Carrying it to a Pile tile with room for its material (or waiting, still Carrying, while there is none),
 /// and Dropping it there.
+/// A Craving ends any of those Tasks at once, dropping what the goblin carries: it goes Seeking the nearest unit of Grub,
+/// then Eating it where it lies.
 /// A new Task is added here and nowhere else. Movement along a path stays in <see cref="JobSystem"/>,
 /// which only counts <see cref="SimState.GoblinStepTicks"/>.
 /// </summary>
@@ -120,6 +122,61 @@ public static class GoblinTasks
 	}
 
 	/// <summary>
+	/// Any Task but Seeking and Eating → Seeking the nearest unit of Grub, or Eating at once when <paramref name="eating"/>
+	/// (the goblin already stands on one). Drops any wander and abandons any Job, which stays on the job list with its
+	/// progress. A goblin carrying a unit puts it down on <paramref name="dropTile"/> first, which the caller has chosen:
+	/// a Pile tile with room for the unit or a tile that is not a Pile, so no drop can take a material past
+	/// <see cref="SimState.PileCapacity"/>. A goblin carrying nothing ignores <paramref name="dropTile"/>.
+	/// </summary>
+	public static void BeginSeek(SimState s, int g, int dropTile, bool eating)
+	{
+		var carried = (Material)s.GoblinCarry[g];
+		if (carried != Material.None)
+		{
+			if (!(dropTile >= 0 && dropTile < s.TileKinds.Length
+				&& TileRules.IsWalkable(s.KindAt(dropTile))
+				&& (!s.IsPile(dropTile) || s.PileHasRoom(dropTile, carried))))
+				throw new InvalidOperationException($"Goblin {g} cannot put {carried} down on tile {dropTile}: not a walkable tile that can take it.");
+			s.AddItems(dropTile, carried, 1);
+			s.GoblinCarry[g] = (byte)Material.None;
+		}
+		s.GoblinJobTile[g] = -1;
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinWanderTile[g] = -1;
+		s.GoblinWanderTicks[g] = 0;
+		s.GoblinTask[g] = (byte)(eating ? GoblinTask.Eating : GoblinTask.Seeking);
+	}
+
+	/// <summary>Seeking → Eating, on arrival at a tile holding Grub.</summary>
+	public static void StartEating(SimState s, int g)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.Eating;
+	}
+
+	/// <summary>
+	/// Counts one tick of a meal. True on the tick the <see cref="NeedRules.EatTicks"/>th tick is counted, when the caller
+	/// must finish the meal with <see cref="FinishEating"/> or by releasing the goblin if the unit is gone.
+	/// </summary>
+	public static bool EatTick(SimState s, int g) => ++s.GoblinWorkTicks[g] >= NeedRules.EatTicks;
+
+	/// <summary>
+	/// Eating → Idle: the goblin eats one unit of Grub off the tile it stands on, Pile or floor, and its meter rises by
+	/// <see cref="NeedRules.EatRestore"/>. The caller has checked the unit is still there.
+	/// </summary>
+	public static void FinishEating(SimState s, int g)
+	{
+		var tile = s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]);
+		if (s.ItemCount(tile, Material.Grub) == 0)
+			throw new InvalidOperationException($"Goblin {g} cannot eat on tile {tile}: no Grub there.");
+		s.RemoveItems(tile, Material.Grub, 1);
+		s.GoblinGrub[g] = NeedRules.Restore(s.GoblinGrub[g]);
+		Release(s, g);
+	}
+
+	/// <summary>
 	/// Any Task → Idle, with no Job and no wander. The Job, if any, stays on the job list. A goblin holding a unit never
 	/// goes through here: it keeps the unit until <see cref="FinishDrop"/> stores it, so a release cannot lose a unit
 	/// or put one down past a Pile's capacity.
@@ -176,10 +233,11 @@ public static class GoblinTasks
 	/// The first broken Task rule, or null when every goblin's Task fits its fields and the world: the field
 	/// shape of each Task, and the world rules (a claimed tile is designated or holds a loose unit, a Digging goblin
 	/// stands where it can dig, a PickingUp goblin stands on its unit, a Dropping goblin stands on a Pile tile, a
-	/// goblin carries a unit exactly while Carrying or Dropping, a wander target is walkable on the goblin's own
+	/// goblin carries a unit exactly while Carrying or Dropping, a Seeking or Eating goblin has a Craving and an Eating goblin stands
+	/// on a unit of Grub, a wander target is walkable on the goblin's own
 	/// level and not its own tile, no two goblins claim one tile to dig it and no more claim a tile's loose units than it holds, step ticks are below
-	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> and only count while
-	/// PickingUp or Dropping, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
+	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> (<see cref="NeedRules.EatTicks"/> while Eating) and only count while
+	/// PickingUp, Dropping or Eating, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
 	/// Precondition: the state is structurally sound: array lengths match the map and goblin cap, tile, material
 	/// and designation values are defined, and every goblin stands on the map.
 	/// </summary>
@@ -203,9 +261,9 @@ public static class GoblinTasks
 				return $"Goblin {g} is {task} with nothing to carry.";
 			if (!carrying && carry != Material.None)
 				return $"Goblin {g} is {task} but carries {carry}.";
-			if (s.GoblinWorkTicks[g] >= HaulActionTicks)
+			if (s.GoblinWorkTicks[g] >= (task == GoblinTask.Eating ? NeedRules.EatTicks : HaulActionTicks))
 				return $"Goblin {g} has work ticks {s.GoblinWorkTicks[g]}.";
-			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping))
+			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating))
 				return $"Goblin {g} is {task} but has work ticks {s.GoblinWorkTicks[g]}.";
 
 			var job = s.GoblinJobTile[g];
@@ -268,6 +326,18 @@ public static class GoblinTasks
 						return $"Goblin {g} is carrying but wanders.";
 					if (task == GoblinTask.Dropping && !s.IsPile(here))
 						return $"Goblin {g} is dropping a unit on tile {here}, which is not a Pile.";
+					break;
+
+				case GoblinTask.Seeking:
+				case GoblinTask.Eating:
+					if (job != -1)
+						return $"Goblin {g} is not working but holds job tile {job}.";
+					if (wanderTile != -1 || wanderTicks != 0)
+						return $"Goblin {g} is {task} but wanders.";
+					if (!NeedRules.IsCraving(s.GoblinGrub[g]))
+						return $"Goblin {g} is {task} with a Grub meter of {s.GoblinGrub[g]}, which is no Craving.";
+					if (task == GoblinTask.Eating && s.ItemCount(here, Material.Grub) == 0)
+						return $"Goblin {g} is eating on tile {here}, which holds no Grub.";
 					break;
 			}
 		}

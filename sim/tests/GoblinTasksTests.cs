@@ -440,4 +440,157 @@ public class GoblinTasksTests
 		s.GoblinWorkTicks[0] = (byte)GoblinTasks.HaulActionTicks;
 		Assert.NotNull(GoblinTasks.FindViolation(s));
 	}
+
+	// ---- Seeking and Eating
+
+	static SimState CravingWorld(out int grub)
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		s.GoblinGrub[0] = 20;
+		grub = s.TileIndex(16, 16, 0);
+		s.AddItems(grub, Material.Grub, 2);
+		return s;
+	}
+
+	[Fact]
+	public void BeginSeek_leaves_a_dig_and_keeps_its_progress()
+	{
+		var sim = WorldWithDesignation(17, 16, out var tile);
+		var s = sim.State;
+		s.GoblinGrub[0] = 20;
+		GoblinTasks.BeginJob(s, 0, tile, digging: true);
+		s.DigProgress[tile] = 7;
+
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false);
+
+		Assert.Equal(GoblinTask.Seeking, TaskOf(s, 0));
+		Assert.Equal(-1, s.GoblinJobTile[0]);
+		Assert.Equal(7, s.DigProgress[tile]);
+		Assert.Equal(DesignationKind.DigStairs, s.DesignationAt(tile));
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void BeginSeek_puts_a_carried_unit_down_on_the_tile_it_is_given_and_refuses_one_that_cannot_take_it()
+	{
+		var s = CravingWorld(out var grub);
+		var here = s.TileIndex(16, 16, 0);
+		var beside = s.TileIndex(15, 16, 0);
+		s.Piles[beside] = 1;
+		s.AddItems(beside, Material.Dirt, SimState.PileCapacity);
+		GoblinTasks.FinishPickUp(s, 0, Material.Dirt);
+
+		Assert.Throws<InvalidOperationException>(() => GoblinTasks.BeginSeek(s, 0, beside, eating: false));
+		Assert.Throws<InvalidOperationException>(() => GoblinTasks.BeginSeek(s, 0, s.Width * s.Height * s.Depth, eating: false));
+		Assert.Equal((byte)Material.Dirt, s.GoblinCarry[0]);
+		Assert.Equal(SimState.PileCapacity, s.ItemCount(beside, Material.Dirt));
+
+		GoblinTasks.BeginSeek(s, 0, here, eating: true);
+
+		Assert.Equal(GoblinTask.Eating, TaskOf(s, 0));
+		Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
+		Assert.Equal(1, s.LooseCount(here, Material.Dirt));
+		Assert.Equal(grub, here);
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void BeginSeek_takes_a_wandering_goblin_off_its_wander()
+	{
+		var s = CravingWorld(out _);
+		GoblinTasks.BeginWander(s, 0, s.TileIndex(18, 18, 0));
+
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false);
+
+		Assert.Equal(GoblinTask.Seeking, TaskOf(s, 0));
+		Assert.Equal(-1, s.GoblinWanderTile[0]);
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void StartEating_turns_the_walk_into_a_meal_and_FinishEating_eats_one_unit_and_adds_50()
+	{
+		var s = CravingWorld(out var grub);
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false);
+
+		GoblinTasks.StartEating(s, 0);
+		Assert.Equal(GoblinTask.Eating, TaskOf(s, 0));
+		Assert.Null(GoblinTasks.FindViolation(s));
+		for (var tick = 1; tick < NeedRules.EatTicks; tick++)
+			Assert.False(GoblinTasks.EatTick(s, 0));
+		Assert.Null(GoblinTasks.FindViolation(s));
+		Assert.True(GoblinTasks.EatTick(s, 0));
+
+		GoblinTasks.FinishEating(s, 0);
+
+		Assert.Equal(GoblinTask.Idle, TaskOf(s, 0));
+		Assert.Equal(70, s.GoblinGrub[0]);
+		Assert.Equal(1, s.ItemCount(grub, Material.Grub));
+		Assert.Equal(0, s.GoblinWorkTicks[0]);
+		Assert.Null(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FinishEating_refuses_a_tile_with_no_Grub()
+	{
+		var s = Simulation.NewWorld(seed: 7).State;
+		s.GoblinGrub[0] = 20;
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false);
+		GoblinTasks.StartEating(s, 0);
+
+		Assert.Throws<InvalidOperationException>(() => GoblinTasks.FinishEating(s, 0));
+		Assert.Equal(20, s.GoblinGrub[0]);
+	}
+
+	[Fact]
+	public void FindViolation_flags_an_eater_on_a_tile_without_Grub_and_a_seeker_or_eater_with_no_Craving()
+	{
+		var s = CravingWorld(out var grub);
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: true);
+		Assert.Null(GoblinTasks.FindViolation(s));
+
+		s.RemoveItems(grub, Material.Grub, 2);
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+		s.AddItems(grub, Material.Grub, 1);
+		Assert.Null(GoblinTasks.FindViolation(s));
+
+		s.GoblinGrub[0] = (byte)NeedRules.CravingThreshold;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+		s.GoblinGrub[0] = (byte)(NeedRules.CravingThreshold - 1);
+
+		GoblinTasks.Release(s, 0);
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false);
+		Assert.Null(GoblinTasks.FindViolation(s));
+		s.GoblinGrub[0] = 80;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FindViolation_flags_a_seeker_that_holds_a_job_or_a_wander_or_a_unit_and_work_ticks_on_a_seeker()
+	{
+		var s = CravingWorld(out _);
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: false);
+		Assert.Null(GoblinTasks.FindViolation(s));
+
+		s.GoblinJobTile[0] = 5;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+		s.GoblinJobTile[0] = -1;
+		s.GoblinCarry[0] = (byte)Material.Dirt;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+		s.GoblinCarry[0] = (byte)Material.None;
+		s.GoblinWorkTicks[0] = 1;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
+
+	[Fact]
+	public void FindViolation_lets_a_meal_run_to_10_ticks_and_flags_the_11th()
+	{
+		var s = CravingWorld(out _);
+		GoblinTasks.BeginSeek(s, 0, dropTile: -1, eating: true);
+
+		s.GoblinWorkTicks[0] = (byte)(NeedRules.EatTicks - 1);
+		Assert.Null(GoblinTasks.FindViolation(s));
+		s.GoblinWorkTicks[0] = (byte)NeedRules.EatTicks;
+		Assert.NotNull(GoblinTasks.FindViolation(s));
+	}
 }

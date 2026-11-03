@@ -22,6 +22,9 @@ public partial class WarrenView : Node2D
 	static readonly Color SelectionFillColor = new(1f, 1f, 1f, 0.15f);
 	static readonly Color GoblinColor = new(0.35f, 0.75f, 0.30f);
 	static readonly Color FaintGoblinColor = new(0.35f, 0.75f, 0.30f, 0.35f);
+	// A Starving goblin's body, tinted from healthy green to a sickly yellow.
+	public static readonly Color StarvingGoblinColor = new(0.78f, 0.72f, 0.22f);
+	public const int PipSize = 4;
 	static readonly Color LooseDirtColor = new(0.55f, 0.36f, 0.18f);
 	static readonly Color GrubColor = new(0.93f, 0.52f, 0.48f);
 	static readonly Color FungusColor = new(0.64f, 0.42f, 0.82f);
@@ -104,7 +107,7 @@ public partial class WarrenView : Node2D
 		{
 			var dz = s.GoblinZ[g] - ViewZ;
 			if (Math.Abs(dz) <= 1)
-				DrawRect(MarkerRect(s, g, dz), dz == 0 ? GoblinColor : FaintGoblinColor);
+				DrawRect(MarkerRect(s, g, dz), dz == 0 ? BodyColor(s, g) : FaintGoblinColor);
 		}
 
 		for (var g = 0; g < s.GoblinCount; g++)
@@ -128,6 +131,11 @@ public partial class WarrenView : Node2D
 			DrawRect(CarriedRect(MarkerRect(s, g, 0), slot, carriers), MaterialColor(carried));
 		}
 
+		// A craving goblin wears a pip in the colour of its Need, over the body and anything it carries.
+		for (var g = 0; g < s.GoblinCount; g++)
+			if (s.GoblinZ[g] == ViewZ && NeedRules.IsCraving(s.GoblinGrub[g]))
+				DrawRect(PipRect(MarkerRect(s, g, 0)), GrubColor);
+
 		if (Selection is { } sel)
 		{
 			var min = new Vector2I(Math.Min(sel.From.X, sel.To.X), Math.Min(sel.From.Y, sel.To.Y));
@@ -137,6 +145,12 @@ public partial class WarrenView : Node2D
 			DrawRect(box, SelectionColor, filled: false, width: 2);
 		}
 	}
+
+	/// <summary>A goblin's body colour: green, or tinted while it is Starving.</summary>
+	public static Color BodyColor(SimState s, int goblin) => NeedRules.IsStarving(s.GoblinGrub[goblin]) ? StarvingGoblinColor : GoblinColor;
+
+	/// <summary>The pip of a craving goblin, in the top right corner of its <paramref name="marker"/>, half outside it.</summary>
+	public static Rect2 PipRect(Rect2 marker) => new(marker.End.X - PipSize + 1, marker.Position.Y - 1, PipSize, PipSize);
 
 	/// <summary>The colour of a material's loose squares, its Pile counts and the square on a carrying goblin.</summary>
 	public static Color MaterialColor(Goblins.Sim.Material material) => material switch
