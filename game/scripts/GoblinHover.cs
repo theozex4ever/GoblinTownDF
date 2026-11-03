@@ -14,13 +14,15 @@ public static class GoblinHover
 		return -1;
 	}
 
-	/// <summary>The hover line for a goblin: its Role and its Grub meter, with a word on how it is bearing up.</summary>
+	/// <summary>The hover line for a goblin: its Role and its Grub and Grog meters, with a word on how it is bearing up.</summary>
 	public static string HoverLine(SimState s, int goblin)
 	{
 		var grub = s.GoblinGrub[goblin];
+		var grog = s.GoblinGrog[goblin];
+		var craving = NeedRules.LeadingCraving(grub, grog);
 		var mood = NeedRules.IsStarving(grub) ? "Starving, and bearing it at half speed with great dignity."
-			: NeedRules.IsCraving(grub) ? "Thinking about nothing but Grub."
+			: craving != Goblins.Sim.Material.None ? $"Thinking about nothing but {craving}."
 			: "At peace with the world, and with lunch.";
-		return $"A {(Role)s.GoblinRole[goblin]}. Grub {grub}/{NeedRules.MeterMax}. {mood}";
+		return $"A {(Role)s.GoblinRole[goblin]}. Grub {grub}/{NeedRules.MeterMax}, Grog {grog}/{NeedRules.MeterMax}. {mood}";
 	}
 }

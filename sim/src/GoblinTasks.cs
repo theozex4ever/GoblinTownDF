@@ -10,7 +10,8 @@ namespace Goblins.Sim;
 /// PickingUp, Carrying it to a Pile tile with room for its material (or waiting, still Carrying, while there is none),
 /// and Dropping it there.
 /// A Craving ends any of those Tasks at once, dropping what the goblin carries: it goes Seeking the nearest unit of Grub,
-/// then Eating it where it lies.
+/// then Eating it where it lies, or SeekingGrog and Drinking for a Craving for Grog. A goblin finishes the one Need it
+/// has begun before it considers the other.
 /// A new Task is added here and nowhere else. Movement along a path stays in <see cref="JobSystem"/>,
 /// which only counts <see cref="SimState.GoblinStepTicks"/>.
 /// </summary>
@@ -122,14 +123,19 @@ public static class GoblinTasks
 	}
 
 	/// <summary>
-	/// Any Task but Seeking and Eating → Seeking the nearest unit of Grub, or Eating at once when <paramref name="eating"/>
-	/// (the goblin already stands on one). Drops any wander and abandons any Job, which stays on the job list with its
-	/// progress. A goblin carrying a unit puts it down on <paramref name="dropTile"/> first, which the caller has chosen:
-	/// a Pile tile with room for the unit or a tile that is not a Pile, so no drop can take a material past
-	/// <see cref="SimState.PileCapacity"/>. A goblin carrying nothing ignores <paramref name="dropTile"/>.
+	/// Any Task but a seeking or consuming one → Seeking the nearest unit of <paramref name="supply"/> (Grub or Grog), or
+	/// Eating or Drinking at once when <paramref name="consuming"/> (the goblin already stands on one). Drops any wander and
+	/// abandons any Job, which stays on the job list with its progress. A goblin carrying a unit puts it down on
+	/// <paramref name="dropTile"/> first, which the caller has chosen: a Pile tile with room for the unit or a tile that is not
+	/// a Pile, so no drop can take a material past <see cref="SimState.PileCapacity"/>. A goblin carrying nothing ignores
+	/// <paramref name="dropTile"/>.
 	/// </summary>
-	public static void BeginSeek(SimState s, int g, int dropTile, bool eating)
+	public static void BeginSeek(SimState s, int g, int dropTile, bool eating, Material supply = Material.Grub)
 	{
+		if (supply is not (Material.Grub or Material.Grog))
+			throw new ArgumentOutOfRangeException(nameof(supply), supply, "A Need is met with Grub or Grog.");
+		if (IsSeekingTask((GoblinTask)s.GoblinTask[g]) || IsConsumingTask((GoblinTask)s.GoblinTask[g]))
+			throw new InvalidOperationException($"Goblin {g} is already satisfying a Need and finishes it before considering another.");
 		var carried = (Material)s.GoblinCarry[g];
 		if (carried != Material.None)
 		{
@@ -145,20 +151,27 @@ public static class GoblinTasks
 		s.GoblinWorkTicks[g] = 0;
 		s.GoblinWanderTile[g] = -1;
 		s.GoblinWanderTicks[g] = 0;
-		s.GoblinTask[g] = (byte)(eating ? GoblinTask.Eating : GoblinTask.Seeking);
+		s.GoblinTask[g] = (byte)(supply == Material.Grub
+			? eating ? GoblinTask.Eating : GoblinTask.Seeking
+			: eating ? GoblinTask.Drinking : GoblinTask.SeekingGrog);
 	}
 
 	/// <summary>Seeking → Eating, on arrival at a tile holding Grub.</summary>
-	public static void StartEating(SimState s, int g)
+	public static void StartEating(SimState s, int g) => StartConsuming(s, g, GoblinTask.Eating);
+
+	/// <summary>SeekingGrog → Drinking, on arrival at a tile holding Grog.</summary>
+	public static void StartDrinking(SimState s, int g) => StartConsuming(s, g, GoblinTask.Drinking);
+
+	static void StartConsuming(SimState s, int g, GoblinTask task)
 	{
 		s.GoblinStepTicks[g] = 0;
 		s.GoblinWorkTicks[g] = 0;
-		s.GoblinTask[g] = (byte)GoblinTask.Eating;
+		s.GoblinTask[g] = (byte)task;
 	}
 
 	/// <summary>
-	/// Counts one tick of a meal. True on the tick the <see cref="NeedRules.EatTicks"/>th tick is counted, when the caller
-	/// must finish the meal with <see cref="FinishEating"/> or by releasing the goblin if the unit is gone.
+	/// Counts one tick of a meal or a drink. True on the tick the <see cref="NeedRules.EatTicks"/>th tick is counted, when the
+	/// caller must finish it with <see cref="FinishEating"/> or <see cref="FinishDrinking"/>, or by releasing the goblin if the unit is gone.
 	/// </summary>
 	public static bool EatTick(SimState s, int g) => ++s.GoblinWorkTicks[g] >= NeedRules.EatTicks;
 
@@ -166,15 +179,34 @@ public static class GoblinTasks
 	/// Eating → Idle: the goblin eats one unit of Grub off the tile it stands on, Pile or floor, and its meter rises by
 	/// <see cref="NeedRules.EatRestore"/>. The caller has checked the unit is still there.
 	/// </summary>
-	public static void FinishEating(SimState s, int g)
+	public static void FinishEating(SimState s, int g) => FinishConsuming(s, g, Material.Grub, s.GoblinGrub);
+
+	/// <summary>Drinking → Idle: as <see cref="FinishEating"/>, with a unit of Grog and the Grog meter.</summary>
+	public static void FinishDrinking(SimState s, int g) => FinishConsuming(s, g, Material.Grog, s.GoblinGrog);
+
+	static void FinishConsuming(SimState s, int g, Material supply, byte[] meter)
 	{
 		var tile = s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]);
-		if (s.ItemCount(tile, Material.Grub) == 0)
-			throw new InvalidOperationException($"Goblin {g} cannot eat on tile {tile}: no Grub there.");
-		s.RemoveItems(tile, Material.Grub, 1);
-		s.GoblinGrub[g] = NeedRules.Restore(s.GoblinGrub[g]);
+		if (s.ItemCount(tile, supply) == 0)
+			throw new InvalidOperationException($"Goblin {g} cannot take {supply} on tile {tile}: none there.");
+		s.RemoveItems(tile, supply, 1);
+		meter[g] = NeedRules.Restore(meter[g]);
 		Release(s, g);
 	}
+
+	/// <summary>True for SeekingGrog and Seeking: walking to a unit to consume.</summary>
+	public static bool IsSeekingTask(GoblinTask task) => task is GoblinTask.Seeking or GoblinTask.SeekingGrog;
+
+	/// <summary>True for Eating and Drinking: consuming a unit on the spot.</summary>
+	public static bool IsConsumingTask(GoblinTask task) => task is GoblinTask.Eating or GoblinTask.Drinking;
+
+	/// <summary>The Material a Need-satisfying Task consumes: Grub for Seeking and Eating, Grog for SeekingGrog and Drinking, None for any other Task.</summary>
+	public static Material SupplyOf(GoblinTask task) => task switch
+	{
+		GoblinTask.Seeking or GoblinTask.Eating => Material.Grub,
+		GoblinTask.SeekingGrog or GoblinTask.Drinking => Material.Grog,
+		_ => Material.None,
+	};
 
 	/// <summary>
 	/// Any Task → Idle, with no Job and no wander. The Job, if any, stays on the job list. A goblin holding a unit never
@@ -233,11 +265,11 @@ public static class GoblinTasks
 	/// The first broken Task rule, or null when every goblin's Task fits its fields and the world: the field
 	/// shape of each Task, and the world rules (a claimed tile is designated or holds a loose unit, a Digging goblin
 	/// stands where it can dig, a PickingUp goblin stands on its unit, a Dropping goblin stands on a Pile tile, a
-	/// goblin carries a unit exactly while Carrying or Dropping, a Seeking or Eating goblin has a Craving and an Eating goblin stands
-	/// on a unit of Grub, a wander target is walkable on the goblin's own
+	/// goblin carries a unit exactly while Carrying or Dropping, a seeking or consuming goblin has a Craving for what it seeks and an Eating or Drinking goblin stands
+	/// on a unit of it, a wander target is walkable on the goblin's own
 	/// level and not its own tile, no two goblins claim one tile to dig it and no more claim a tile's loose units than it holds, step ticks are below
-	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> (<see cref="NeedRules.EatTicks"/> while Eating) and only count while
-	/// PickingUp, Dropping or Eating, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
+	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> (<see cref="NeedRules.EatTicks"/> while Eating or Drinking) and only count while
+	/// PickingUp, Dropping, Eating or Drinking, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
 	/// Precondition: the state is structurally sound: array lengths match the map and goblin cap, tile, material
 	/// and designation values are defined, and every goblin stands on the map.
 	/// </summary>
@@ -261,9 +293,9 @@ public static class GoblinTasks
 				return $"Goblin {g} is {task} with nothing to carry.";
 			if (!carrying && carry != Material.None)
 				return $"Goblin {g} is {task} but carries {carry}.";
-			if (s.GoblinWorkTicks[g] >= (task == GoblinTask.Eating ? NeedRules.EatTicks : HaulActionTicks))
+			if (s.GoblinWorkTicks[g] >= (IsConsumingTask(task) ? NeedRules.EatTicks : HaulActionTicks))
 				return $"Goblin {g} has work ticks {s.GoblinWorkTicks[g]}.";
-			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating))
+			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking))
 				return $"Goblin {g} is {task} but has work ticks {s.GoblinWorkTicks[g]}.";
 
 			var job = s.GoblinJobTile[g];
@@ -330,14 +362,18 @@ public static class GoblinTasks
 
 				case GoblinTask.Seeking:
 				case GoblinTask.Eating:
+				case GoblinTask.SeekingGrog:
+				case GoblinTask.Drinking:
+					var supply = SupplyOf(task);
+					var meter = s.MeterOf(supply)[g];
 					if (job != -1)
 						return $"Goblin {g} is not working but holds job tile {job}.";
 					if (wanderTile != -1 || wanderTicks != 0)
 						return $"Goblin {g} is {task} but wanders.";
-					if (!NeedRules.IsCraving(s.GoblinGrub[g]))
-						return $"Goblin {g} is {task} with a Grub meter of {s.GoblinGrub[g]}, which is no Craving.";
-					if (task == GoblinTask.Eating && s.ItemCount(here, Material.Grub) == 0)
-						return $"Goblin {g} is eating on tile {here}, which holds no Grub.";
+					if (!NeedRules.IsCraving(meter))
+						return $"Goblin {g} is {task} with a {supply} meter of {meter}, which is no Craving.";
+					if (IsConsumingTask(task) && s.ItemCount(here, supply) == 0)
+						return $"Goblin {g} is {task} on tile {here}, which holds no {supply}.";
 					break;
 			}
 		}

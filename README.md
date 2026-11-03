@@ -20,7 +20,7 @@ Goblins are earnest underdogs who take absurd traditions seriously. Failure shou
 
 ## Development status
 
-**Early grey-box prototype. P1 (map and digging) and P2 (hauling and piles) have been played and logged ([P1](docs/playtests/2026-10-30-P1.md), [P2](docs/playtests/2026-10-31-P2.md)); P3 (Needs) is in progress.** The current build has a 32×32 map across three z-levels and seven Grunts who start together on the surface beside 14 loose Grub and 7 loose Grog. They dig designated tunnels and stairs, haul what they dig to Piles, wander when idle, and eat. Each Grunt has a Grub meter; when it falls below 30 the Grunt drops its work and any unit it carries, and goes to eat the nearest Grub it can reach. At 0 it is Starving and moves at half speed. Grog, Sleep, farming and brewing are still to come. You can switch levels, pause, and change speed.
+**Early grey-box prototype. P1 (map and digging) and P2 (hauling and piles) have been played and logged ([P1](docs/playtests/2026-10-30-P1.md), [P2](docs/playtests/2026-10-31-P2.md)); P3 (Needs) is in progress.** The current build has a 32×32 map across three z-levels and seven Grunts who start together on the surface beside 14 loose Grub and 7 loose Grog. They dig designated tunnels and stairs, haul what they dig to Piles, wander when idle, and eat. Each Grunt has Grub and Grog meters; when one falls below 30 the Grunt drops its work and any unit it carries, and goes to eat or drink the nearest unit it can reach (the lower meter first). A Grunt stuck holding a unit with no Pile to take it loses Grog twice as fast, so it eventually drops the unit and goes for a drink. At 0 Grub it is Starving and moves at half speed; Grog at 0 does nothing yet. Sleep, farming and brewing are still to come. You can switch levels, pause, and change speed.
 
 The first prototype asks: **is it fun to dig a warren and watch goblins mess it up?** It will grow through six playable milestones:
 
@@ -50,11 +50,11 @@ Current controls: **Space** pauses; **1**, **2**, and **4** select speed; **,** 
 
 Press **D** for Dig, **S** for Dig stairs or **P** for Pile, then click a tile or left-drag a rectangle to designate it or paint a Pile on its Floor tiles. Right-drag removes what the active tool makes: Dig and Dig stairs cancel designations, Pile removes Piles (their stock stays as loose items), and with no tool picked right-drag cancels designations. **Escape** clears the selected tool and any active drag.
 
-Each Pile tile holds up to 30 units of each material; goblins carry to the nearest Pile with room, or wait holding the unit until one appears. Painting skips any tile holding more than 30 of a material. A Pile tile draws two counts, each in its material's colour: a material that is full comes first (highlighted), then the largest. The hover line under the map names every count on the Pile tile under the cursor, or, over a goblin, that goblin's Grub meter.
+Each Pile tile holds up to 30 units of each material; goblins carry to the nearest Pile with room, or wait holding the unit until one appears. Painting skips any tile holding more than 30 of a material. A Pile tile draws two counts, each in its material's colour: a material that is full comes first (highlighted), then the largest. The hover line under the map names every count on the Pile tile under the cursor, or, over a goblin, that goblin's Grub and Grog meters.
 
-On the map, a goblin with a Craving wears a small pip in the colour of its Need (Grub is pink), and a Starving goblin turns yellow.
+On the map, a goblin with a Craving wears a small pip in the colour of its Need (Grub is pink, Grog is teal; with both, the lower meter's), and a Starving goblin turns yellow.
 
-Saves are whole-state JSON and are never migrated: a P2 save, which counted two materials, is rejected. There is no player-facing save or load yet.
+Saves are whole-state JSON and are never migrated: a P2 save, which counted two materials, is rejected, and so is a save from before the Grog meter. There is no player-facing save or load yet.
 
 ## Development
 

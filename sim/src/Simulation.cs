@@ -85,6 +85,10 @@ public sealed class Simulation
 			s.GoblinZ[g] = 0;
 			s.GoblinGrub[g] = NeedRules.Start(s.Rng);
 		}
+		s.GoblinGrog = new byte[SimState.MaxGoblins];
+		// Drawn after every Grub meter, so adding the Grog Need left each goblin's starting Grub as it was.
+		for (var g = 0; g < s.GoblinCount; g++)
+			s.GoblinGrog[g] = NeedRules.Start(s.Rng);
 
 		var supplies = s.TileIndex(MapWidth / 2 + StartingSupplies.Dx, MapHeight / 2 + StartingSupplies.Dy, 0);
 		s.AddItems(supplies, Material.Grub, StartingGrub);

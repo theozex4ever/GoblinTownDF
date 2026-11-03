@@ -73,7 +73,8 @@ public static class SimJson
 			&& s.GoblinWanderTicks is { Length: SimState.MaxGoblins }
 			&& s.GoblinCarry is { Length: SimState.MaxGoblins }
 			&& s.GoblinWorkTicks is { Length: SimState.MaxGoblins }
-			&& s.GoblinGrub is { Length: SimState.MaxGoblins },
+			&& s.GoblinGrub is { Length: SimState.MaxGoblins }
+			&& s.GoblinGrog is { Length: SimState.MaxGoblins },
 			$"Goblin arrays must hold {SimState.MaxGoblins} entries.");
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
@@ -83,6 +84,7 @@ public static class SimJson
 				$"Goblin {g} is off the map.");
 			Require(Enum.IsDefined((Role)s.GoblinRole[g]), $"Goblin {g} has unknown role {s.GoblinRole[g]}.");
 			Require(s.GoblinGrub[g] <= NeedRules.MeterMax, $"Goblin {g} has Grub meter {s.GoblinGrub[g]}, past {NeedRules.MeterMax}.");
+			Require(s.GoblinGrog[g] <= NeedRules.MeterMax, $"Goblin {g} has Grog meter {s.GoblinGrog[g]}, past {NeedRules.MeterMax}.");
 		}
 
 		// The structure is sound, so the Task rules can read it.
