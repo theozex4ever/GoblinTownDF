@@ -2,10 +2,11 @@ namespace Goblins.Sim;
 
 /// <summary>
 /// The global job list and the goblins that work it. A designated tile is a dig Job, a tile with a loose
-/// unit is a Haul Job and an untended Grub Pit tile is a Tend Job. An idle goblin claims the nearest one of any kind by path length (ties go to the
+/// unit is a Haul Job, an untended farm tile is a Tend Job and a tile holding Fungus is a Brew Job while a Brewery tile and Grog storage are in reach. An idle goblin claims the nearest one of any kind by path length (ties go to the
 /// lowest tile index). It walks to a tile it can dig from and digs, or walks to the unit, picks it up (5 ticks),
 /// carries it to the nearest Pile tile with room for its material and drops it (5 ticks); with no such tile it waits holding
-/// the unit; or walks to the Grub Pit tile and tends it (20 ticks), which starts the tile spawning Grub. A goblin with no reachable Job wanders instead.
+/// the unit; or walks to the Grub Pit tile and tends it (20 ticks), which starts the tile spawning Grub; or walks to the Fungus, takes a unit (5 ticks),
+/// brings it to a free Brewery tile and brews it (20 ticks) into one Grog, loose on that tile. A goblin with no reachable Job wanders instead.
 /// A goblin with a Craving for Grub or Grog that can reach a unit of it drops everything and goes to eat or drink it, whatever
 /// it was doing. A Craving for Sleep always can be met: the goblin walks to the nearest Sleeping Heap tile and sleeps there, or sleeps
 /// where it stands when none is in reach. With several Cravings the lowest meter wins (Grub, then Grog, then Sleep on a tie),
@@ -25,6 +26,7 @@ public sealed class JobSystem
 		Dig,
 		Haul,
 		Tend,
+		Brew,
 	}
 
 	readonly IPathfinder _pathfinder;
@@ -35,6 +37,10 @@ public sealed class JobSystem
 	readonly List<JobKind> _goalKinds = [];
 	readonly List<int> _starts = [];
 	byte[] _reached = [];
+	// Per region (index 0 is no region), the Brewery tiles no goblin is Bringing Fungus to or Brewing at, and the goblins who have
+	// claimed Fungus to brew and will take one. Filled by CountBreweries.
+	readonly int[] _freeBreweries = new int[SimState.MaxGoblins + 1];
+	readonly int[] _gatherers = new int[SimState.MaxGoblins + 1];
 
 	public JobSystem(IPathfinder pathfinder)
 	{
@@ -205,6 +211,18 @@ public sealed class JobSystem
 				case GoblinTask.Approaching:
 				case GoblinTask.Tending:
 					Tend(s, g);
+					break;
+				case GoblinTask.Gathering:
+					Gather(s, g);
+					break;
+				case GoblinTask.Taking:
+					Take(s, g);
+					break;
+				case GoblinTask.Bringing:
+					Bring(s, g);
+					break;
+				case GoblinTask.Brewing:
+					Brew(s, g);
 					break;
 				case GoblinTask.Fetching:
 					Fetch(s, g);
@@ -417,6 +435,7 @@ public sealed class JobSystem
 	bool TryClaim(SimState s, int goblin)
 	{
 		ClearGoals();
+		CountBreweries(s);
 		for (var tile = 0; tile < s.Designations.Length; tile++)
 		{
 			if (s.IsReachable(tile) && !IsClaimed(s, tile, JobKind.Dig))
@@ -426,6 +445,9 @@ public sealed class JobSystem
 			// A Grub Pit tile some goblin can path to; the pathfinder weighs the walk for this goblin.
 			if (s.HaulRegion[tile] != 0 && FarmSystem.IsTendOffered(s, tile) && !IsClaimed(s, tile, JobKind.Tend))
 				AddGoal(tile, tile, JobKind.Tend);
+			// A tile holding Fungus no one has claimed, with a free Brewery tile and room for the Grog in its region.
+			if (IsBrewOffered(s, tile))
+				AddGoal(tile, tile, JobKind.Brew);
 		}
 
 		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
@@ -439,6 +461,9 @@ public sealed class JobSystem
 				break;
 			case JobKind.Tend:
 				GoblinTasks.BeginTend(s, goblin, _goalJobs[goalIndex], tending: _path.Count == 0);
+				break;
+			case JobKind.Brew:
+				GoblinTasks.BeginBrew(s, goblin, _goalJobs[goalIndex], taking: _path.Count == 0);
 				break;
 			default:
 				GoblinTasks.BeginJob(s, goblin, _goalJobs[goalIndex], digging: _path.Count == 0);
@@ -610,6 +635,144 @@ public sealed class JobSystem
 		}
 	}
 
+	// Counts, per region, the Brewery tiles no goblin has claimed (not Bringing Fungus to, nor Brewing at) and the goblins who have
+	// claimed Fungus to brew and will each need one. A Brew is offered while the first exceeds the second.
+	void CountBreweries(SimState s)
+	{
+		Array.Clear(_freeBreweries);
+		Array.Clear(_gatherers);
+		for (var tile = 0; tile < s.Rooms.Length; tile++)
+			if (s.Rooms[tile] == (byte)RoomKind.Brewery)
+				_freeBreweries[s.HaulRegion[tile]]++;
+		for (var g = 0; g < s.GoblinCount; g++)
+		{
+			var task = (GoblinTask)s.GoblinTask[g];
+			if (GoblinTasks.IsBreweryTask(task))
+				_freeBreweries[s.HaulRegion[s.GoblinJobTile[g]]]--;
+			else if (GoblinTasks.IsBrewSourceTask(task))
+				_gatherers[s.HaulRegion[s.GoblinJobTile[g]]]++;
+		}
+	}
+
+	// A Brew Job on a tile: Fungus no one has claimed, a Brewery tile in its region that no brewer has claimed and no gatherer is counting
+	// on, and a Pile in its region with room for the Grog. The region is what a goblin who can reach the Fungus can reach.
+	bool IsBrewOffered(SimState s, int tile)
+	{
+		var fungus = s.ItemCount(tile, Material.Fungus);
+		if (fungus == 0)
+			return false;
+		var region = s.HaulRegion[tile];
+		return region != 0
+			&& _freeBreweries[region] - _gatherers[region] > 0
+			&& GoblinTasks.SupplyClaims(s, tile, s.GoblinCount) < fungus
+			&& s.HasStorageRoom(tile, Material.Grog);
+	}
+
+	// Walks to the claimed Fungus. The walk ends where the Job does: the Fungus gone, no Pile with room for the Grog, or no free Brewery.
+	void Gather(SimState s, int goblin)
+	{
+		if (!StepDue(s, goblin))
+			return;
+
+		var tile = s.GoblinJobTile[goblin];
+		CountBreweries(s);
+		if (s.ItemCount(tile, Material.Fungus) == 0 || !s.HasStorageRoom(tile, Material.Grog) || _freeBreweries[s.HaulRegion[tile]] <= 0)
+		{
+			GoblinTasks.Release(s, goblin);
+			return;
+		}
+
+		ClearGoals();
+		AddGoal(tile, tile, JobKind.Brew);
+		switch (MoveToward(s, goblin))
+		{
+			case Move.NoPath:
+				GoblinTasks.Release(s, goblin);
+				break;
+			case Move.Here:
+			case Move.Arrived:
+				GoblinTasks.StartTaking(s, goblin);
+				break;
+		}
+	}
+
+	// The unit leaves its tile as the taking ends, when the goblin also claims the nearest free Brewery tile. If the Fungus has gone, or
+	// there is nowhere to brew it or put the Grog, the goblin takes nothing and is freed. A Pile that was full of Fungus has room again.
+	void Take(SimState s, int goblin)
+	{
+		if (!GoblinTasks.WorkTick(s, goblin))
+			return;
+
+		var tile = s.GoblinJobTile[goblin];
+		if (s.ItemCount(tile, Material.Fungus) == 0
+			|| !s.HasStorageRoom(tile, Material.Grog)
+			|| !TryFindBrewery(s, goblin, out var brewery, out var here))
+		{
+			GoblinTasks.Release(s, goblin);
+			return;
+		}
+
+		var wasFull = s.IsPile(tile) && !s.PileHasRoom(tile, Material.Fungus);
+		s.RemoveItems(tile, Material.Fungus, 1);
+		GoblinTasks.FinishTake(s, goblin, brewery, brewing: here);
+		RoomRules.Settle(s);
+		if (wasFull)
+			RecheckReachability(s);
+	}
+
+	// The nearest Brewery tile no brewer has claimed, by path length, ties to the lowest tile index.
+	bool TryFindBrewery(SimState s, int goblin, out int tile, out bool here)
+	{
+		ClearGoals();
+		for (var candidate = 0; candidate < s.Rooms.Length; candidate++)
+			if (s.Rooms[candidate] == (byte)RoomKind.Brewery && !GoblinTasks.IsBreweryClaimed(s, candidate))
+				AddGoal(candidate, candidate, JobKind.Brew);
+		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
+		if (!_pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out var goalIndex))
+		{
+			tile = -1;
+			here = false;
+			return false;
+		}
+		tile = _goals[goalIndex];
+		here = _path.Count == 0;
+		return true;
+	}
+
+	// Walks the Fungus to the claimed Brewery tile. A way that is gone, or a Brewery that is, leaves it carrying the Fungus to a Pile.
+	void Bring(SimState s, int goblin)
+	{
+		if (!StepDue(s, goblin))
+			return;
+
+		var tile = s.GoblinJobTile[goblin];
+		ClearGoals();
+		AddGoal(tile, tile, JobKind.Brew);
+		switch (MoveToward(s, goblin))
+		{
+			case Move.NoPath:
+				GoblinTasks.ResumeCarrying(s, goblin);
+				break;
+			case Move.Here:
+			case Move.Arrived:
+				GoblinTasks.StartBrewing(s, goblin);
+				break;
+		}
+	}
+
+	// Twenty working ticks, then the Fungus is one Grog, loose on the Brewery tile. Reachability is derived: a tile some goblin can path
+	// to is a Haul as soon as it holds a loose unit.
+	void Brew(SimState s, int goblin)
+	{
+		if (!GoblinTasks.BrewTick(s, goblin))
+			return;
+
+		var tile = s.GoblinJobTile[goblin];
+		GoblinTasks.FinishBrew(s, goblin);
+		if (s.HaulRegion[tile] != 0)
+			s.HaulReachable[tile] = 1;
+	}
+
 	void Fetch(SimState s, int goblin)
 	{
 		if (!StepDue(s, goblin))
@@ -652,8 +815,8 @@ public sealed class JobSystem
 
 		s.RemoveItems(tile, material, 1);
 		GoblinTasks.FinishPickUp(s, goblin, material);
-		// A goblin eating or drinking the last unit has nothing left to take.
-		if (material is Material.Grub or Material.Grog)
+		// A goblin eating or drinking the last unit, or gathering the Fungus, has nothing left to take.
+		if (material is Material.Grub or Material.Grog or Material.Fungus)
 			RoomRules.Settle(s);
 	}
 
@@ -726,7 +889,7 @@ public sealed class JobSystem
 	static bool IsClaimed(SimState s, int tile, JobKind kind)
 	{
 		if (kind == JobKind.Haul)
-			return GoblinTasks.FetchClaims(s, tile, s.GoblinCount) >= s.HaulableTotal(tile);
+			return GoblinTasks.SupplyClaims(s, tile, s.GoblinCount) >= s.HaulableTotal(tile);
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			var task = (GoblinTask)s.GoblinTask[g];

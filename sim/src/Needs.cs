@@ -99,6 +99,8 @@ public static class ProductionRules
 	public const int FungusGrowTicks = 300;
 	/// <summary>A Fungus Farm works only at this z-level or deeper; z0 is the Surface.</summary>
 	public const int FungusFarmMinZ = 1;
+	/// <summary>Working ticks one Brew takes: one Fungus into one Grog.</summary>
+	public const int BrewTicks = 20;
 }
 
 /// <summary>The Needs' own system: the slow drain of every goblin's meters. Cravings and meals are worked by <see cref="JobSystem"/>.</summary>

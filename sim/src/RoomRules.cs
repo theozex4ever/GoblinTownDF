@@ -52,9 +52,9 @@ public static class RoomRules
 	/// Brings the goblins' hauls and meals in line after a Pile appeared or went, or a unit of Grub or Grog was consumed or picked
 	/// up: a goblin fetching a unit that is now stored is freed, a goblin dropping a unit on a tile that is no longer a Pile carries
 	/// it on to the next nearest Pile, a goblin eating or drinking a unit that is gone is freed to look for another, and a goblin
-	/// tending a tile that is no longer a farm free to tend is freed.
-	/// Run after anything that clears or sets a Room (painting, removing, digging stairs on one) or takes a unit of Grub
-	/// or Grog off a tile, so <see cref="GoblinTasks.FindViolation"/> holds between ticks.
+	/// tending a tile that is no longer a farm free to tend is freed, a gatherer of Fungus that is gone or taken by others is freed, and a brewer whose Brewery is gone carries its Fungus on to a Pile.
+	/// Run after anything that clears or sets a Room (painting, removing, digging stairs on one) or takes a unit of Grub,
+	/// Grog or Fungus off a tile, so <see cref="GoblinTasks.FindViolation"/> holds between ticks.
 	/// </summary>
 	public static void Settle(SimState s)
 	{
@@ -65,8 +65,20 @@ public static class RoomRules
 				case GoblinTask.Fetching:
 				case GoblinTask.PickingUp:
 					// A tile claimed by more goblins than it has loose units frees its highest-numbered claimants.
-					if (GoblinTasks.FetchClaims(s, s.GoblinJobTile[g], g) >= s.LooseTotal(s.GoblinJobTile[g]))
+					if (GoblinTasks.SupplyClaims(s, s.GoblinJobTile[g], g) >= s.LooseTotal(s.GoblinJobTile[g]))
 						GoblinTasks.Release(s, g);
+					break;
+				case GoblinTask.Gathering:
+				case GoblinTask.Taking:
+					// Fungus that shrank under its claimants frees the highest-numbered of them.
+					if (GoblinTasks.SupplyClaims(s, s.GoblinJobTile[g], g) >= s.ItemCount(s.GoblinJobTile[g], Material.Fungus))
+						GoblinTasks.Release(s, g);
+					break;
+				case GoblinTask.Bringing:
+				case GoblinTask.Brewing:
+					// A Brewery cleared or repainted under its brewer takes the brew's progress with it; the Fungus in hand goes to a Pile.
+					if (s.RoomAt(s.GoblinJobTile[g]) != RoomKind.Brewery)
+						GoblinTasks.ResumeCarrying(s, g);
 					break;
 				case GoblinTask.Dropping:
 					if (!s.IsPile(s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g])))

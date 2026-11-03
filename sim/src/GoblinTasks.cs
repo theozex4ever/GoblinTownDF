@@ -11,6 +11,8 @@ namespace Goblins.Sim;
 /// and Dropping it there.
 /// A Tend: Approaching a farm tile (a Grub Pit or a Fungus Farm), then Tending it for <see cref="ProductionRules.TendTicks"/> working ticks, after which the tile
 /// spawns its crop and the goblin is Idle again.
+/// A Brew: Gathering to a tile holding Fungus, Taking one unit (5 ticks), Bringing it to a free Brewery tile and Brewing it there for
+/// <see cref="ProductionRules.BrewTicks"/> working ticks, after which the Fungus is one Grog, loose on the tile, and the goblin is Idle again.
 /// A Craving ends any of those Tasks at once, dropping what the goblin carries: it goes Seeking the nearest unit of Grub,
 /// then Eating it where it lies, or SeekingGrog and Drinking for a Craving for Grog, or SeekingHeap (walking to the
 /// nearest Sleeping Heap tile) and Sleeping there, or Sleeping where it stands when no Heap is in reach. A goblin finishes the one Need it
@@ -77,6 +79,69 @@ public static class GoblinTasks
 	/// </summary>
 	public static bool TendTick(SimState s, int g) => ++s.GoblinWorkTicks[g] >= ProductionRules.TendTicks;
 
+	/// <summary>
+	/// Idle or Wandering → Gathering, walking to the tile <paramref name="sourceTile"/> holding the Fungus it has claimed, or Taking
+	/// at once when <paramref name="taking"/> (the goblin already stands on it). Drops any wander.
+	/// </summary>
+	public static void BeginBrew(SimState s, int g, int sourceTile, bool taking)
+	{
+		s.GoblinJobTile[g] = sourceTile;
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinWanderTile[g] = -1;
+		s.GoblinWanderTicks[g] = 0;
+		s.GoblinTask[g] = (byte)(taking ? GoblinTask.Taking : GoblinTask.Gathering);
+	}
+
+	/// <summary>Gathering → Taking, on arrival at the Fungus.</summary>
+	public static void StartTaking(SimState s, int g)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.Taking;
+	}
+
+	/// <summary>
+	/// Taking → Bringing one unit of Fungus to the Brewery tile <paramref name="breweryTile"/>, which the goblin claims, or
+	/// Brewing at once when <paramref name="brewing"/> (it already stands on it). The unit has just left its tile.
+	/// </summary>
+	public static void FinishTake(SimState s, int g, int breweryTile, bool brewing)
+	{
+		s.GoblinCarry[g] = (byte)Material.Fungus;
+		s.GoblinJobTile[g] = breweryTile;
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)(brewing ? GoblinTask.Brewing : GoblinTask.Bringing);
+	}
+
+	/// <summary>Bringing → Brewing, on arrival at the Brewery tile.</summary>
+	public static void StartBrewing(SimState s, int g)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.Brewing;
+	}
+
+	/// <summary>
+	/// Counts one working tick of a Brew. True on the tick the <see cref="ProductionRules.BrewTicks"/>th tick is counted, when the
+	/// caller must finish it with <see cref="FinishBrew"/>.
+	/// </summary>
+	public static bool BrewTick(SimState s, int g) => ++s.GoblinWorkTicks[g] >= ProductionRules.BrewTicks;
+
+	/// <summary>
+	/// Brewing → Idle: the Fungus in the goblin's hands becomes one Grog, loose on the Brewery tile it stands on. The Fungus is
+	/// gone, so a Collapse or Craving before this tick loses the brew's progress and drops the Fungus instead.
+	/// </summary>
+	public static void FinishBrew(SimState s, int g)
+	{
+		var tile = s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]);
+		if (s.RoomAt(tile) != RoomKind.Brewery || (Material)s.GoblinCarry[g] != Material.Fungus)
+			throw new InvalidOperationException($"Goblin {g} cannot brew on tile {tile}: no Brewery, or no Fungus in hand.");
+		s.AddItems(tile, Material.Grog, 1);
+		s.GoblinCarry[g] = (byte)Material.None;
+		Release(s, g);
+	}
+
 	/// <summary>Idle → Wandering to <paramref name="target"/>, a walkable tile on the goblin's own level.</summary>
 	public static void BeginWander(SimState s, int g, int target)
 	{
@@ -132,9 +197,14 @@ public static class GoblinTasks
 		s.GoblinTask[g] = (byte)GoblinTask.Dropping;
 	}
 
-	/// <summary>Dropping → Carrying again, when the Pile under the goblin is gone or has no room left for its unit.</summary>
+	/// <summary>
+	/// Dropping → Carrying again, when the Pile under the goblin is gone or has no room left for its unit. Also Bringing or Brewing →
+	/// Carrying, when the Brewery tile the goblin claimed is gone: the Fungus in its hands goes to a Pile like any carried unit, and the
+	/// brew's progress is lost.
+	/// </summary>
 	public static void ResumeCarrying(SimState s, int g)
 	{
+		s.GoblinJobTile[g] = -1;
 		s.GoblinStepTicks[g] = 0;
 		s.GoblinWorkTicks[g] = 0;
 		s.GoblinTask[g] = (byte)GoblinTask.Carrying;
@@ -354,6 +424,37 @@ public static class GoblinTasks
 	/// <summary>True for Fetching and PickingUp: the Tasks that hold a claim on a loose unit.</summary>
 	public static bool IsFetchTask(GoblinTask task) => task is GoblinTask.Fetching or GoblinTask.PickingUp;
 
+	/// <summary>True for Gathering and Taking: the Tasks that hold a claim on a unit of Fungus.</summary>
+	public static bool IsBrewSourceTask(GoblinTask task) => task is GoblinTask.Gathering or GoblinTask.Taking;
+
+	/// <summary>True for Bringing and Brewing: the Tasks that hold a claim on a Brewery tile, with the Fungus in hand.</summary>
+	public static bool IsBreweryTask(GoblinTask task) => task is GoblinTask.Bringing or GoblinTask.Brewing;
+
+	/// <summary>How many goblins numbered below <paramref name="below"/> are Gathering or Taking a unit of Fungus on <paramref name="tile"/>.</summary>
+	public static int BrewClaims(SimState s, int tile, int below)
+	{
+		var claims = 0;
+		for (var g = 0; g < below; g++)
+			if (s.GoblinJobTile[g] == tile && IsBrewSourceTask((GoblinTask)s.GoblinTask[g]))
+				claims++;
+		return claims;
+	}
+
+	/// <summary>
+	/// Claims on a tile's units by goblins numbered below <paramref name="below"/>, haulers and brewers together: no unit is claimed twice,
+	/// so the count stays under what the tile holds (<see cref="SimState.LooseTotal"/> for a hauler, its Fungus for a brewer).
+	/// </summary>
+	public static int SupplyClaims(SimState s, int tile, int below) => FetchClaims(s, tile, below) + BrewClaims(s, tile, below);
+
+	/// <summary>True when a goblin is Bringing or Brewing at the Brewery tile <paramref name="tile"/>: one brewer per tile.</summary>
+	public static bool IsBreweryClaimed(SimState s, int tile)
+	{
+		for (var g = 0; g < s.GoblinCount; g++)
+			if (s.GoblinJobTile[g] == tile && IsBreweryTask((GoblinTask)s.GoblinTask[g]))
+				return true;
+		return false;
+	}
+
 	/// <summary>
 	/// How many goblins numbered below <paramref name="below"/> hold a claim on a loose unit of <paramref name="tile"/>.
 	/// Pass the goblin count for every claim; pass a goblin's own number to ask whether its claim has a unit to itself,
@@ -374,7 +475,7 @@ public static class GoblinTasks
 	/// stands where it can dig, a PickingUp goblin stands on its unit, a Dropping goblin stands on a Pile tile, a
 	/// goblin carries a unit exactly while Carrying or Dropping, a seeking or consuming goblin has a Craving for what it seeks and an Eating or Drinking goblin stands
 	/// on a unit of it, a Sleeping goblin's meter is below <see cref="NeedRules.MeterMax"/> (it has climbed past any Craving, or Collapsed), a wander target is walkable on the goblin's own
-	/// level and not its own tile, a tender works a farm tile that is not producing, and a Tending one stands on it, no two goblins claim one tile to dig it or to tend it and no more claim a tile's loose units than it holds, step ticks are below
+	/// level and not its own tile, a tender works a farm tile that is not producing, and a Tending one stands on it, no two goblins claim one tile to dig it or to tend it, no more claim a tile's loose units than it holds, no more claim its Fungus to brew than it holds (hauling and brewing together never claim a unit twice), a Bringing or Brewing goblin holds Fungus and a Brewery tile that no other goblin has, and a Brewing one stands on it, step ticks are below
 	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> (<see cref="NeedRules.EatTicks"/> while Eating or Drinking, <see cref="ProductionRules.TendTicks"/> while Tending,
 	/// <see cref="NeedRules.FloorRecoveryTicks"/> while Sleeping) and only count while
 	/// PickingUp, Dropping, Eating, Drinking, Tending or Sleeping, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
@@ -396,14 +497,14 @@ public static class GoblinTasks
 			var carry = (Material)s.GoblinCarry[g];
 			if (!Enum.IsDefined(carry))
 				return $"Goblin {g} carries unknown material {s.GoblinCarry[g]}.";
-			var carrying = task is GoblinTask.Carrying or GoblinTask.Dropping;
+			var carrying = task is GoblinTask.Carrying or GoblinTask.Dropping || IsBreweryTask(task);
 			if (carrying && carry == Material.None)
 				return $"Goblin {g} is {task} with nothing to carry.";
 			if (!carrying && carry != Material.None)
 				return $"Goblin {g} is {task} but carries {carry}.";
-			if (s.GoblinWorkTicks[g] >= (IsConsumingTask(task) ? NeedRules.EatTicks : task == GoblinTask.Tending ? ProductionRules.TendTicks : task == GoblinTask.Sleeping ? NeedRules.FloorRecoveryTicks : HaulActionTicks))
+			if (s.GoblinWorkTicks[g] >= (IsConsumingTask(task) ? NeedRules.EatTicks : task == GoblinTask.Tending ? ProductionRules.TendTicks : task == GoblinTask.Sleeping ? NeedRules.FloorRecoveryTicks : task == GoblinTask.Brewing ? ProductionRules.BrewTicks : HaulActionTicks))
 				return $"Goblin {g} has work ticks {s.GoblinWorkTicks[g]}.";
-			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Tending or GoblinTask.Sleeping))
+			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Tending or GoblinTask.Sleeping or GoblinTask.Taking or GoblinTask.Brewing))
 				return $"Goblin {g} is {task} but has work ticks {s.GoblinWorkTicks[g]}.";
 
 			var job = s.GoblinJobTile[g];
@@ -454,8 +555,34 @@ public static class GoblinTasks
 						return $"Goblin {g} fetches tile {job}, which holds no loose unit.";
 					if (task == GoblinTask.PickingUp && job != here)
 						return $"Goblin {g} is picking up tile {job} from tile {here}.";
-					if (FetchClaims(s, job, g) >= s.LooseTotal(job))
+					if (SupplyClaims(s, job, g) >= s.LooseTotal(job))
 						return $"Goblin {g} fetches a unit on tile {job}, which holds {s.LooseTotal(job)} and is claimed by others.";
+					break;
+
+				case GoblinTask.Gathering:
+				case GoblinTask.Taking:
+					if (wanderTile != -1 || wanderTicks != 0)
+						return $"Goblin {g} is working but wanders.";
+					if (!(job >= 0 && job < tiles && s.ItemCount(job, Material.Fungus) > 0))
+						return $"Goblin {g} gathers tile {job}, which holds no Fungus.";
+					if (task == GoblinTask.Taking && job != here)
+						return $"Goblin {g} is taking Fungus on tile {job} from tile {here}.";
+					if (SupplyClaims(s, job, g) >= s.ItemCount(job, Material.Fungus))
+						return $"Goblin {g} gathers a unit of Fungus on tile {job}, which holds {s.ItemCount(job, Material.Fungus)} and is claimed by others.";
+					break;
+
+				case GoblinTask.Bringing:
+				case GoblinTask.Brewing:
+					if (wanderTile != -1 || wanderTicks != 0)
+						return $"Goblin {g} is working but wanders.";
+					if (carry != Material.Fungus)
+						return $"Goblin {g} is {task} with {carry} in hand, not Fungus.";
+					if (!(job >= 0 && job < tiles && s.RoomAt(job) == RoomKind.Brewery))
+						return $"Goblin {g} brews at tile {job}, which is no Brewery.";
+					if (task == GoblinTask.Brewing && job != here)
+						return $"Goblin {g} is brewing at tile {job} from tile {here}.";
+					if (FindOtherBrewer(s, g, job) is { } brewRival)
+						return $"Goblins {brewRival} and {g} both claim Brewery tile {job}.";
 					break;
 
 				case GoblinTask.Approaching:
@@ -510,6 +637,15 @@ public static class GoblinTasks
 	{
 		for (var other = 0; other < g; other++)
 			if (s.GoblinJobTile[other] == job && IsTendTask((GoblinTask)s.GoblinTask[other]))
+				return other;
+		return null;
+	}
+
+	// The lower-numbered goblin that is bringing Fungus to or brewing at the same Brewery tile as goblin g, or null.
+	static int? FindOtherBrewer(SimState s, int g, int job)
+	{
+		for (var other = 0; other < g; other++)
+			if (s.GoblinJobTile[other] == job && IsBreweryTask((GoblinTask)s.GoblinTask[other]))
 				return other;
 		return null;
 	}
