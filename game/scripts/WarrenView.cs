@@ -66,24 +66,18 @@ public partial class WarrenView : Node2D
 					DrawLine(new Vector2(rect.Position.X + 3, ry), new Vector2(rect.End.X - 3, ry), StairsMarkColor, 2);
 				}
 
-			// A Pile tile is tinted and shows its stored count per material, in that material's colour (dirt top
-			// left, stone bottom right); a count at the Pile's capacity sits on a bright chip, and only that material's.
-			// A loose item is a small square in the same colour (stone matches solid stone), greyed while its Haul
-			// waits for a Pile with room for its material that it can be carried to.
+			// A Pile tile is tinted and shows its stored count per material, in that material's colour; a count at the
+			// Pile's capacity sits on a bright chip, and only that material's. A loose item is a small square in the
+			// same colour (stone matches solid stone), greyed while its Haul waits for a Pile with room for its material
+			// that it can be carried to.
 			if (s.IsPile(tile))
-			{
 				DrawRect(rect, PileTint);
-				DrawCount(s.StoredCount(tile, Goblins.Sim.Material.Dirt), rect.Position + new Vector2(2, 9), LooseDirtColor);
-				DrawCount(s.StoredCount(tile, Goblins.Sim.Material.Stone), rect.Position + new Vector2(2, CellSize - 2), StoneColor);
-			}
-			else
+			for (var material = Goblins.Sim.Material.Dirt; (int)material <= SimState.CountedMaterials; material++)
 			{
-				if (s.LooseCount(tile, Goblins.Sim.Material.Dirt) > 0)
-					DrawRect(new Rect2(rect.Position.X + 3, rect.Position.Y + 3, 6, 6),
-						s.IsHaulReachable(tile, Goblins.Sim.Material.Dirt) ? LooseDirtColor : WaitingHaulColor);
-				if (s.LooseCount(tile, Goblins.Sim.Material.Stone) > 0)
-					DrawRect(new Rect2(rect.End.X - 9, rect.End.Y - 9, 6, 6),
-						s.IsHaulReachable(tile, Goblins.Sim.Material.Stone) ? StoneColor : WaitingHaulColor);
+				if (s.IsPile(tile))
+					DrawCount(s.StoredCount(tile, material), CountBaseline(rect, (int)material - 1), MaterialColor(material));
+				else if (s.LooseCount(tile, material) > 0)
+					DrawRect(LooseSquare(rect, (int)material - 1), s.IsHaulReachable(tile, material) ? MaterialColor(material) : WaitingHaulColor);
 			}
 
 			if (s.DesignationAt(tile) == DesignationKind.None)
@@ -126,7 +120,7 @@ public partial class WarrenView : Node2D
 				if (other < g)
 					slot++;
 			}
-			DrawRect(CarriedRect(MarkerRect(s, g, 0), slot, carriers), carried == Goblins.Sim.Material.Stone ? StoneColor : LooseDirtColor);
+			DrawRect(CarriedRect(MarkerRect(s, g, 0), slot, carriers), MaterialColor(carried));
 		}
 
 		if (Selection is { } sel)
@@ -138,6 +132,20 @@ public partial class WarrenView : Node2D
 			DrawRect(box, SelectionColor, filled: false, width: 2);
 		}
 	}
+
+	/// <summary>The colour of a material's loose squares, its Pile counts and the square on a carrying goblin.</summary>
+	public static Color MaterialColor(Goblins.Sim.Material material) => material switch
+	{
+		Goblins.Sim.Material.Dirt => LooseDirtColor,
+		Goblins.Sim.Material.Stone => StoneColor,
+		_ => throw new ArgumentOutOfRangeException(nameof(material), material, "No colour for this material."),
+	};
+
+	/// <summary>The loose square of the material in <paramref name="slot"/> (its number less one), in a tile's <paramref name="rect"/>.</summary>
+	static Rect2 LooseSquare(Rect2 rect, int slot) => new(rect.Position.X + 3 + 6 * slot, rect.Position.Y + 3 + 6 * slot, 6, 6);
+
+	/// <summary>Where the count in <paramref name="slot"/> starts on a Pile tile.</summary>
+	static Vector2 CountBaseline(Rect2 rect, int slot) => rect.Position + new Vector2(2, 9 + slot * (CellSize - 11));
 
 	static Rect2 MarkerRect(SimState s, int goblin, int dz)
 	{
