@@ -35,6 +35,8 @@ public partial class WarrenView : Node2D
 	public static readonly Color FightColor = new(0.98f, 0.45f, 0.12f);
 	/// <summary>The ring round a goblin recovering from a scuffle: the fight colour, banked down.</summary>
 	public static readonly Color FightRestColor = new(0.62f, 0.34f, 0.22f);
+	/// <summary>The ring and the mask on a goblin stealing, in any stage of a theft: a crimson clear of the lilac, the orange and the colours of Grub and Grog.</summary>
+	public static readonly Color ThiefColor = new(0.78f, 0.10f, 0.20f);
 	public const int PipSize = 4;
 	static readonly Color LooseDirtColor = new(0.55f, 0.36f, 0.18f);
 	static readonly Color GrubColor = new(0.93f, 0.52f, 0.48f);
@@ -147,6 +149,8 @@ public partial class WarrenView : Node2D
 				DrawRect(MarkerRect(s, g, dz).Grow(2), ShirkColor);
 			else if (dz == 0 && FightRingColor((GoblinTask)s.GoblinTask[g]) is { } ring)
 				DrawRect(MarkerRect(s, g, dz).Grow(2), ring);
+			else if (dz == 0 && GoblinTasks.IsTheftTask((GoblinTask)s.GoblinTask[g]))
+				DrawRect(MarkerRect(s, g, dz).Grow(2), ThiefColor);
 			if (dz == 0)
 				DrawRect(MarkerRect(s, g, dz).Grow(1), GoblinOutlineColor);
 			if (Math.Abs(dz) <= 1)
@@ -163,6 +167,11 @@ public partial class WarrenView : Node2D
 			DrawLine(marker.Position, marker.End, FightColor, 2);
 			DrawLine(new Vector2(marker.End.X, marker.Position.Y), new Vector2(marker.Position.X, marker.End.Y), FightColor, 2);
 		}
+
+		// A thief's mask lies across the top of its body, above the unit it carries, which draws over the middle in its own colour.
+		for (var g = 0; g < s.GoblinCount; g++)
+			if (s.GoblinZ[g] == ViewZ && GoblinTasks.IsTheftTask((GoblinTask)s.GoblinTask[g]))
+				DrawRect(ThiefMaskRect(MarkerRect(s, g, 0)), ThiefColor);
 
 		// A shirker carries nothing, so its band has the body to itself; the pip and a hovering cursor still draw over it.
 		for (var g = 0; g < s.GoblinCount; g++)
@@ -241,6 +250,9 @@ public partial class WarrenView : Node2D
 
 	/// <summary>The band across the middle of a shirking goblin's <paramref name="marker"/>: its full width and 3 px tall, clear of the pip in the top right corner.</summary>
 	public static Rect2 ShirkBandRect(Rect2 marker) => new(marker.Position.X, marker.Position.Y + (int)marker.Size.Y / 2 - 1, marker.Size.X, 3);
+
+	/// <summary>The mask across the top of a thieving goblin's <paramref name="marker"/>: its full width and 2 px tall, above the unit it carries and clear of a shirk's band.</summary>
+	public static Rect2 ThiefMaskRect(Rect2 marker) => new(marker.Position.X, marker.Position.Y + 1, marker.Size.X, 2);
 
 	/// <summary>Where the "zzz" of a sleeping goblin starts: along the lower part of its <paramref name="marker"/>, clear of the pip in the top right corner.</summary>
 	public static Vector2 ZzzBaseline(Rect2 marker) => marker.Position + new Vector2(0, ZzzFontSize + 2);

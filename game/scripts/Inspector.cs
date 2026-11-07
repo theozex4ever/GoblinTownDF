@@ -8,9 +8,9 @@ public readonly record struct MeterReading(Need Need, int Value);
 
 /// <summary>
 /// One goblin on an inspected tile: its <see cref="Title"/> (stable name and Role), what it is <see cref="Doing"/> in plain words, its meters, its
-/// <see cref="Chaos"/>, whether it is <see cref="Shirking"/> or <see cref="Fighting"/> in any stage of a fight (the map wears a marker for each), and a <see cref="Note"/> in the goblin voice.
+/// <see cref="Chaos"/>, whether it is <see cref="Shirking"/>, <see cref="Fighting"/> in any stage of a fight or <see cref="Stealing"/> in any stage of a theft (the map wears a marker for each), and a <see cref="Note"/> in the goblin voice.
 /// </summary>
-public readonly record struct GoblinReading(string Title, string Doing, IReadOnlyList<MeterReading> Meters, int Chaos, bool Shirking, string Note, bool Fighting = false);
+public readonly record struct GoblinReading(string Title, string Doing, IReadOnlyList<MeterReading> Meters, int Chaos, bool Shirking, string Note, bool Fighting = false, bool Stealing = false);
 
 /// <summary>
 /// One material's count on an inspected tile. <see cref="Full"/> marks a Pile count at capacity; <see cref="Waiting"/> marks
@@ -60,17 +60,21 @@ public static class Inspector
 		var task = (GoblinTask)s.GoblinTask[goblin];
 		var shirking = task == GoblinTask.Shirking;
 		var fighting = GoblinTasks.IsFightTask(task);
+		var stealing = GoblinTasks.IsTheftTask(task);
 		var mood = task == GoblinTask.Sleeping ? "Fast asleep. Hunger and thirst may take a number."
 			: shirking ? "Has withdrawn labour. The principle is very important, and so is the floor."
 			: task is GoblinTask.Pursuing or GoblinTask.Scuffling ? "Has a grievance and a target. Dignity is taking cover."
 			: task == GoblinTask.Scuffled ? "Was minding its work. The work has been rudely interrupted."
 			: task == GoblinTask.Recovering ? "Sitting very still, in the manner of the recently thumped."
+			: task is GoblinTask.Sneaking or GoblinTask.Pilfering or GoblinTask.MakingOff ? "Borrowing from everyone at once, and not planning to mention it."
+			: task == GoblinTask.Scoffing ? "Eating in a corner, facing the wall. It tastes better when it is nobody's business."
+			: task == GoblinTask.Stalled ? "Holding the evidence, with nowhere to put it down. Looking busy."
 			: NeedRules.IsStarving(grub) ? "Starving, and bearing it at half speed with great dignity."
 			: craving == Need.Sleep ? "Thinking about nothing but a lie-down, on anything flat."
 			: craving != Need.None ? $"Thinking about nothing but {craving}."
 			: "At peace with the world, and with lunch.";
 		MeterReading[] meters = [new(Need.Grub, grub), new(Need.Grog, grog), new(Need.Sleep, sleep)];
-		return new GoblinReading($"{GoblinNames.For(goblin)}, {(Role)s.GoblinRole[goblin]}", TaskWords(s, goblin), meters, s.GoblinChaos[goblin], shirking, mood, fighting);
+		return new GoblinReading($"{GoblinNames.For(goblin)}, {(Role)s.GoblinRole[goblin]}", TaskWords(s, goblin), meters, s.GoblinChaos[goblin], shirking, mood, fighting, stealing);
 	}
 
 	/// <summary>A goblin's Task in plain words, naming what it carries or where it is headed.</summary>
@@ -107,9 +111,17 @@ public static class Inspector
 			GoblinTask.Scuffling => $"Scuffling with {Other(s, goblin)}, with great commitment",
 			GoblinTask.Scuffled => $"Being scuffled by {Other(s, goblin)}, under protest",
 			GoblinTask.Recovering => $"Sitting down after a scuffle with {Other(s, goblin)}",
+			GoblinTask.Sneaking => $"Creeping toward a Pile, eyeing the {Word(Stolen(s, goblin))}",
+			GoblinTask.Pilfering => $"Pocketing a {Word(Stolen(s, goblin))}, very casually",
+			GoblinTask.MakingOff => $"Making off with a {Word(Stolen(s, goblin))}, looking innocent",
+			GoblinTask.Scoffing => $"Scoffing a stolen {Word(Stolen(s, goblin))}, in private",
+			GoblinTask.Stalled => $"Stuck holding a stolen {Word(Stolen(s, goblin))}, nowhere to put it",
 			var task => task.ToString(),
 		};
 	}
+
+	// The supply a thief set out to take.
+	static Material Stolen(SimState s, int goblin) => (Material)s.GoblinTheftSupply[goblin];
 
 	// The name of the other goblin of a fight.
 	static string Other(SimState s, int goblin) => GoblinNames.For(s.GoblinFightPartner[goblin]);

@@ -1,0 +1,214 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Godot;
+using Goblins.Sim;
+
+namespace AThousandGoblinsDeep;
+
+/// <summary>
+/// Scripted demonstration, not a check, not a human playtest. Runs the real Main scene in a viewport with only ordinary player commands (Piles, a Grub Pit, digs, stairs down,
+/// a Fungus Farm and a Brewery), no extra supplies and no debug controls, fast-forwarding the sim with Advance until a goblin steals of its own accord, then
+/// captures each stage with the pointer on the thief (engine-local mouse motion only) and keeps playing to show ordinary eating, hauling and brewing carry on.
+/// </summary>
+public partial class TheftDemo : Node
+{
+	SubViewport _viewport = null!;
+	Main _main = null!;
+	string _dir = "";
+	readonly List<string> _log = [];
+
+	void Log(string line) { _log.Add(line); GD.Print(line); }
+
+	async Task Frames(int n) { for (var i = 0; i < n; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+
+	void Motion(Vector2 at)
+	{
+		using var input = new InputEventMouseMotion { Position = at, GlobalPosition = at };
+		_viewport.PushInput(input, inLocalCoords: true);
+	}
+
+	async Task Capture(string name)
+	{
+		await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+		using var image = _viewport.GetTexture().GetImage();
+		image.SavePng(System.IO.Path.Combine(_dir, name + ".png"));
+	}
+
+	int _level;
+
+	// The viewed level follows the thief, by the same keys a player would press, handed straight to Main (engine-local; nothing reaches the host).
+	void ShowLevel(int z)
+	{
+		while (_level != z)
+		{
+			using var input = new InputEventKey { Keycode = _level < z ? Key.Period : Key.Comma, Pressed = true };
+			_main._UnhandledKeyInput(input);
+			_level += _level < z ? 1 : -1;
+		}
+	}
+
+	static int Total(SimState s, Goblins.Sim.Material m)
+	{
+		var total = 0;
+		for (var tile = 0; tile < s.TileKinds.Length; tile++) total += s.ItemCount(tile, m);
+		for (var g = 0; g < s.GoblinCount; g++) if (s.GoblinCarry[g] == (byte)m) total++;
+		return total;
+	}
+
+	public override async void _Ready()
+	{
+		try
+		{
+			_dir = OS.GetEnvironment("GOBLINTOWN_CAPTURE_DIR");
+			if (_dir == "") _dir = "/tmp/theft-demo";
+			var capture = DisplayServer.GetName() != "headless";
+			System.IO.Directory.CreateDirectory(_dir);
+			_viewport = new SubViewport { Size = new Vector2I(1280, 720), RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+			AddChild(_viewport);
+			_main = new Main();
+			_viewport.AddChild(_main);
+			await Frames(4);
+			var sim = _main.View.Sim!;
+			var s = sim.State;
+			Log($"seed {s.Seed}; ordinary commands only, no extra supplies, no debug controls; startup Grub {Total(s, Goblins.Sim.Material.Grub)}, Grog {Total(s, Goblins.Sim.Material.Grog)}");
+			sim.Apply(new SetPaused(false));
+
+			// Ordinary player orders: store the supplies on a Pile, a Grub Pit, some digging for dirt to haul, and a way down to a Fungus Farm and a Brewery.
+			sim.Apply(new PaintPile(0, 18, 16, 19, 17));
+			sim.Apply(new PaintRoom(RoomKind.GrubPit, 0, 12, 12, 13, 13));
+			sim.Apply(new Designate(DesignationKind.Dig, 0, 22, 12, 24, 14));
+			sim.Apply(new Designate(DesignationKind.DigStairs, 0, 16, 20, 16, 20));
+			var below = false;
+			var farm = false;
+			var counters = new Dictionary<string, int> { ["eat"] = 0, ["drink"] = 0, ["haul-drop"] = 0, ["brew"] = 0, ["tend"] = 0 };
+			var last = new byte[s.GoblinCount];
+			var thief = -1;
+			var stage = 0;
+			var done = false;
+			var theftPickups = 0;
+			long endTick = 0;
+			var after = new Dictionary<string, int>(counters);
+			var limit = 60_000;
+			while (!done && s.Tick < limit)
+			{
+				sim.Advance(0.1);
+				foreach (var e in sim.DrainEvents())
+					if (e is TheftPickedUp pickup)
+					{
+						theftPickups++;
+						Log($"tick {s.Tick}: THEFT PICKUP event: {GoblinNames.For(pickup.Goblin)} took a {pickup.Supply}; Grub {Total(s, Goblins.Sim.Material.Grub)}, Grog {Total(s, Goblins.Sim.Material.Grog)} (carried counted)");
+					}
+
+				// Ordinary orders follow the digging: the second stairs, then the rooms below.
+				if (!below && s.KindAt(s.TileIndex(16, 20, 0)) == TileKind.Stairs)
+				{
+					sim.Apply(new Designate(DesignationKind.DigStairs, 1, 16, 20, 16, 20));
+					sim.Apply(new Designate(DesignationKind.Dig, 1, 17, 20, 20, 22));
+					below = true;
+				}
+				if (below && !farm && s.KindAt(s.TileIndex(20, 22, 1)) == TileKind.Floor && s.KindAt(s.TileIndex(17, 20, 1)) == TileKind.Floor)
+				{
+					sim.Apply(new PaintRoom(RoomKind.FungusFarm, 1, 17, 20, 18, 21));
+					sim.Apply(new PaintRoom(RoomKind.Brewery, 1, 19, 20, 20, 21));
+					sim.Apply(new PaintPile(1, 17, 22, 20, 22));
+					farm = true;
+					Log($"tick {s.Tick}: Fungus Farm, Brewery and a Pile painted on z1");
+				}
+
+				for (var g = 0; g < s.GoblinCount; g++)
+				{
+					if (s.GoblinTask[g] == last[g]) continue;
+					var from = (GoblinTask)last[g];
+					var task = (GoblinTask)s.GoblinTask[g];
+					last[g] = s.GoblinTask[g];
+					if (task == GoblinTask.Eating) counters["eat"]++;
+					if (task == GoblinTask.Drinking) counters["drink"]++;
+					if (from == GoblinTask.Dropping && task == GoblinTask.Idle) counters["haul-drop"]++;
+					if (from == GoblinTask.Brewing && task == GoblinTask.Idle) counters["brew"]++;
+					if (from == GoblinTask.Tending && task == GoblinTask.Idle) counters["tend"]++;
+					if (GoblinTasks.IsTheftTask(task) || GoblinTasks.IsTheftTask(from))
+						Log($"tick {s.Tick}: {GoblinNames.For(g)} {from} -> {task} (chaos {s.GoblinChaos[g]}, cooldown {s.GoblinActCooldown[g]}, carry {(Goblins.Sim.Material)s.GoblinCarry[g]}, at {s.GoblinX[g]},{s.GoblinY[g]})");
+					// A goblin already standing on the Pile begins at the pickup; one elsewhere begins by Sneaking to it.
+					if (thief < 0 && task is GoblinTask.Sneaking or GoblinTask.Pilfering) { thief = g; stage = task == GoblinTask.Sneaking ? 0 : 1; }
+				}
+
+				if (thief < 0) continue;
+				var want = stage switch { 0 => GoblinTask.Sneaking, 1 => GoblinTask.Pilfering, 2 => GoblinTask.MakingOff, 3 => GoblinTask.Scoffing, _ => GoblinTask.Idle };
+				if ((GoblinTask)s.GoblinTask[thief] != want) continue;
+				if (stage == 2 && s.GoblinTheftDestination[thief] >= 0)
+				{
+					// Mid-walk: two steps in, so the carried unit is clearly away from the Pile.
+					var dest = s.GoblinTheftDestination[thief];
+					var here = s.TileIndex(s.GoblinX[thief], s.GoblinY[thief], s.GoblinZ[thief]);
+					var distance = Math.Abs(dest % s.Width - s.GoblinX[thief]) + Math.Abs(dest / s.Width % s.Height - s.GoblinY[thief]);
+					if (here == dest || distance > 2) continue;
+				}
+				if (stage == 4)
+				{
+					endTick = s.Tick;
+					after = new Dictionary<string, int>(counters);
+					Log($"tick {s.Tick}: theft over: {GoblinNames.For(thief)} Idle, chaos {s.GoblinChaos[thief]}, cooldown {s.GoblinActCooldown[thief]}; Grub {Total(s, Goblins.Sim.Material.Grub)}, Grog {Total(s, Goblins.Sim.Material.Grog)}; grub meter {s.GoblinGrub[thief]}, grog meter {s.GoblinGrog[thief]}");
+				}
+				if (capture)
+				{
+					sim.Apply(new SetPaused(true));
+					ShowLevel(s.GoblinZ[thief]);
+					Motion(_main.View.GlobalPosition + new Vector2((s.GoblinX[thief] + 0.5f) * WarrenView.CellSize, (s.GoblinY[thief] + 0.5f) * WarrenView.CellSize));
+					await Frames(4);
+					await Capture($"{stage + 1}-{want}".ToLowerInvariant());
+					var inspected = string.Join(" | ", _main.Inspection.Goblins.Select(r => r.Title + " - " + r.Doing + $" (chaos {r.Chaos})"));
+					Log($"captured {want} at tick {s.Tick}; inspector: {inspected}");
+					sim.Apply(new SetPaused(false));
+				}
+				else
+					Log($"(headless) {want} at tick {s.Tick}: {Inspector.TaskWords(s, thief)}");
+				stage++;
+				if (stage == 5) { done = true; }
+			}
+			if (thief < 0) Log($"no theft by tick {s.Tick}");
+
+			if (done)
+			{
+				// Ordinary life carries on: keep playing 4000 more ticks and count what the goblins did.
+				var until = s.Tick + 4000;
+				while (s.Tick < until)
+				{
+					sim.Advance(0.1);
+					sim.DrainEvents();
+					for (var g = 0; g < s.GoblinCount; g++)
+					{
+						if (s.GoblinTask[g] == last[g]) continue;
+						var from = (GoblinTask)last[g];
+						var task = (GoblinTask)s.GoblinTask[g];
+						last[g] = s.GoblinTask[g];
+						if (task == GoblinTask.Eating) counters["eat"]++;
+						if (task == GoblinTask.Drinking) counters["drink"]++;
+						if (from == GoblinTask.Dropping && task == GoblinTask.Idle) counters["haul-drop"]++;
+						if (from == GoblinTask.Brewing && task == GoblinTask.Idle) counters["brew"]++;
+						if (from == GoblinTask.Tending && task == GoblinTask.Idle) counters["tend"]++;
+					}
+				}
+				Log($"ordinary life: through tick {endTick} -> eat {after["eat"]}, drink {after["drink"]}, hauls dropped {after["haul-drop"]}, brews {after["brew"]}, tends {after["tend"]}");
+				Log($"ordinary life: through tick {s.Tick} -> eat {counters["eat"]}, drink {counters["drink"]}, hauls dropped {counters["haul-drop"]}, brews {counters["brew"]}, tends {counters["tend"]}");
+				Log($"ordinary life after the theft ({s.Tick - endTick} ticks): +{counters["eat"] - after["eat"]} meals, +{counters["drink"] - after["drink"]} drinks, +{counters["haul-drop"] - after["haul-drop"]} hauls, +{counters["brew"] - after["brew"]} brews, +{counters["tend"] - after["tend"]} tends");
+				if (capture)
+				{
+					sim.Apply(new SetPaused(true));
+					ShowLevel(0);
+					await Frames(4);
+					await Capture("6-later-warren");
+				}
+			}
+			Log($"finished at tick {s.Tick}; theft pickups {theftPickups}");
+			System.IO.File.WriteAllLines(System.IO.Path.Combine(_dir, "rawlog.txt"), _log);
+			GetTree().Quit(done ? 0 : 1);
+		}
+		catch (Exception error)
+		{
+			GD.PushError(error.ToString());
+			GetTree().Quit(1);
+		}
+	}
+}

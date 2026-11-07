@@ -195,7 +195,8 @@ public sealed partial class JobSystem
 				Pursue(s, g, events);
 				continue;
 			}
-			if (!GoblinTasks.IsConsumingTask(task) && task != GoblinTask.Sleeping && task != GoblinTask.Shirking && !NeedRules.ActsThisTick(s.GoblinGrub[g], s.Tick))
+			if (!GoblinTasks.IsConsumingTask(task) && task is not (GoblinTask.Sleeping or GoblinTask.Shirking or GoblinTask.Pilfering or GoblinTask.Scoffing or GoblinTask.Stalled)
+				&& !NeedRules.ActsThisTick(s.GoblinGrub[g], s.Tick))
 				continue;
 
 			// An idle or wandering goblin takes any Job it can reach; with none, it wanders on.
@@ -259,6 +260,21 @@ public sealed partial class JobSystem
 					if (GoblinTasks.ShirkTick(s, g))
 						GoblinTasks.FinishShirk(s, g);
 					break;
+				case GoblinTask.Sneaking:
+					Sneak(s, g);
+					break;
+				case GoblinTask.Pilfering:
+					Pilfer(s, g, events);
+					break;
+				case GoblinTask.MakingOff:
+					MakeOff(s, g);
+					break;
+				case GoblinTask.Scoffing:
+					Scoff(s, g);
+					break;
+				case GoblinTask.Stalled:
+					Stall(s, g);
+					break;
 				case GoblinTask.SeekingHeap:
 					SeekHeap(s, g);
 					break;
@@ -301,8 +317,8 @@ public sealed partial class JobSystem
 	// A goblin with enough Chaos and no cooldown stops what it is doing and acts out, once its Craving has had its chance: this runs after
 	// TryCraving, so a goblin that set out to meet a Need is satisfying one and is not eligible, and Collapse (which a goblin that can set down its
 	// unit always makes) has already put it to sleep. Anything carried is put down by the same legal-drop rule as for a Craving; with no legal place the
-	// goblin keeps its unit and its work, and looks again next tick. Shirking is always an option and a fight is one while a target is in reach; when both are,
-	// the choice is drawn from s.Rng with equal chance, and when only shirking is, nothing is drawn.
+	// goblin keeps its unit and its work, and looks again next tick. Shirking is always an option, a fight is one while a target is in reach and theft is one while a Pile
+	// holding Grub or Grog and a tile to consume it on are; the choice is drawn from s.Rng with equal chance among those there are, and when only shirking is, nothing is drawn.
 	void TryActOut(SimState s, int goblin, List<SimEvent> events)
 	{
 		if (!ChaosSystem.CanActOut(s, goblin))
@@ -313,12 +329,22 @@ public sealed partial class JobSystem
 		if (carried != Material.None && !TryFindDropTile(s, goblin, carried, out dropTile))
 			return;
 
-		if (TryFindTarget(s, goblin, out var target) && s.Rng.NextInt(2) == 1)
-			GoblinTasks.BeginPursuit(s, goblin, target, dropTile);
-		else
+		// The options, in this order: shirking always, a fight while a target is in reach, theft while a source and a destination are.
+		var fight = TryFindTarget(s, goblin, out var target);
+		var theft = TryFindTheft(s, goblin, out var source, out var supply, out var destination);
+		var options = 1 + (fight ? 1 : 0) + (theft ? 1 : 0);
+		var pick = options == 1 ? 0 : s.Rng.NextInt(options);
+		if (pick == 0)
 		{
 			GoblinTasks.BeginShirk(s, goblin, dropTile);
 			events.Add(new ShirkStarted(goblin));
+		}
+		else if (fight && pick == 1)
+			GoblinTasks.BeginPursuit(s, goblin, target, dropTile);
+		else
+		{
+			var here = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
+			GoblinTasks.BeginTheft(s, goblin, source, supply, destination, dropTile, atSource: here == source);
 		}
 		// The unit put down is a new loose Haul, or has taken a Pile tile's last slot of its material.
 		if (carried != Material.None)

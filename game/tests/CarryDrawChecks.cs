@@ -29,10 +29,11 @@ public partial class CarryDrawChecks : Node
 			ZzzLayoutCheck();
 			ShirkLayoutCheck();
 			FightLayoutCheck();
+			ThiefLayoutCheck();
 
 			if (DisplayServer.GetName() == "headless")
 			{
-				GD.Print("Carry draw checks: layout checks passed; the 12 pixel scenarios were SKIPPED, not passed: no renderer under --headless.");
+				GD.Print("Carry draw checks: layout checks passed; the 13 pixel scenarios were SKIPPED, not passed: no renderer under --headless.");
 				GetTree().Quit();
 				return;
 			}
@@ -49,7 +50,8 @@ public partial class CarryDrawChecks : Node
 			await BreweryTintCheck();
 			await ShirkMarkCheck();
 			await FightMarkCheck();
-			GD.Print("Carry draw checks passed (layout, colours, count order, 12 pixel scenarios).");
+			await ThiefMarkCheck();
+			GD.Print("Carry draw checks passed (layout, colours, count order, 13 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -400,6 +402,59 @@ public partial class CarryDrawChecks : Node
 		Require(!IsNear(Ring(6), WarrenView.FightColor) && !IsNear(Ring(6), WarrenView.FightRestColor), "A goblin in no fight wears a fight ring.");
 		var pip = WarrenView.PipRect(Marker(2)).GetCenter();
 		Require(IsNear(image.GetPixel((int)pip.X, (int)pip.Y), WarrenView.NeedColor(Need.Grub)), "A scuffling goblin that craves Grub has lost its pip under the cross.");
+	}
+
+	// The thief's ring and mask lie inside their tile, the mask clears the square a thief carries and the pip, and the thief's colour is told apart from a shirk's and a fight's.
+	static void ThiefLayoutCheck()
+	{
+		var tile = new Rect2(0, 0, WarrenView.CellSize, WarrenView.CellSize);
+		var marker = new Rect2(3, 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+		Require(tile.Encloses(marker.Grow(2)), "The thief's ring leaves its tile.");
+		var mask = WarrenView.ThiefMaskRect(marker);
+		Require(marker.Encloses(mask), $"The thief's mask {mask} leaves its marker.");
+		Require(!mask.Intersects(WarrenView.CarriedRect(marker, 0, 1)), "The thief's mask covers the unit it carries.");
+		Require(!mask.Intersects(WarrenView.ShirkBandRect(marker)), "The thief's mask overlaps a shirk's band.");
+		foreach (var other in new[] { WarrenView.ShirkColor, WarrenView.FightColor, WarrenView.FightRestColor, WarrenView.GoblinColor, WarrenView.MaterialColor(Material.Grub), WarrenView.MaterialColor(Material.Grog) })
+			Require(Math.Abs(WarrenView.ThiefColor.R - other.R) + Math.Abs(WarrenView.ThiefColor.G - other.G) + Math.Abs(WarrenView.ThiefColor.B - other.B) > 0.3f,
+				"The thief's colour is too close to another cue.");
+	}
+
+	// Every stage of a theft wears a ring and a mask in the thief's colour; the unit a thief carries still shows in its own colour over the body and the Need pip still shows;
+	// a goblin that is not stealing wears neither.
+	async System.Threading.Tasks.Task ThiefMarkCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		var places = new[] { (3, 3), (3, 12), (10, 10), (11, 10), (6, 20), (6, 21), (20, 6) };
+		for (var g = 0; g < s.GoblinCount; g++)
+		{
+			(s.GoblinGrub[g], s.GoblinGrog[g], s.GoblinSleep[g]) = (100, 100, 100);
+			(s.GoblinX[g], s.GoblinY[g]) = places[g];
+		}
+		Array.Clear(s.TileItems);
+		var far = s.TileIndex(25, 25, 0);
+		// Goblin 0 is on its way to a Pile, goblin 1 is making off with Grub, goblin 2 is making off with Grog and craves Grub.
+		GoblinTasks.BeginTheft(s, 0, far, Material.Grub, far + 1, dropTile: -1, atSource: false);
+		GoblinTasks.BeginTheft(s, 1, far, Material.Grub, far + 1, dropTile: -1, atSource: true);
+		GoblinTasks.FinishPilfer(s, 1);
+		GoblinTasks.BeginTheft(s, 2, far, Material.Grog, far + 1, dropTile: -1, atSource: true);
+		GoblinTasks.FinishPilfer(s, 2);
+		s.GoblinGrub[2] = 20;
+		var image = await Render(sim);
+
+		Rect2 Marker(int g) => new(s.GoblinX[g] * WarrenView.CellSize + 3, s.GoblinY[g] * WarrenView.CellSize + 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+		Color Ring(int g) => image.GetPixel((int)Marker(g).Position.X - 2, (int)Marker(g).GetCenter().Y);
+		Color Mask(int g) { var c = WarrenView.ThiefMaskRect(Marker(g)).GetCenter(); return image.GetPixel((int)c.X, (int)c.Y); }
+		Color Centre(int g) => image.GetPixel((int)Marker(g).GetCenter().X, (int)Marker(g).GetCenter().Y);
+
+		foreach (var thief in new[] { 0, 1, 2 })
+			Require(IsNear(Ring(thief), WarrenView.ThiefColor) && IsNear(Mask(thief), WarrenView.ThiefColor), $"Thief {thief} has lost its ring or mask.");
+		Require(IsNear(Centre(0), GoblinBody), "A thief with nothing yet in hand has something over its body.");
+		Require(IsNear(Centre(1), WarrenView.MaterialColor(Material.Grub)), "A thief making off with Grub does not show the Grub.");
+		Require(IsNear(Centre(2), WarrenView.MaterialColor(Material.Grog)), "A thief making off with Grog does not show the Grog.");
+		var pip = WarrenView.PipRect(Marker(2)).GetCenter();
+		Require(IsNear(image.GetPixel((int)pip.X, (int)pip.Y), WarrenView.NeedColor(Need.Grub)), "A thief that craves Grub has lost its pip.");
+		Require(!IsNear(Ring(3), WarrenView.ThiefColor) && !IsNear(Mask(3), WarrenView.ThiefColor), "A goblin that is not stealing wears the thief's cue.");
 	}
 
 	// The "zzz" lies inside its tile, from the left edge of the goblin marker.

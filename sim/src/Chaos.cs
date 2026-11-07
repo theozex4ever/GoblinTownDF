@@ -38,6 +38,8 @@ public static class ChaosRules
 	public const int RecoveryTicks = 100;
 	/// <summary>Chaos the victim gains, once, when the scuffle starts.</summary>
 	public const int VictimGain = 15;
+	/// <summary>Maximum walking steps from a theft's source to its private consumption tile.</summary>
+	public const int TheftRange = 4;
 }
 
 /// <summary>Chaos' own system: how it rises and falls with the sim-wide clock, and who may act out. Starting an act is worked by <see cref="JobSystem"/>.</summary>
@@ -50,7 +52,7 @@ public static class ChaosSystem
 	/// <summary>
 	/// Runs once per tick, after the tick counter has advanced and the Needs have drained: counts down every cooldown, then on the sim-wide
 	/// <see cref="ChaosRules.UnmetNeedInterval"/> ticks adds 1 for each Need below the Craving threshold, whether or not supply is reachable,
-	/// except the Need the goblin is restoring right now by eating, drinking or sleeping; or, when no Need is below the threshold at all and the
+	/// except the Need the goblin is restoring right now by eating, drinking (a thief scoffing its stolen unit included) or sleeping; or, when no Need is below the threshold at all and the
 	/// goblin is not a waiting carrier, removes 1. On the sim-wide <see cref="ChaosRules.WaitingInterval"/> ticks a waiting carrier gains 1 more.
 	/// Nothing is stored beyond Chaos and the cooldown, so a save taken at any tick continues the same.
 	/// </summary>
@@ -72,7 +74,9 @@ public static class ChaosSystem
 			if (needsInterval)
 			{
 				var task = (GoblinTask)s.GoblinTask[g];
-				var restoring = task is GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Sleeping ? GoblinTasks.NeedOf(task) : Need.None;
+				var restoring = task is GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Sleeping ? GoblinTasks.NeedOf(task)
+					: task == GoblinTask.Scoffing ? NeedOfSupply((Material)s.GoblinCarry[g])
+					: Need.None;
 				var low = 0;
 				var unmet = 0;
 				Count(s.GoblinGrub[g], Need.Grub, restoring, ref low, ref unmet);
@@ -87,6 +91,14 @@ public static class ChaosSystem
 				Add(s, g, ChaosRules.WaitingGain);
 		}
 	}
+
+	// A thief consuming its stolen unit is eating or drinking it, so it is restoring the Need that supply feeds.
+	static Need NeedOfSupply(Material supply) => supply switch
+	{
+		Material.Grub => Need.Grub,
+		Material.Grog => Need.Grog,
+		_ => Need.None,
+	};
 
 	// A Need below the Craving threshold is low; it is unmet unless the goblin is restoring it this very moment.
 	static void Count(int meter, Need need, Need restoring, ref int low, ref int unmet)

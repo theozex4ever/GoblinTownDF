@@ -68,3 +68,6 @@ public sealed record HaulCancelled(int Goblin) : SimEvent;
 
 /// <summary>A goblin made contact with its target and a scuffle began: the instigator and the victim, by goblin index. A transient fact for the view; nothing is logged.</summary>
 public sealed record ScuffleStarted(int Instigator, int Victim) : SimEvent;
+
+/// <summary>A thief took its unit of Grub or Grog off a Pile: the goblin and the supply it now carries. A transient fact for the view; nothing is logged.</summary>
+public sealed record TheftPickedUp(int Goblin, Material Supply) : SimEvent;

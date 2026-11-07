@@ -142,6 +142,17 @@ public sealed class SimState
 	/// </summary>
 	public ushort[] GoblinFightTicks { get; set; } = [];
 
+	/// <summary>
+	/// The non-Pile tile a thief has chosen to consume its unit on, or -1 while a goblin is not stealing: fixed when the theft begins and never replaced.
+	/// Change through <see cref="GoblinTasks"/> only. Empty until a world fills it, like <see cref="GoblinChaos"/>.
+	/// </summary>
+	public int[] GoblinTheftDestination { get; set; } = [];
+	/// <summary>
+	/// The <see cref="Material"/> (Grub or Grog) a thief set out to take, and so the one it carries once it has; None while a goblin is not stealing.
+	/// Change through <see cref="GoblinTasks"/> only. Empty until a world fills it, like <see cref="GoblinChaos"/>.
+	/// </summary>
+	public byte[] GoblinTheftSupply { get; set; } = [];
+
 	/// <summary>The per-goblin meter of a Need.</summary>
 	public byte[] MeterOf(Need need) => need switch
 	{

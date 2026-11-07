@@ -96,6 +96,7 @@ public sealed class Simulation
 		s.GoblinChaos = new byte[SimState.MaxGoblins];
 		s.GoblinActCooldown = new ushort[SimState.MaxGoblins];
 		GoblinTasks.StartFights(s);
+		GoblinTasks.StartThefts(s);
 		// Drawn after every Grog meter, for the same reason.
 		for (var g = 0; g < s.GoblinCount; g++)
 			s.GoblinSleep[g] = NeedRules.Start(s.Rng);

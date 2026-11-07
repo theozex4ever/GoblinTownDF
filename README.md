@@ -21,7 +21,7 @@ Goblins are earnest underdogs who take absurd traditions seriously. Failure shou
 ## Development status
 
 > [!NOTE]
-> **Early grey-box prototype.** P1, P2 and P3 have been played and logged. P3 passed its fun check with five yeses out of five. P4 (Chaos) is under way: unmet Needs now raise Chaos and a goblin can shirk or pick a fight, while theft is still to come.
+> **Early grey-box prototype.** P1, P2 and P3 have been played and logged. P3 passed its fun check with five yeses out of five. P4 (Chaos) is under way: unmet Needs now raise Chaos and a goblin can shirk, pick a fight or steal supplies.
 
 The first prototype asks one question: **is it fun to dig a warren and watch goblins mess it up?** It grows through six playable milestones, each tested for fun before any art or extra systems.
 
@@ -30,7 +30,7 @@ The first prototype asks one question: **is it fun to dig a warren and watch gob
 | ✅ | **P1 — Map and digging** | Designate tunnels and stairs; one goblin digs them out | [Played](docs/playtests/2026-10-30-P1.md) |
 | ✅ | **P2 — Hauling and piles** | Goblins carry dug material to Piles | [Played](docs/playtests/2026-10-31-P2.md) |
 | ✅ | **P3 — Needs** | Food, drink, sleep, Fungus farming and a Brewery | [Played, 5/5 yes](docs/playtests/2026-11-06-P3.md) |
-| 🚧 | **P4 — Chaos** | Unmet needs lead to shirking, fights and theft | In progress: Chaos, shirking and fights built, not yet played |
+| 🚧 | **P4 — Chaos** | Unmet needs lead to shirking, fights and theft | In progress: Chaos, shirking, fights and theft built; human fun check pending |
 | ⬜ | **P5 — One invasion** | Three heroes, one trap type, and Brutes fighting back | Planned |
 | ⬜ | **P6 — Legends** | A running event log of deaths, invasions and chaos | Planned |
 
@@ -90,7 +90,7 @@ The Need a Grunt is eating, drinking or sleeping to restore adds nothing while i
 - **Shirking.** From 70 Chaos, a Grunt with no cooldown abandons its Job and loafs where it stands for 100 ticks, taking no work and not wandering. A Craving it can satisfy, Collapse and sleep all come first. A dig keeps its progress, a Tend or a Brew loses it, and a unit it carries is put down by the same rules as for a Craving. With nowhere legal to put the unit it holds on to it and tries again.
 - **Finishing.** A full 100 ticks of shirking removes 40 Chaos. A Craving it can meet, or Collapse, ends the shirk early for no relief, and it does not resume. Either way the Grunt then waits 300 ticks before it can act out again, though its Chaos can keep rising. Starving does not lengthen any of this.
 - **Seeing it.** A shirking Grunt wears a lilac ring and a lilac band across its body, and the Inspector shows its Chaos beside its Needs.
-- **Fighting.** At 70 Chaos with no cooldown, a Grunt who can reach another one on its own level draws, with equal chance, between shirking and a fight (with nobody to fight it simply shirks). A fight picks the nearest reachable Grunt, ties to the lower number, and skips anyone asleep, meeting a Need, acting out, in a cooldown, or holding a unit with nowhere legal to put it. The instigator stomps after its target for up to 100 ticks while the target carries on working; on contact, the same tile or a side-on neighbour, the target is rechecked, and if it is still fair game it abandons its work as a shirker would. The two scuffle for 30 ticks: the victim gains 15 Chaos, once, and nobody is hurt. A scuffle that runs its course takes 40 Chaos off the instigator alone, then both sit out 100 ticks of recovery and start their 300-tick cooldown together. A Craving it can meet, or Collapse, in either Grunt ends the scuffle for both with no relief and no recovery, though the victim keeps its 15; a Need can also end recovery early without restarting the cooldown. A pursuit that times out, loses its path or finds its target gone ends with the instigator's cooldown and nobody else's. Starving slows only the pursuer's walk.
+- **Fighting.** At 70 Chaos with no cooldown, a Grunt chooses equally among the behaviours available: shirking, fighting when an eligible Grunt is reachable, and theft when supplies and a private destination are available. With neither a fight nor a theft available, it simply shirks. A fight picks the nearest reachable Grunt, ties to the lower number, and skips anyone asleep, meeting a Need, acting out, in a cooldown, or holding a unit with nowhere legal to put it. The instigator stomps after its target for up to 100 ticks while the target carries on working; on contact, the same tile or a side-on neighbour, the target is rechecked, and if it is still fair game it abandons its work as a shirker would. The two scuffle for 30 ticks: the victim gains 15 Chaos, once, and nobody is hurt. A scuffle that runs its course takes 40 Chaos off the instigator alone, then both sit out 100 ticks of recovery and start their 300-tick cooldown together. A Craving it can meet, or Collapse, in either Grunt ends the scuffle for both with no relief and no recovery, though the victim keeps its 15; a Need can also end recovery early without restarting the cooldown. A pursuit that times out, loses its path or finds its target gone ends with the instigator's cooldown and nobody else's. Starving slows only the pursuer's walk.
 - **Seeing a fight.** An orange ring marks a Grunt chasing, scuffling or being scuffled, with an orange cross over the two scuffling; a duller ring marks the recovery. The Inspector names the other Grunt in each one's Task, and the Need pip and any carried square still show.
 
 **Try it: neglect, then recover.** Start the game, give no orders and press <kbd>4</kbd>. The starting Grub and Grog are eaten once; when the Needs run low again with nothing left, Chaos climbs on the Inspector's bars, and around tick 3000 the first Grunt loafs under a lilac ring and band. Then fix it as a player would: paint a Pile, a Grub Pit and a Brewery, dig stairs down and paint a Fungus Farm below, paint a Heap. Once the Grunts eat, drink and sleep again, Chaos drains away and the shirking stops. For a storage blockage instead, paint a one-tile Pile, dig a large area so it fills, and watch the Grunts left holding dirt; painting more Pile ends their wait.
@@ -174,7 +174,7 @@ A tile holds one Room, so painting skips a tile that already holds a different o
 
 ### Saves
 
-Saves are whole-state JSON and are never migrated. A P2 save, which counted two materials, is rejected, and so are saves from before the Grog and Sleep meters, from before Chaos or from before fights. There is no player-facing save or load yet.
+Saves are whole-state JSON and are never migrated. A P2 save, which counted two materials, is rejected, and so are saves from before the Grog and Sleep meters, from before Chaos, from before fights or from before theft. There is no player-facing save or load yet.
 
 ## Development
 

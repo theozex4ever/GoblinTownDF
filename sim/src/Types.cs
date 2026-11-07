@@ -80,4 +80,9 @@ public enum GoblinTask : byte
 	Scuffling,
 	Scuffled,
 	Recovering,
+	Sneaking,
+	Pilfering,
+	MakingOff,
+	Scoffing,
+	Stalled,
 }
