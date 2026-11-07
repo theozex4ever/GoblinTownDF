@@ -653,6 +653,32 @@ public partial class SelectionInputChecks : Node
 				Require(main.ClockText == "Tick 1235", $"The clock reads \"{main.ClockText}\" a tick after 1234.");
 			});
 
+			// The Tool buttons pick Tools as the keys do, and show the Tool picked whichever way it was picked.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				ExpectTool(main, null);
+				var idleHint = main.ToolHint;
+				Press(main, "ToolDigStairs");
+				ExpectTool(main, "ToolDigStairs");
+				Drag(main, view, MouseButton.Left, 4, 4, 5, 5);
+				ExpectRectangle(s, 0, DesignationKind.DigStairs, 4, 4, 5, 5);
+				Key(main, Godot.Key.P);
+				ExpectTool(main, "ToolPile");
+				Require(main.ToolHint != idleHint, "The hint did not change when the Pile Tool was picked.");
+				// A click on the picked Tool puts it away, as its key does.
+				Press(main, "ToolPile");
+				ExpectTool(main, null);
+				Require(main.ToolHint == idleHint, "The hint still describes a Tool that was put away.");
+				Key(main, Godot.Key.H);
+				ExpectTool(main, "ToolHeap");
+				Key(main, Godot.Key.Escape);
+				ExpectTool(main, null);
+				Drag(main, view, MouseButton.Left, 8, 8, 9, 9);
+				ExpectRectangle(s, 0, DesignationKind.None, 8, 8, 9, 9);
+				Require(CountRooms(s, RoomKind.SleepingHeap) == 0, "A put-away Tool still painted.");
+			});
+
 			CountLabelChecks();
 			PileCountChecks();
 
@@ -696,6 +722,15 @@ public partial class SelectionInputChecks : Node
 		if (button.ToggleMode)
 			button.SetPressedNoSignal(!button.ButtonPressed);
 		button.EmitSignal(BaseButton.SignalName.Pressed);
+	}
+
+	static readonly string[] ToolButtons = ["ToolDig", "ToolDigStairs", "ToolPile", "ToolGrubPit", "ToolFungusFarm", "ToolBrewery", "ToolHeap"];
+
+	// Exactly the named Tool button is down, or none for null.
+	static void ExpectTool(Main main, string? picked)
+	{
+		foreach (var name in ToolButtons)
+			Require(ButtonNamed(main, name).ButtonPressed == (name == picked), $"The {name} button is wrong with {picked ?? "no Tool"} picked.");
 	}
 
 	static void ExpectSpeed(Main main, SimState s, int speed)

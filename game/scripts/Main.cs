@@ -6,24 +6,10 @@ namespace AThousandGoblinsDeep;
 
 public partial class Main : Node
 {
-	enum Tool
-	{
-		None,
-		Dig,
-		DigStairs,
-		Pile,
-		GrubPit,
-		FungusFarm,
-		Brewery,
-		Heap,
-	}
-
-	const string KeyHint = "Space naps the warren. 1, 2, 4 hurry it. , and . change level. D digs, S makes stairs, P heaps things in a pile, G sets a pit aside for grubs, who need minding, F plants a fungus farm, but only down the stairs, since fungus will not grow where anyone can see it, B sets up a brewery, where a goblin stands over the fungus until it gives in and becomes grog, and H lays out a heap to sleep on, which is a bed with the pretensions removed; drag a box. Right-drag unsays it. The Grunt takes it personally.";
-
 	Simulation _sim = null!;
 	WarrenView _view = null!;
 	TopBar _topBar = null!;
-	Label _toolLabel = null!;
+	ToolPalette _palette = null!;
 	Label _hoverLabel = null!;
 	// The map cell under the cursor, from the last mouse motion; kept so the hover line follows the counts as the sim changes them.
 	Vector2I _hoverCell = new(-1, -1);
@@ -94,9 +80,9 @@ public partial class Main : Node
 		body.AddChild(left);
 		var leftColumn = new VBoxContainer();
 		left.AddChild(leftColumn);
-		_toolLabel = new Label();
-		leftColumn.AddChild(_toolLabel);
-		leftColumn.AddChild(UiTheme.Text(KeyHint, UiTheme.MutedLabel, wrap: true));
+		_palette = new ToolPalette();
+		_palette.ToolClicked += PickTool;
+		leftColumn.AddChild(_palette);
 
 		var mapArea = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
 		body.AddChild(mapArea);
@@ -238,6 +224,17 @@ public partial class Main : Node
 		_ => throw new ArgumentOutOfRangeException(nameof(tool), tool, "This Tool makes no Room."),
 	};
 
+	static Tool ToolOf(Key key)
+	{
+		foreach (var tool in Enum.GetValues<Tool>())
+			if (tool != Tool.None && ToolInfo.KeyOf(tool) == key)
+				return tool;
+		throw new ArgumentOutOfRangeException(nameof(key), key, "No Tool has this key.");
+	}
+
+	/// <summary>The how-to under the Tool palette, for the picked Tool or for none.</summary>
+	public string ToolHint => _palette.Hint;
+
 	void PickTool(Tool tool)
 	{
 		CancelSelection();
@@ -256,13 +253,7 @@ public partial class Main : Node
 			case Key.Key1 or Key.Kp1: Apply(new SetSpeed(1)); break;
 			case Key.Key2 or Key.Kp2: Apply(new SetSpeed(2)); break;
 			case Key.Key4 or Key.Kp4: Apply(new SetSpeed(4)); break;
-			case Key.D: PickTool(Tool.Dig); break;
-			case Key.S: PickTool(Tool.DigStairs); break;
-			case Key.P: PickTool(Tool.Pile); break;
-			case Key.G: PickTool(Tool.GrubPit); break;
-			case Key.F: PickTool(Tool.FungusFarm); break;
-			case Key.B: PickTool(Tool.Brewery); break;
-			case Key.H: PickTool(Tool.Heap); break;
+			case Key.D or Key.S or Key.P or Key.G or Key.F or Key.B or Key.H: PickTool(ToolOf(key.Keycode)); break;
 			case Key.Escape: CancelSelection(); _tool = Tool.None; SyncHud(); break;
 			case Key.Comma: ChangeLevel(-1); break;
 			case Key.Period: ChangeLevel(1); break;
@@ -298,16 +289,6 @@ public partial class Main : Node
 	void SyncHud()
 	{
 		_topBar.Sync(_sim.State, _viewZ);
-		_toolLabel.Text = _tool switch
-		{
-			Tool.Dig => "Tool: dig",
-			Tool.DigStairs => "Tool: stairs",
-			Tool.Pile => "Tool: pile",
-			Tool.GrubPit => "Tool: grub pit",
-			Tool.FungusFarm => "Tool: fungus farm",
-			Tool.Brewery => "Tool: brewery",
-			Tool.Heap => "Tool: sleeping heap",
-			_ => "No tool",
-		};
+		_palette.Sync(_tool);
 	}
 }

@@ -32,7 +32,7 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Dig stairs | A designation that turns a Solid or Floor tile into Stairs. |
 | Reachable | A Designation is reachable when some goblin can path to a tile it can dig from. An unreachable Designation waits: it stays designated, is skipped when goblins claim a Job, and shows greyed out until a dug tile opens a path. |
 | Selection | A click-drag on the viewed level that picks a rectangle of tiles; a single click is a 1×1 rectangle. It does not know what the active tool will do with it. |
-| Tool | The action a selection applies, picked by a key: Dig, Dig stairs, Pile, Grub Pit, Fungus Farm, Brewery, or Sleeping Heap. Right-drag removes what the active Tool makes. |
+| Tool | The action a selection applies, picked by its key or its button in the Tool palette: Dig, Dig stairs, Pile, Grub Pit, Fungus Farm, Brewery, or Sleeping Heap. Right-drag removes what the active Tool makes. |
 | Cancel designation | The `CancelDesignation` Command: removes Designations from a rectangle of tiles. A tile mid-dig loses its progress and stays as it was. |
 | Job | A unit of work in the global job list (dig, haul, tend, brew, build) that an idle goblin claims. |
 | Tend | The Job of working a Grub Pit or Fungus Farm tile so that it produces. A Grub Pit tile yields several units per Tend, a Fungus Farm tile one. A Tend is offered on a tile that is not still spawning or growing and holds no loose unit of its crop, and one goblin works a tile at a time. Nearest first with digs and Hauls; there are no priorities. |

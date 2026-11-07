@@ -9,13 +9,13 @@ public partial class WarrenView : Node2D
 {
 	public const int CellSize = 18;
 
-	static readonly Color FloorColor = new(0.62f, 0.62f, 0.64f);
+	public static readonly Color FloorColor = new(0.62f, 0.62f, 0.64f);
 	static readonly Color DirtColor = new(0.30f, 0.26f, 0.22f);
 	static readonly Color StoneColor = new(0.36f, 0.40f, 0.48f);
 	static readonly Color GridColor = new(0f, 0f, 0f, 0.15f);
-	static readonly Color StairsColor = new(0.78f, 0.74f, 0.58f);
+	public static readonly Color StairsColor = new(0.78f, 0.74f, 0.58f);
 	static readonly Color StairsMarkColor = new(0.25f, 0.22f, 0.15f);
-	static readonly Color DesignationColor = new(1f, 0.85f, 0.2f);
+	public static readonly Color DesignationColor = new(1f, 0.85f, 0.2f);
 	static readonly Color UnreachableColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color ProgressColor = new(1f, 0.85f, 0.2f, 0.55f);
 	static readonly Color SelectionColor = new(1f, 1f, 1f, 0.9f);
@@ -30,7 +30,7 @@ public partial class WarrenView : Node2D
 	static readonly Color FungusColor = new(0.64f, 0.42f, 0.82f);
 	static readonly Color GrogColor = new(0.18f, 0.72f, 0.74f);
 	public static readonly Color WaitingHaulColor = new(0.55f, 0.55f, 0.55f);
-	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
+	public static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
 	public static readonly Color GrubPitTint = new(0.82f, 0.60f, 0.28f, 0.6f);
 	public static readonly Color FungusFarmTint = new(0.30f, 0.58f, 0.42f, 0.6f);
 	public static readonly Color BreweryTint = new(0.75f, 0.32f, 0.28f, 0.6f);
