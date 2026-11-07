@@ -10,8 +10,8 @@ public partial class Main : Node
 	WarrenView _view = null!;
 	TopBar _topBar = null!;
 	ToolPalette _palette = null!;
-	Label _hoverLabel = null!;
-	// The map cell under the cursor, from the last mouse motion; kept so the hover line follows the counts as the sim changes them.
+	InspectorPanel _inspector = null!;
+	// The map cell under the cursor, from the last mouse motion; kept so the Inspector follows the sim as it changes the tile.
 	Vector2I _hoverCell = new(-1, -1);
 	SelectionGesture _selection = null!;
 	SelectionGesture _removal = null!;
@@ -92,8 +92,11 @@ public partial class Main : Node
 
 		var right = new PanelContainer { CustomMinimumSize = new Vector2(RightPanelWidth, 0) };
 		body.AddChild(right);
-		_hoverLabel = UiTheme.Text("", wrap: true);
-		right.AddChild(_hoverLabel);
+		var rightColumn = new VBoxContainer();
+		rightColumn.AddThemeConstantOverride("separation", 12);
+		right.AddChild(rightColumn);
+		_inspector = new InspectorPanel();
+		rightColumn.AddChild(_inspector);
 	}
 
 	const int LeftPanelWidth = 230;
@@ -117,8 +120,8 @@ public partial class Main : Node
 	/// <summary>The clock in the top bar.</summary>
 	public string ClockText => _topBar.ClockText;
 
-	/// <summary>The hover line: the Grub, Grog and Sleep meters of the goblin under the cursor, else every count on the Pile tile under it, else empty.</summary>
-	public string HoverText => _hoverLabel.Text;
+	/// <summary>What the Inspector shows: the goblin or tile under the cursor on the viewed level, or <see cref="Inspection.Nothing"/> off the map.</summary>
+	public Inspection Inspection { get; private set; } = Inspection.Nothing;
 
 	// A drag in progress owns the mouse before the panels see it, so dragging off the map over a panel still sweeps and
 	// still ends; the gesture clamps the far corner to the map. Motion also moves the hover here, so leaving the map for
@@ -159,14 +162,8 @@ public partial class Main : Node
 	{
 		var s = _sim.State;
 		var inMap = _hoverCell.X >= 0 && _hoverCell.Y >= 0 && _hoverCell.X < s.Width && _hoverCell.Y < s.Height;
-		if (!inMap)
-		{
-			_hoverLabel.Text = "";
-			return;
-		}
-		var tile = s.TileIndex(_hoverCell.X, _hoverCell.Y, _viewZ);
-		var goblin = GoblinHover.GoblinAt(s, tile);
-		_hoverLabel.Text = goblin >= 0 ? GoblinHover.HoverLine(s, goblin) : PileCounts.HoverLine(s, tile);
+		Inspection = inMap ? Inspector.Inspect(s, s.TileIndex(_hoverCell.X, _hoverCell.Y, _viewZ)) : Inspection.Nothing;
+		_inspector.Show(Inspection);
 	}
 
 	void UpdateSelection()

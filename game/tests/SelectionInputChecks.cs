@@ -202,6 +202,9 @@ public partial class SelectionInputChecks : Node
 					main._Process(0.1);
 				Require(frames < 200, "No Grunt started digging.");
 				var digger = Enumerable.Range(0, s.GoblinCount).First(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Digging);
+				Move(main, view, s.GoblinX[digger], s.GoblinY[digger]);
+				Require(GoblinHover.GoblinAt(s, s.TileIndex(s.GoblinX[digger], s.GoblinY[digger], 0)) != digger
+					|| main.Inspection.Doing == "Digging", $"A digging Grunt is \"{main.Inspection.Doing}\".");
 				// A few ticks into the dig, so it has progress to keep.
 				for (var tick = 0; tick < 5; tick++)
 					main._Process(0.1);
@@ -444,27 +447,50 @@ public partial class SelectionInputChecks : Node
 				s.AddItems(s.TileIndex(4, 4, 0), Goblins.Sim.Material.Stone, SimState.PileCapacity);
 				s.AddItems(s.TileIndex(4, 4, 0), Goblins.Sim.Material.Grog, 7);
 				s.AddItems(s.TileIndex(6, 4, 0), Goblins.Sim.Material.Dirt, 2);
+				sim.RecheckReachability();
 
-				// One line names every count on the Pile tile under the cursor, in Material order, full ones marked.
+				// The Inspector names every count on the Pile tile under the cursor, in Material order, full ones marked.
 				Move(main, view, 4, 4);
-				ExpectHover(main, "A Pile, counted solemnly: Stone 30 (full), Grub 14, Grog 7.");
+				ExpectInspection(main, "Pile", "Stone 30 full, Grub 14, Grog 7");
 				Move(main, view, 5, 4);
-				ExpectHover(main, "An empty Pile, waiting with great dignity.");
-				// A loose item is not on a Pile, and neither is bare floor or somewhere off the map.
+				ExpectInspection(main, "Pile", "", "An empty Pile, waiting with great dignity.");
+				// A loose item is not on a Pile: the Inspector shows the Floor it lies on, and the unit, which has a Pile to go to.
 				Move(main, view, 6, 4);
-				ExpectHover(main, "");
+				ExpectInspection(main, "Floor", "Dirt 2");
+				Move(main, view, 7, 4);
+				ExpectInspection(main, "Floor", "");
+				// Off the map there is nothing to inspect.
 				Move(main, view, 4, 4);
 				Move(main, view, -1, 4);
-				ExpectHover(main, "");
-				// The line follows the count as the Pile fills, and goes when the level changes.
+				ExpectInspection(main, "", "");
+				// The Inspector follows the count as the Pile fills, and the level when it changes.
 				Move(main, view, 5, 4);
 				s.AddItems(s.TileIndex(5, 4, 0), Goblins.Sim.Material.Fungus, 3);
 				sim.Apply(new SetPaused(false));
 				main._Process(0.1);
 				sim.Apply(new SetPaused(true));
-				ExpectHover(main, "A Pile, counted solemnly: Fungus 3.");
+				ExpectInspection(main, "Pile", "Fungus 3");
 				Key(main, Godot.Key.Period);
-				ExpectHover(main, "");
+				ExpectInspection(main, "Solid dirt", "");
+			});
+
+			// The Inspector says what any other tile is and what is marked on it.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				sim.Apply(new Designate(DesignationKind.DigStairs, 0, 3, 3, 3, 3));
+				sim.Apply(new PaintRoom(RoomKind.Brewery, 0, 4, 3, 4, 3));
+				Move(main, view, 3, 3);
+				ExpectInspection(main, "Floor", "");
+				Require(main.Inspection.Doing == "Marked for stairs", $"A stairs Designation reads \"{main.Inspection.Doing}\".");
+				Move(main, view, 4, 3);
+				ExpectInspection(main, "Brewery", "");
+				Key(main, Godot.Key.Period);
+				sim.Apply(new Designate(DesignationKind.Dig, 1, 3, 3, 3, 3));
+				Move(main, view, 3, 3);
+				ExpectInspection(main, "Solid dirt", "");
+				Require(main.Inspection.Doing == "Marked for digging", $"A dig Designation reads \"{main.Inspection.Doing}\".");
+				Require(main.Inspection.Note == "No goblin can reach it yet.", $"An unreachable dig says \"{main.Inspection.Note}\".");
 			});
 
 			// The real game: the starting Grub and Grog are hauled to a Pile painted with the Pile Tool, and the hover line reads it.
@@ -491,7 +517,8 @@ public partial class SelectionInputChecks : Node
 					.First(p => s.StoredCount(s.TileIndex(p.Item1, p.Item2, 0), Goblins.Sim.Material.Grub) > 0
 						&& GoblinHover.GoblinAt(s, s.TileIndex(p.Item1, p.Item2, 0)) < 0);
 				Move(main, view, stockedX, stockedY);
-				Require(main.HoverText.StartsWith("A Pile, counted solemnly:"), $"The hover line over the stocked Pile was \"{main.HoverText}\".");
+				Require(main.Inspection.Title == "Pile" && main.Inspection.Stock.Any(line => line.Material == Goblins.Sim.Material.Grub),
+					$"The Inspector over the stocked Pile shows {main.Inspection.Title}: {StockText(main.Inspection)}.");
 			});
 
 			// The hover line names the Grub, Grog and Sleep meters of the goblin under the cursor, ahead of any Pile under it.
@@ -505,30 +532,32 @@ public partial class SelectionInputChecks : Node
 				(s.GoblinGrub[5], s.GoblinGrog[5], s.GoblinSleep[5]) = (100, 100, 40);
 				GoblinTasks.BeginSleep(s, 5, dropTile: -1, asleep: true);
 				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
-				ExpectHover(main, "A Grunt. Grub 74/100, Grog 91/100, Sleep 85/100. At peace with the world, and with lunch.");
+				ExpectGoblin(main, 74, 91, 85, "At peace with the world, and with lunch.");
+				Require(main.Inspection.Doing == "Standing about, between jobs", $"An idle Grunt is \"{main.Inspection.Doing}\".");
 				Move(main, view, s.GoblinX[1], s.GoblinY[1]);
-				ExpectHover(main, "A Grunt. Grub 12/100, Grog 80/100, Sleep 60/100. Thinking about nothing but Grub.");
+				ExpectGoblin(main, 12, 80, 60, "Thinking about nothing but Grub.");
 				Move(main, view, s.GoblinX[2], s.GoblinY[2]);
-				ExpectHover(main, "A Grunt. Grub 0/100, Grog 100/100, Sleep 100/100. Starving, and bearing it at half speed with great dignity.");
+				ExpectGoblin(main, 0, 100, 100, "Starving, and bearing it at half speed with great dignity.");
 				Move(main, view, s.GoblinX[3], s.GoblinY[3]);
-				ExpectHover(main, "A Grunt. Grub 90/100, Grog 8/100, Sleep 45/100. Thinking about nothing but Grog.");
+				ExpectGoblin(main, 90, 8, 45, "Thinking about nothing but Grog.");
 				Move(main, view, s.GoblinX[4], s.GoblinY[4]);
-				ExpectHover(main, "A Grunt. Grub 100/100, Grog 100/100, Sleep 12/100. Thinking about nothing but a lie-down, on anything flat.");
+				ExpectGoblin(main, 100, 100, 12, "Thinking about nothing but a lie-down, on anything flat.");
 				Move(main, view, s.GoblinX[5], s.GoblinY[5]);
-				ExpectHover(main, "A Grunt. Grub 100/100, Grog 100/100, Sleep 40/100. Fast asleep. Hunger and thirst may take a number.");
+				ExpectGoblin(main, 100, 100, 40, "Fast asleep. Hunger and thirst may take a number.");
+				Require(main.Inspection.Doing == "Asleep on the bare floor", $"A Grunt asleep on the floor is \"{main.Inspection.Doing}\".");
 				sim.Apply(new PaintPile(0, s.GoblinX[0], s.GoblinY[0], s.GoblinX[0], s.GoblinY[0]));
 				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
-				Require(main.HoverText.StartsWith("A Grunt. Grub 74/100, Grog 91/100, Sleep 85/100."), $"A Pile hid the goblin on it: \"{main.HoverText}\".");
-				// The line follows the meters as the sim drains them, and a goblin on another level is not under the cursor.
+				Require(main.Inspection.Title == "Grunt", $"A Pile hid the goblin on it: the Inspector shows {main.Inspection.Title}.");
+				// The meters follow the sim as it drains them, and a goblin on another level is not under the cursor.
 				s.GoblinGrub[0] = 74;
 				s.GoblinGrog[0] = 91;
 				s.Tick = 34;
 				sim.Apply(new SetPaused(false));
 				main._Process(0.1);
 				sim.Apply(new SetPaused(true));
-				ExpectHover(main, "A Grunt. Grub 74/100, Grog 90/100, Sleep 85/100. At peace with the world, and with lunch.");
+				ExpectGoblin(main, 74, 90, 85, "At peace with the world, and with lunch.");
 				Key(main, Godot.Key.Period);
-				ExpectHover(main, "");
+				ExpectInspection(main, "Solid dirt", "");
 			});
 
 			// The real game: hungry Grunts leave a dig for the starting Grub, which is eaten where it lies, and the dig carries on.
@@ -545,6 +574,9 @@ public partial class SelectionInputChecks : Node
 					main._Process(0.1);
 				Require(frames < 200, "No Grunt started digging.");
 				var digger = Enumerable.Range(0, s.GoblinCount).First(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Digging);
+				Move(main, view, s.GoblinX[digger], s.GoblinY[digger]);
+				Require(GoblinHover.GoblinAt(s, s.TileIndex(s.GoblinX[digger], s.GoblinY[digger], 0)) != digger
+					|| main.Inspection.Doing == "Digging", $"A digging Grunt is \"{main.Inspection.Doing}\".");
 				// Hunger strikes mid-dig.
 				Array.Fill(s.GoblinGrub, (byte)29, 0, s.GoblinCount);
 				main._Process(0.1);
@@ -740,8 +772,25 @@ public partial class SelectionInputChecks : Node
 			Require(ButtonNamed(main, $"Speed{each}").ButtonPressed == (each == speed), $"The {each}× button is wrong at {speed}×.");
 	}
 
-	static void ExpectHover(Main main, string expected) =>
-		Require(main.HoverText == expected, $"The hover line was \"{main.HoverText}\", expected \"{expected}\".");
+	// Every stock line as "Material count", with "full" and "waiting" marked, in the order shown.
+	static string StockText(Inspection inspection) =>
+		string.Join(", ", inspection.Stock.Select(line => $"{line.Material} {line.Count}{(line.Full ? " full" : "")}{(line.Waiting ? " waiting" : "")}"));
+
+	static void ExpectInspection(Main main, string title, string stock, string? note = null)
+	{
+		var inspection = main.Inspection;
+		Require(inspection.Title == title && StockText(inspection) == stock && (note is null || inspection.Note == note),
+			$"The Inspector shows \"{inspection.Title}\" [{StockText(inspection)}] \"{inspection.Note}\", expected \"{title}\" [{stock}] \"{note}\".");
+	}
+
+	static void ExpectGoblin(Main main, int grub, int grog, int sleep, string note)
+	{
+		var inspection = main.Inspection;
+		var meters = string.Join(" ", inspection.Meters.Select(meter => $"{meter.Need} {meter.Value}"));
+		var expected = $"Grub {grub} Grog {grog} Sleep {sleep}";
+		Require(inspection.Title == "Grunt" && meters == expected && inspection.Note == note,
+			$"The Inspector shows \"{inspection.Title}\" [{meters}] \"{inspection.Note}\", expected a Grunt [{expected}] \"{note}\".");
+	}
 
 	// A Pile tile draws two counts: full materials first, then the larger count, and Material order on a tie. Counts are
 	// given in Material order: Dirt, Stone, Grub, Fungus, Grog.
