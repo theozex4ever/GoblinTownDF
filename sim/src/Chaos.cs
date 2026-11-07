@@ -2,7 +2,7 @@ namespace Goblins.Sim;
 
 /// <summary>
 /// Every number of Chaos, kept together so they can be tuned after play. Chaos is a goblin's accumulated frustration, 0 to
-/// <see cref="Max"/>; at <see cref="ActingOutThreshold"/> an otherwise free goblin acts out. Shirking is the only act so far.
+/// <see cref="Max"/>; at <see cref="ActingOutThreshold"/> an otherwise free goblin acts out. Shirking and fighting are the acts so far.
 /// </summary>
 public static class ChaosRules
 {
@@ -29,6 +29,15 @@ public static class ChaosRules
 	public const int ActRelief = 40;
 	/// <summary>Ticks after an act ends, finished or interrupted, before the goblin may act out again.</summary>
 	public const int CooldownTicks = 300;
+
+	/// <summary>Ticks an instigator may pursue its target before the attempt is abandoned.</summary>
+	public const int PursuitTicks = 100;
+	/// <summary>Ticks a scuffle lasts once contact is made.</summary>
+	public const int ScuffleTicks = 30;
+	/// <summary>Ticks both fighters take no work after a scuffle that ran its course.</summary>
+	public const int RecoveryTicks = 100;
+	/// <summary>Chaos the victim gains, once, when the scuffle starts.</summary>
+	public const int VictimGain = 15;
 }
 
 /// <summary>Chaos' own system: how it rises and falls with the sim-wide clock, and who may act out. Starting an act is worked by <see cref="JobSystem"/>.</summary>
@@ -50,6 +59,7 @@ public static class ChaosSystem
 		for (var g = 0; g < s.GoblinCount; g++)
 			if (s.GoblinActCooldown[g] > 0)
 				s.GoblinActCooldown[g]--;
+		GoblinTasks.CountDownFights(s);
 
 		var needsInterval = s.Tick % ChaosRules.UnmetNeedInterval == 0;
 		var waitingInterval = s.Tick % ChaosRules.WaitingInterval == 0;
@@ -88,13 +98,13 @@ public static class ChaosSystem
 			unmet++;
 	}
 
-	/// <summary>True when a goblin may begin to act out now: enough Chaos, no cooldown, and not already satisfying a Need, sleeping or shirking.</summary>
+	/// <summary>True when a goblin may begin to act out now: enough Chaos, no cooldown, and not already satisfying a Need, sleeping, shirking or in a fight.</summary>
 	public static bool CanActOut(SimState s, int goblin)
 	{
 		var task = (GoblinTask)s.GoblinTask[goblin];
 		return s.GoblinChaos[goblin] >= ChaosRules.ActingOutThreshold
 			&& s.GoblinActCooldown[goblin] == 0
 			&& !GoblinTasks.IsSatisfyingTask(task)
-			&& task != GoblinTask.Shirking;
+			&& !GoblinTasks.IsActingOutTask(task);
 	}
 }

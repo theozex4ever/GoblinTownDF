@@ -8,9 +8,9 @@ public readonly record struct MeterReading(Need Need, int Value);
 
 /// <summary>
 /// One goblin on an inspected tile: its <see cref="Title"/> (stable name and Role), what it is <see cref="Doing"/> in plain words, its meters, its
-/// <see cref="Chaos"/>, whether it is <see cref="Shirking"/> (the map wears a marker for the same), and a <see cref="Note"/> in the goblin voice.
+/// <see cref="Chaos"/>, whether it is <see cref="Shirking"/> or <see cref="Fighting"/> in any stage of a fight (the map wears a marker for each), and a <see cref="Note"/> in the goblin voice.
 /// </summary>
-public readonly record struct GoblinReading(string Title, string Doing, IReadOnlyList<MeterReading> Meters, int Chaos, bool Shirking, string Note);
+public readonly record struct GoblinReading(string Title, string Doing, IReadOnlyList<MeterReading> Meters, int Chaos, bool Shirking, string Note, bool Fighting = false);
 
 /// <summary>
 /// One material's count on an inspected tile. <see cref="Full"/> marks a Pile count at capacity; <see cref="Waiting"/> marks
@@ -57,15 +57,20 @@ public static class Inspector
 		var grog = s.GoblinGrog[goblin];
 		var sleep = s.GoblinSleep[goblin];
 		var craving = NeedRules.LeadingCraving(grub, grog, sleep);
-		var shirking = (GoblinTask)s.GoblinTask[goblin] == GoblinTask.Shirking;
-		var mood = (GoblinTask)s.GoblinTask[goblin] == GoblinTask.Sleeping ? "Fast asleep. Hunger and thirst may take a number."
+		var task = (GoblinTask)s.GoblinTask[goblin];
+		var shirking = task == GoblinTask.Shirking;
+		var fighting = GoblinTasks.IsFightTask(task);
+		var mood = task == GoblinTask.Sleeping ? "Fast asleep. Hunger and thirst may take a number."
 			: shirking ? "Has withdrawn labour. The principle is very important, and so is the floor."
+			: task is GoblinTask.Pursuing or GoblinTask.Scuffling ? "Has a grievance and a target. Dignity is taking cover."
+			: task == GoblinTask.Scuffled ? "Was minding its work. The work has been rudely interrupted."
+			: task == GoblinTask.Recovering ? "Sitting very still, in the manner of the recently thumped."
 			: NeedRules.IsStarving(grub) ? "Starving, and bearing it at half speed with great dignity."
 			: craving == Need.Sleep ? "Thinking about nothing but a lie-down, on anything flat."
 			: craving != Need.None ? $"Thinking about nothing but {craving}."
 			: "At peace with the world, and with lunch.";
 		MeterReading[] meters = [new(Need.Grub, grub), new(Need.Grog, grog), new(Need.Sleep, sleep)];
-		return new GoblinReading($"{GoblinNames.For(goblin)}, {(Role)s.GoblinRole[goblin]}", TaskWords(s, goblin), meters, s.GoblinChaos[goblin], shirking, mood);
+		return new GoblinReading($"{GoblinNames.For(goblin)}, {(Role)s.GoblinRole[goblin]}", TaskWords(s, goblin), meters, s.GoblinChaos[goblin], shirking, mood, fighting);
 	}
 
 	/// <summary>A goblin's Task in plain words, naming what it carries or where it is headed.</summary>
@@ -98,9 +103,16 @@ public static class Inspector
 			GoblinTask.Bringing => "Taking Fungus to the Brewery",
 			GoblinTask.Brewing => "Brewing",
 			GoblinTask.Shirking => "Shirking, on the spot, in protest",
+			GoblinTask.Pursuing => $"Stomping after {Other(s, goblin)} to start something",
+			GoblinTask.Scuffling => $"Scuffling with {Other(s, goblin)}, with great commitment",
+			GoblinTask.Scuffled => $"Being scuffled by {Other(s, goblin)}, under protest",
+			GoblinTask.Recovering => $"Sitting down after a scuffle with {Other(s, goblin)}",
 			var task => task.ToString(),
 		};
 	}
+
+	// The name of the other goblin of a fight.
+	static string Other(SimState s, int goblin) => GoblinNames.For(s.GoblinFightPartner[goblin]);
 
 	static Inspection InspectTile(SimState s, int tile)
 	{

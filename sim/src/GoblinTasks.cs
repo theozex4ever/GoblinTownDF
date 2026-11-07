@@ -20,6 +20,11 @@ namespace Goblins.Sim;
 /// thing that ends a Task already satisfying a Need is Collapse, at Sleep 0, which puts the goblin to sleep on the spot.
 /// Acting out ends a Job too: a goblin with enough Chaos and no cooldown begins Shirking, loafing where it stands for <see cref="ChaosRules.ShirkTicks"/>
 /// ticks and taking no Job, putting down what it carries as a Craving does. A Craving or Collapse ends a shirk at once, for no relief; either way a cooldown follows.
+/// A fight is the other way to act out: the instigator goes Pursuing a target for up to <see cref="ChaosRules.PursuitTicks"/> ticks while the target keeps working, and on contact
+/// both abandon their work, as a shirk does, and Scuffle for <see cref="ChaosRules.ScuffleTicks"/> ticks (the instigator Scuffling, the victim Scuffled). A scuffle that
+/// runs its course relieves the instigator and leaves both Recovering, taking no work, for <see cref="ChaosRules.RecoveryTicks"/> ticks with a cooldown that began with the scuffle's end;
+/// a Craving or Collapse in either ends it for both at once, for no relief and no recovery. A failed or interrupted pursuit touches only the instigator. The fight clock is
+/// <see cref="SimState.GoblinFightTicks"/>, counted down on every sim tick, and fighters are paired through <see cref="SimState.GoblinFightPartner"/>.
 /// A new Task is added here and nowhere else. Movement along a path stays in <see cref="JobSystem"/>,
 /// which only counts <see cref="SimState.GoblinStepTicks"/>.
 /// </summary>
@@ -265,9 +270,99 @@ public static class GoblinTasks
 	public static void BeginShirk(SimState s, int g, int dropTile)
 	{
 		var task = (GoblinTask)s.GoblinTask[g];
-		if (IsSatisfyingTask(task) || task == GoblinTask.Shirking)
+		if (IsSatisfyingTask(task) || IsActingOutTask(task))
 			throw new InvalidOperationException($"Goblin {g} is {task} and cannot begin to shirk.");
 		BeginNeedTask(s, g, dropTile, GoblinTask.Shirking);
+	}
+
+	/// <summary>
+	/// Any Task but a seeking, consuming, sleeping or acting-out one → Pursuing goblin <paramref name="target"/>, for at most <see cref="ChaosRules.PursuitTicks"/> ticks.
+	/// Drops any wander and abandons any Job, and puts a carried unit down on <paramref name="dropTile"/> first, exactly as <see cref="BeginShirk"/> does. The target is told nothing.
+	/// </summary>
+	public static void BeginPursuit(SimState s, int g, int target, int dropTile)
+	{
+		var task = (GoblinTask)s.GoblinTask[g];
+		if (IsSatisfyingTask(task) || IsActingOutTask(task))
+			throw new InvalidOperationException($"Goblin {g} is {task} and cannot begin a pursuit.");
+		if (target == g || target < 0 || target >= s.GoblinCount)
+			throw new ArgumentOutOfRangeException(nameof(target), target, "A pursuit needs another goblin as its target.");
+		BeginNeedTask(s, g, dropTile, GoblinTask.Pursuing);
+		s.GoblinFightPartner[g] = target;
+		s.GoblinFightTicks[g] = ChaosRules.PursuitTicks;
+	}
+
+	/// <summary>
+	/// Pursuing → Idle: the pursuit ran out its ticks, lost its path, or found the target no longer available. The instigator alone starts its cooldown, for no relief.
+	/// </summary>
+	public static void FailPursuit(SimState s, int g)
+	{
+		Release(s, g);
+		s.GoblinActCooldown[g] = ChaosRules.CooldownTicks;
+	}
+
+	/// <summary>
+	/// Pursuing → Scuffling for the instigator, and any non-acting-out Task → Scuffled for <paramref name="victim"/>, which abandons its work as a shirk does and puts a
+	/// carried unit down on <paramref name="victimDropTile"/> first. Both hold the same scuffle clock, and the victim gains <see cref="ChaosRules.VictimGain"/> Chaos, once, now.
+	/// </summary>
+	public static void BeginScuffle(SimState s, int instigator, int victim, int victimDropTile)
+	{
+		if ((GoblinTask)s.GoblinTask[instigator] != GoblinTask.Pursuing || s.GoblinFightPartner[instigator] != victim)
+			throw new InvalidOperationException($"Goblin {instigator} is not pursuing goblin {victim}.");
+		var task = (GoblinTask)s.GoblinTask[victim];
+		if (IsSatisfyingTask(task) || IsActingOutTask(task))
+			throw new InvalidOperationException($"Goblin {victim} is {task} and cannot be set upon.");
+		BeginNeedTask(s, victim, victimDropTile, GoblinTask.Scuffled);
+		s.GoblinFightPartner[victim] = instigator;
+		s.GoblinFightTicks[victim] = ChaosRules.ScuffleTicks;
+		ChaosSystem.Add(s, victim, ChaosRules.VictimGain);
+
+		s.GoblinStepTicks[instigator] = 0;
+		s.GoblinWorkTicks[instigator] = 0;
+		s.GoblinFightTicks[instigator] = ChaosRules.ScuffleTicks;
+		s.GoblinTask[instigator] = (byte)GoblinTask.Scuffling;
+	}
+
+	/// <summary>
+	/// Scuffling and Scuffled → Recovering, both at once: the scuffle ran its course. The instigator loses <see cref="ChaosRules.ActRelief"/> Chaos and the victim none, and
+	/// both start their cooldown and their <see cref="ChaosRules.RecoveryTicks"/> ticks of no work together. Each keeps the other as its partner, to be named while it recovers.
+	/// </summary>
+	public static void FinishScuffle(SimState s, int instigator)
+	{
+		var victim = s.GoblinFightPartner[instigator];
+		StartRecovery(s, instigator, victim);
+		StartRecovery(s, victim, instigator);
+		ChaosSystem.Add(s, instigator, -ChaosRules.ActRelief);
+	}
+
+	static void StartRecovery(SimState s, int g, int partner)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinFightPartner[g] = partner;
+		s.GoblinFightTicks[g] = ChaosRules.RecoveryTicks;
+		s.GoblinActCooldown[g] = ChaosRules.CooldownTicks;
+		s.GoblinTask[g] = (byte)GoblinTask.Recovering;
+	}
+
+	/// <summary>Gives a new world its fight arrays: no goblin in a fight, no clock running.</summary>
+	public static void StartFights(SimState s)
+	{
+		s.GoblinFightPartner = SimState.NoJobs();
+		s.GoblinFightTicks = new ushort[SimState.MaxGoblins];
+	}
+
+	/// <summary>Recovering → Idle: the goblin has rested its full time. Its cooldown, started with the scuffle, runs on.</summary>
+	public static void FinishRecovery(SimState s, int g) => Release(s, g);
+
+	/// <summary>
+	/// Counts every fight clock down by one sim tick, whatever its goblin is doing, so a Starving goblin's pursuit times out, its scuffle ends and its recovery
+	/// finishes on the same tick as anyone's. <see cref="JobSystem"/> ends a stage on the tick its clock reaches 0.
+	/// </summary>
+	public static void CountDownFights(SimState s)
+	{
+		for (var g = 0; g < s.GoblinCount; g++)
+			if (s.GoblinFightTicks[g] > 0)
+				s.GoblinFightTicks[g]--;
 	}
 
 	/// <summary>
@@ -298,12 +393,13 @@ public static class GoblinTasks
 		BeginNeedTask(s, g, dropTile, GoblinTask.Sleeping);
 	}
 
-	// The common start of a Task that takes a goblin off its work, to satisfy a Need or to shirk: any carried unit goes down on dropTile,
+	// The common start of a Task that takes a goblin off its work, to satisfy a Need, to shirk or to fight: any carried unit goes down on dropTile,
 	// which the caller has chosen as a walkable tile that can take it, the Job and wander are dropped, and the counters start from nothing.
-	// A shirk this ends was interrupted, so it starts the goblin's cooldown and gives it no relief.
+	// An act this ends was interrupted, so it starts the goblin's cooldown and gives it no relief: a shirk or a pursuit, or a scuffle, which ends for the
+	// other fighter too, with a cooldown for both. A recovery this ends starts nothing: its cooldown began with the scuffle.
 	static void BeginNeedTask(SimState s, int g, int dropTile, GoblinTask task)
 	{
-		var wasShirking = (GoblinTask)s.GoblinTask[g] == GoblinTask.Shirking;
+		var before = (GoblinTask)s.GoblinTask[g];
 		var carried = (Material)s.GoblinCarry[g];
 		if (carried != Material.None)
 		{
@@ -314,13 +410,21 @@ public static class GoblinTasks
 			s.AddItems(dropTile, carried, 1);
 			s.GoblinCarry[g] = (byte)Material.None;
 		}
+		if (before is GoblinTask.Scuffling or GoblinTask.Scuffled)
+		{
+			var other = s.GoblinFightPartner[g];
+			Release(s, other);
+			s.GoblinActCooldown[other] = ChaosRules.CooldownTicks;
+		}
 		s.GoblinJobTile[g] = -1;
 		s.GoblinStepTicks[g] = 0;
 		s.GoblinWorkTicks[g] = 0;
 		s.GoblinWanderTile[g] = -1;
 		s.GoblinWanderTicks[g] = 0;
+		s.GoblinFightPartner[g] = -1;
+		s.GoblinFightTicks[g] = 0;
 		s.GoblinTask[g] = (byte)task;
-		if (wasShirking)
+		if (before is GoblinTask.Shirking or GoblinTask.Pursuing or GoblinTask.Scuffling or GoblinTask.Scuffled)
 			s.GoblinActCooldown[g] = ChaosRules.CooldownTicks;
 	}
 
@@ -398,6 +502,12 @@ public static class GoblinTasks
 	/// <summary>True for every Task that satisfies a Need, which a goblin finishes before it considers another.</summary>
 	public static bool IsSatisfyingTask(GoblinTask task) => IsSeekingTask(task) || IsConsumingTask(task) || IsSleepTask(task);
 
+	/// <summary>True for Pursuing, Scuffling, Scuffled and Recovering: the stages of a fight.</summary>
+	public static bool IsFightTask(GoblinTask task) => task is GoblinTask.Pursuing or GoblinTask.Scuffling or GoblinTask.Scuffled or GoblinTask.Recovering;
+
+	/// <summary>True for Shirking and every stage of a fight: a goblin in one is acting out and starts no other act, nor is it set upon.</summary>
+	public static bool IsActingOutTask(GoblinTask task) => task == GoblinTask.Shirking || IsFightTask(task);
+
 	/// <summary>The Need a Need-satisfying Task serves, or None for any other Task.</summary>
 	public static Need NeedOf(GoblinTask task) => task switch
 	{
@@ -430,6 +540,8 @@ public static class GoblinTasks
 		s.GoblinStepTicks[g] = 0;
 		s.GoblinWanderTile[g] = -1;
 		s.GoblinWanderTicks[g] = 0;
+		s.GoblinFightPartner[g] = -1;
+		s.GoblinFightTicks[g] = 0;
 	}
 
 	/// <summary>
@@ -546,7 +658,10 @@ public static class GoblinTasks
 	/// level and not its own tile, a tender works a farm tile that is not producing, and a Tending one stands on it, no two goblins claim one tile to dig it or to tend it, no more claim a tile's loose units than it holds, no more claim its Fungus to brew than it holds, and haulers and brewers together never claim more units than it has, a Bringing or Brewing goblin holds Fungus and a Brewery tile that no other goblin has, and a Brewing one stands on it, step ticks are below
 	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> (<see cref="NeedRules.EatTicks"/> while Eating or Drinking, <see cref="ProductionRules.TendTicks"/> while Tending,
 	/// <see cref="NeedRules.FloorRecoveryTicks"/> while Sleeping, <see cref="ChaosRules.ShirkTicks"/> while Shirking) and only count while
-	/// PickingUp, Dropping, Eating, Drinking, Tending, Sleeping or Shirking, a Shirking goblin holds no Job, wanders nowhere and has no cooldown, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
+	/// PickingUp, Dropping, Eating, Drinking, Tending, Sleeping or Shirking, a Shirking goblin holds no Job, wanders nowhere and has no cooldown, an idle pause is at most <see cref="MaxWanderPauseTicks"/>,
+/// and a fight keeps its shape: a goblin Pursuing, Scuffling, Scuffled or Recovering holds no Job, wanders nowhere, carries nothing, names another goblin as its partner and has a fight clock
+/// from 1 to its stage's length, and has none otherwise; a Pursuing, Scuffling or Scuffled goblin has no cooldown; Scuffling and Scuffled goblins name each other, stand on one tile or beside each other on one level
+/// and hold one clock; a Recovering goblin has a cooldown at least as long as its recovery has left).
 	/// Precondition: the state is structurally sound: array lengths match the map and goblin cap, tile, material
 	/// and designation values are defined, and every goblin stands on the map.
 	/// </summary>
@@ -574,6 +689,9 @@ public static class GoblinTasks
 				return $"Goblin {g} has work ticks {s.GoblinWorkTicks[g]}.";
 			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Tending or GoblinTask.Sleeping or GoblinTask.Taking or GoblinTask.Brewing or GoblinTask.Shirking))
 				return $"Goblin {g} is {task} but has work ticks {s.GoblinWorkTicks[g]}.";
+
+			if (FindFightViolation(s, g, task) is { } fightViolation)
+				return fightViolation;
 
 			var job = s.GoblinJobTile[g];
 			var wanderTile = s.GoblinWanderTile[g];
@@ -666,12 +784,16 @@ public static class GoblinTasks
 					break;
 
 				case GoblinTask.Shirking:
+				case GoblinTask.Pursuing:
+				case GoblinTask.Scuffling:
+				case GoblinTask.Scuffled:
+				case GoblinTask.Recovering:
 					if (job != -1)
 						return $"Goblin {g} is not working but holds job tile {job}.";
 					if (wanderTile != -1 || wanderTicks != 0)
-						return $"Goblin {g} is shirking but wanders.";
-					if (s.GoblinActCooldown[g] != 0)
-						return $"Goblin {g} is shirking with a cooldown of {s.GoblinActCooldown[g]}, which only starts when the shirk ends.";
+						return $"Goblin {g} is {task} but wanders.";
+					if (task != GoblinTask.Recovering && s.GoblinActCooldown[g] != 0)
+						return $"Goblin {g} is {task} with a cooldown of {s.GoblinActCooldown[g]}, which only starts when the act ends.";
 					break;
 
 				case GoblinTask.Carrying:
@@ -705,6 +827,45 @@ public static class GoblinTasks
 						return $"Goblin {g} is {task} on tile {here}, which holds no {SupplyOf(task)}.";
 					break;
 			}
+		}
+		return null;
+	}
+
+	// The first broken rule of a goblin's fight fields, or null. A goblin in no fight has no partner and no clock.
+	static string? FindFightViolation(SimState s, int g, GoblinTask task)
+	{
+		var partner = s.GoblinFightPartner[g];
+		var ticks = s.GoblinFightTicks[g];
+		if (!IsFightTask(task))
+		{
+			if (partner != -1)
+				return $"Goblin {g} is {task} but has fight partner {partner}.";
+			if (ticks != 0)
+				return $"Goblin {g} is {task} but has a fight clock of {ticks}.";
+			return null;
+		}
+
+		if (!(partner >= 0 && partner < s.GoblinCount && partner != g))
+			return $"Goblin {g} is {task} with fight partner {partner}, which is not another goblin.";
+		var length = task switch
+		{
+			GoblinTask.Pursuing => ChaosRules.PursuitTicks,
+			GoblinTask.Recovering => ChaosRules.RecoveryTicks,
+			_ => ChaosRules.ScuffleTicks,
+		};
+		if (ticks < 1 || ticks > length)
+			return $"Goblin {g} is {task} with a fight clock of {ticks}, outside 1 to {length}.";
+		if (task == GoblinTask.Recovering && s.GoblinActCooldown[g] < ticks)
+			return $"Goblin {g} is Recovering for {ticks} ticks with a cooldown of only {s.GoblinActCooldown[g]}.";
+		if (task is GoblinTask.Scuffling or GoblinTask.Scuffled)
+		{
+			var other = (GoblinTask)s.GoblinTask[partner];
+			if (other != (task == GoblinTask.Scuffling ? GoblinTask.Scuffled : GoblinTask.Scuffling) || s.GoblinFightPartner[partner] != g)
+				return $"Goblin {g} is {task} with goblin {partner}, who is {other} and does not name it back.";
+			if (s.GoblinFightTicks[partner] != ticks)
+				return $"Goblins {g} and {partner} scuffle on different clocks, {ticks} and {s.GoblinFightTicks[partner]}.";
+			if (s.GoblinZ[g] != s.GoblinZ[partner] || Math.Abs(s.GoblinX[g] - s.GoblinX[partner]) + Math.Abs(s.GoblinY[g] - s.GoblinY[partner]) > 1)
+				return $"Goblins {g} and {partner} scuffle without standing on one tile or beside each other.";
 		}
 		return null;
 	}

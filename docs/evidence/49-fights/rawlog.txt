@@ -1,0 +1,17 @@
+seed 1794078431; sim speed 4x; no orders, no extra supplies, no debug controls
+tick 3670: Nubbin Splatt Idle -> Pursuing (chaos 70, cooldown 0, partner Kevin)
+victim chaos before contact: 3
+captured Pursuing at tick 3670; inspector says: Nubbin Splatt, Grunt - Stomping after Kevin to start something
+tick 3687: Kevin Idle -> Scuffled (chaos 17, cooldown 0, partner Nubbin Splatt)
+tick 3687: Nubbin Splatt Pursuing -> Scuffling (chaos 71, cooldown 0, partner Kevin)
+scuffle: victim chaos 17, instigator chaos 71
+captured Scuffling at tick 3687; inspector says: Nubbin Splatt, Grunt - Scuffling with Kevin, with great commitment
+victim inspector: Kevin, Grunt - Being scuffled by Nubbin Splatt, under protest
+tick 3717: Kevin Scuffled -> Recovering (chaos 14, cooldown 300, partner Nubbin Splatt)
+tick 3717: Nubbin Splatt Scuffling -> Recovering (chaos 35, cooldown 300, partner Kevin)
+recovery: instigator chaos 35 (relief taken), victim chaos 14
+captured Recovering at tick 3717; inspector says: Nubbin Splatt, Grunt - Sitting down after a scuffle with Kevin
+tick 3817: Kevin Recovering -> Idle (chaos 4, cooldown 200, partner -)
+tick 3817: Nubbin Splatt Recovering -> Idle (chaos 55, cooldown 200, partner -)
+recovered: instigator Nubbin Splatt now Idle chaos 55 cooldown 200; victim Kevin now Idle chaos 4 cooldown 200
+finished at tick 3817, stage 4, shirks seen 1

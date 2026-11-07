@@ -614,6 +614,37 @@ public partial class SelectionInputChecks : Node
 				ExpectInspection(main, "Floor", "");
 			});
 
+			// A fight names the other goblin in each fighter's activity, marks both in their reading, and counts neither as working.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinGrog, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinSleep, (byte)NeedRules.MeterMax);
+				(s.GoblinX[1], s.GoblinY[1]) = (s.GoblinX[0] + 5, s.GoblinY[0] + 4);
+				(s.GoblinX[2], s.GoblinY[2]) = (s.GoblinX[0] + 5, s.GoblinY[0] + 3);
+				GoblinTask Task(int g) => (GoblinTask)s.GoblinTask[g];
+				GoblinReading Read(int g) => Inspector.Inspect(s, s.TileIndex(s.GoblinX[g], s.GoblinY[g], 0)).Goblins.First(r => r.Title.StartsWith(GoblinNames.For(g)));
+
+				GoblinTasks.BeginPursuit(s, 0, 1, dropTile: -1);
+				Require(Read(0).Doing.Contains(GoblinNames.Starting[1]) && Read(0).Fighting && !Read(0).Shirking && !Read(1).Fighting,
+					$"A pursuer reads \"{Read(0).Doing}\" fighting={Read(0).Fighting}; its target fighting={Read(1).Fighting}.");
+
+				GoblinTasks.BeginScuffle(s, 0, 1, victimDropTile: -1);
+				Require(Task(0) == GoblinTask.Scuffling && Task(1) == GoblinTask.Scuffled, "The scuffle did not begin.");
+				Require(Read(0).Doing.Contains(GoblinNames.Starting[1]) && Read(1).Doing.Contains(GoblinNames.Starting[0]) && Read(0).Fighting && Read(1).Fighting,
+					$"A scuffle reads \"{Read(0).Doing}\" and \"{Read(1).Doing}\".");
+				Require(Read(0).Doing != Read(1).Doing, "The instigator and the victim read the same.");
+				Require(WarrenSummary.StateOf(s, 0) == WarrenSummary.GoblinState.Idle && WarrenSummary.StateOf(s, 1) == WarrenSummary.GoblinState.Idle,
+					"A scuffling goblin counts as working.");
+
+				GoblinTasks.FinishScuffle(s, 0);
+				Require(Task(0) == GoblinTask.Recovering && Read(0).Doing.Contains(GoblinNames.Starting[1]) && Read(1).Doing.Contains(GoblinNames.Starting[0]),
+					$"Recovery reads \"{Read(0).Doing}\" and \"{Read(1).Doing}\".");
+				Require(WarrenSummary.StateOf(s, 0) == WarrenSummary.GoblinState.Idle, "A recovering goblin counts as working.");
+				Require(!Read(2).Fighting, "A bystander is marked as fighting.");
+			});
+
 			// A name belongs to the goblin index, not to the seed.
 			foreach (var seed in new[] { 1, 2, 12345 })
 			{

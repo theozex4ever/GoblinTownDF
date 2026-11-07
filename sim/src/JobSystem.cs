@@ -13,7 +13,7 @@ namespace Goblins.Sim;
 /// and a Craving with no unit in reach does not count. A goblin at Sleep 0 collapses and sleeps on the spot, whatever else it was doing.
 /// Loops over the state arrays; the only memory it owns is reused scratch lists.
 /// </summary>
-public sealed class JobSystem
+public sealed partial class JobSystem
 {
 	/// <summary>A wander ends at most this many tiles away on each axis.</summary>
 	public const int WanderRadius = 4;
@@ -179,12 +179,22 @@ public sealed class JobSystem
 
 	public void Step(SimState s, List<SimEvent> events)
 	{
+		// Every fight stage whose clock has run out ends before any goblin takes its turn, so that no goblin's index decides whether a scuffle finished.
+		EndDueFights(s);
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			// A Craving comes before any Job, and before a Starving goblin sits a tick out. Eating, drinking, sleeping and shirking are not slowed.
 			TryCraving(s, g);
 			TryActOut(s, g, events);
 			var task = (GoblinTask)s.GoblinTask[g];
+			// A scuffle and its recovery are not walked and not slowed: their clocks are the sim's. A pursuit slows only its walking.
+			if (task is GoblinTask.Scuffling or GoblinTask.Scuffled or GoblinTask.Recovering)
+				continue;
+			if (task == GoblinTask.Pursuing)
+			{
+				Pursue(s, g, events);
+				continue;
+			}
 			if (!GoblinTasks.IsConsumingTask(task) && task != GoblinTask.Sleeping && task != GoblinTask.Shirking && !NeedRules.ActsThisTick(s.GoblinGrub[g], s.Tick))
 				continue;
 
@@ -288,11 +298,11 @@ public sealed class JobSystem
 		}
 	}
 
-	// A goblin with enough Chaos and no cooldown stops what it is doing and shirks, once its Craving has had its chance: this runs after
+	// A goblin with enough Chaos and no cooldown stops what it is doing and acts out, once its Craving has had its chance: this runs after
 	// TryCraving, so a goblin that set out to meet a Need is satisfying one and is not eligible, and Collapse (which a goblin that can set down its
 	// unit always makes) has already put it to sleep. Anything carried is put down by the same legal-drop rule as for a Craving; with no legal place the
-	// goblin keeps its unit and its work, and looks again next tick. Shirking is the only act so far, so nothing is drawn from the Rng to choose it;
-	// once there are several, the choice among those eligible is drawn from s.Rng.
+	// goblin keeps its unit and its work, and looks again next tick. Shirking is always an option and a fight is one while a target is in reach; when both are,
+	// the choice is drawn from s.Rng with equal chance, and when only shirking is, nothing is drawn.
 	void TryActOut(SimState s, int goblin, List<SimEvent> events)
 	{
 		if (!ChaosSystem.CanActOut(s, goblin))
@@ -303,11 +313,16 @@ public sealed class JobSystem
 		if (carried != Material.None && !TryFindDropTile(s, goblin, carried, out dropTile))
 			return;
 
-		GoblinTasks.BeginShirk(s, goblin, dropTile);
+		if (TryFindTarget(s, goblin, out var target) && s.Rng.NextInt(2) == 1)
+			GoblinTasks.BeginPursuit(s, goblin, target, dropTile);
+		else
+		{
+			GoblinTasks.BeginShirk(s, goblin, dropTile);
+			events.Add(new ShirkStarted(goblin));
+		}
 		// The unit put down is a new loose Haul, or has taken a Pile tile's last slot of its material.
 		if (carried != Material.None)
 			RecheckReachability(s);
-		events.Add(new ShirkStarted(goblin));
 	}
 
 	// True when the goblin set out to meet the Need: for a unit of Grub or Grog, or for a bed (the nearest Heap, or the floor under it).

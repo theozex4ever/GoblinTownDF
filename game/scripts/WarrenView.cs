@@ -31,6 +31,10 @@ public partial class WarrenView : Node2D
 	public static readonly Color StarvingGoblinColor = new(0.78f, 0.72f, 0.22f);
 	// A shirking goblin wears a lilac ring and a lilac band across its body.
 	public static readonly Color ShirkColor = new(0.80f, 0.45f, 0.95f);
+	/// <summary>The ring round a goblin in a fight, and the cross over one that is scuffling: a hot orange, clear of the lilac of a shirk.</summary>
+	public static readonly Color FightColor = new(0.98f, 0.45f, 0.12f);
+	/// <summary>The ring round a goblin recovering from a scuffle: the fight colour, banked down.</summary>
+	public static readonly Color FightRestColor = new(0.62f, 0.34f, 0.22f);
 	public const int PipSize = 4;
 	static readonly Color LooseDirtColor = new(0.55f, 0.36f, 0.18f);
 	static readonly Color GrubColor = new(0.93f, 0.52f, 0.48f);
@@ -141,10 +145,23 @@ public partial class WarrenView : Node2D
 			var dz = s.GoblinZ[g] - ViewZ;
 			if (dz == 0 && (GoblinTask)s.GoblinTask[g] == GoblinTask.Shirking)
 				DrawRect(MarkerRect(s, g, dz).Grow(2), ShirkColor);
+			else if (dz == 0 && FightRingColor((GoblinTask)s.GoblinTask[g]) is { } ring)
+				DrawRect(MarkerRect(s, g, dz).Grow(2), ring);
 			if (dz == 0)
 				DrawRect(MarkerRect(s, g, dz).Grow(1), GoblinOutlineColor);
 			if (Math.Abs(dz) <= 1)
 				DrawRect(MarkerRect(s, g, dz), dz == 0 ? BodyColor(s, g) : FaintGoblinColor);
+		}
+
+		// A scuffler carries nothing either, so its cross has the body to itself; the pip and a hovering cursor still draw over it.
+		for (var g = 0; g < s.GoblinCount; g++)
+		{
+			var task = (GoblinTask)s.GoblinTask[g];
+			if (s.GoblinZ[g] != ViewZ || task is not (GoblinTask.Scuffling or GoblinTask.Scuffled))
+				continue;
+			var marker = MarkerRect(s, g, 0);
+			DrawLine(marker.Position, marker.End, FightColor, 2);
+			DrawLine(new Vector2(marker.End.X, marker.Position.Y), new Vector2(marker.Position.X, marker.End.Y), FightColor, 2);
 		}
 
 		// A shirker carries nothing, so its band has the body to itself; the pip and a hovering cursor still draw over it.
@@ -207,6 +224,14 @@ public partial class WarrenView : Node2D
 			DrawString(ThemeDB.FallbackFont, new Vector2(0, -6), "PAUSED · the warren holds its breath", HorizontalAlignment.Left, -1, PausedFontSize, PausedColor);
 		}
 	}
+
+	/// <summary>The ring round a goblin in a stage of a fight, or null for any other Task: hot while it pursues or scuffles, banked down while it recovers.</summary>
+	public static Color? FightRingColor(GoblinTask task) => task switch
+	{
+		GoblinTask.Pursuing or GoblinTask.Scuffling or GoblinTask.Scuffled => FightColor,
+		GoblinTask.Recovering => FightRestColor,
+		_ => null,
+	};
 
 	/// <summary>A goblin's body colour: green, or tinted while it is Starving.</summary>
 	public static Color BodyColor(SimState s, int goblin) => NeedRules.IsStarving(s.GoblinGrub[goblin]) ? StarvingGoblinColor : GoblinColor;

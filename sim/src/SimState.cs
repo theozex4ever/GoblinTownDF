@@ -130,6 +130,18 @@ public sealed class SimState
 	/// </summary>
 	public ushort[] GoblinActCooldown { get; set; } = [];
 
+	/// <summary>
+	/// The other goblin of a fight, or -1 while a goblin is in none: the target while Pursuing, the victim while Scuffling, the instigator while
+	/// Scuffled, and the one it fought while Recovering. Change through <see cref="GoblinTasks"/> only. Empty until a world fills it, like <see cref="GoblinChaos"/>.
+	/// </summary>
+	public int[] GoblinFightPartner { get; set; } = [];
+	/// <summary>
+	/// Sim ticks left in the fight stage a goblin is in (pursuit, scuffle or recovery), 0 otherwise. <see cref="GoblinTasks"/> counts it down on
+	/// every sim tick whatever the goblin is doing, so a Starving goblin is no slower, and the two fighters of a scuffle always hold the same number.
+	/// Empty until a world fills it, like <see cref="GoblinChaos"/>.
+	/// </summary>
+	public ushort[] GoblinFightTicks { get; set; } = [];
+
 	/// <summary>The per-goblin meter of a Need.</summary>
 	public byte[] MeterOf(Need need) => need switch
 	{
