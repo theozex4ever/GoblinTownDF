@@ -25,6 +25,8 @@ public partial class Main : Node
 	SelectionGesture _selection = null!;
 	SelectionGesture _removal = null!;
 	int _viewZ;
+	// The chat bubbles on show: provisional presentation of the sim's incident events, aged by unpaused real time. Never written to the sim.
+	readonly BubbleBoard _bubbles = new();
 	// The tool stays picked until Escape or its own key puts it away.
 	Tool _tool = Tool.None;
 
@@ -35,7 +37,7 @@ public partial class Main : Node
 		GD.Print($"A Thousand Goblins Deep: boot ok (seed {seed})");
 
 		var s = _sim.State;
-		_view = new WarrenView { Sim = _sim };
+		_view = new WarrenView { Sim = _sim, Bubbles = _bubbles };
 		BuildLayout(new Vector2(s.Width, s.Height) * WarrenView.CellSize);
 
 		_selection = new SelectionGesture(MouseButton.Left, new Vector2I(s.Width, s.Height), CellAt);
@@ -141,14 +143,23 @@ public partial class Main : Node
 	{
 		if (_view.GlobalPosition != _hoverOrigin)
 			Hover(_pointer);
+		// Bubbles shown before this frame age by the real time it took, unless the game is paused; those the frame makes start whole.
+		var bubblesChanged = !_sim.State.Paused && _bubbles.Advance(delta);
 		if (_sim.Advance(delta) > 0)
 		{
 			_view.QueueRedraw();
 			UpdateHover();
 			_topBar.SyncClock(_sim.State);
 		}
-		if (_sim.DrainEvents().Count > 0)
+		var events = _sim.DrainEvents();
+		if (events.Count > 0)
+		{
+			bubblesChanged |= _bubbles.Observe(events, _sim.State, _viewZ);
 			SyncHud();
+		}
+		bubblesChanged |= _bubbles.KeepLevel(_sim.State, _viewZ);
+		if (bubblesChanged)
+			_view.QueueRedraw();
 		// Counted every frame, so changes made outside a tick (a Pile painted while paused) show at once.
 		_summary.Count(_sim.State);
 		_summaryPanel.Show(_summary);
@@ -156,6 +167,9 @@ public partial class Main : Node
 
 	/// <summary>The Warren summary as of the last frame.</summary>
 	public WarrenSummary Summary => _summary;
+
+	/// <summary>The chat bubbles on show. Presentation only: the sim neither reads nor knows them.</summary>
+	public BubbleBoard Bubbles => _bubbles;
 
 	/// <summary>The depth readout in the top bar: the viewed level and its Band.</summary>
 	public string DepthText => _topBar.DepthText;
@@ -363,6 +377,8 @@ public partial class Main : Node
 	void Refresh()
 	{
 		_view.ViewZ = _viewZ;
+		// A bubble belongs to the level its goblin is on; leaving the level takes it down.
+		_bubbles.KeepLevel(_sim.State, _viewZ);
 		_view.QueueRedraw();
 		SyncHud();
 		UpdateHover();

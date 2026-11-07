@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Goblins.Sim;
@@ -33,7 +34,7 @@ public partial class CarryDrawChecks : Node
 
 			if (DisplayServer.GetName() == "headless")
 			{
-				GD.Print("Carry draw checks: layout checks passed; the 13 pixel scenarios were SKIPPED, not passed: no renderer under --headless.");
+				GD.Print("Carry draw checks: layout checks passed; the 17 pixel scenarios were SKIPPED, not passed: no renderer under --headless.");
 				GetTree().Quit();
 				return;
 			}
@@ -51,7 +52,11 @@ public partial class CarryDrawChecks : Node
 			await ShirkMarkCheck();
 			await FightMarkCheck();
 			await ThiefMarkCheck();
-			GD.Print("Carry draw checks passed (layout, colours, count order, 13 pixel scenarios).");
+			await BubbleSymbolCheck();
+			await BubblePileUpCheck();
+			await BubbleKeepsCuesCheck();
+			await BubbleOffLevelCheck();
+			GD.Print("Carry draw checks passed (layout, colours, count order, 17 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -457,6 +462,134 @@ public partial class CarryDrawChecks : Node
 		Require(!IsNear(Ring(3), WarrenView.ThiefColor) && !IsNear(Mask(3), WarrenView.ThiefColor), "A goblin that is not stealing wears the thief's cue.");
 	}
 
+
+	static SimEvent IncidentFor(BubbleKind kind, int goblin) => kind switch
+	{
+		BubbleKind.Shirk => new ShirkStarted(goblin),
+		BubbleKind.Scuffle => new ScuffleStarted(goblin, (goblin + 1) % 7),
+		BubbleKind.Theft => new TheftPickedUp(goblin, Material.Grog),
+		_ => new HaulCancelled(goblin),
+	};
+
+	static List<(Bubble Bubble, Rect2 Rect, Rect2 Anchor)> LayoutOf(Simulation sim, BubbleBoard board, int viewZ = 0)
+	{
+		var view = new WarrenView { Sim = sim, Bubbles = board, ViewZ = viewZ };
+		var laid = view.LayoutBubbles();
+		view.Free();
+		return laid;
+	}
+
+	static Color Pixel(Image image, Vector2 at) => image.GetPixel((int)at.X, (int)at.Y);
+
+	// Each kind of bubble draws its paper, rim, symbol in its colour and some ink for the name and the line, whole inside the map, for a goblin
+	// in the open, in each corner and along each edge; and the goblin's own body is left showing.
+	async System.Threading.Tasks.Task BubbleSymbolCheck()
+	{
+		var spots = new[] { (-1, -1), (0, 0), (31, 0), (0, 31), (31, 31), (15, 0), (15, 31), (0, 15), (31, 15) };
+		foreach (var kind in Enum.GetValues<BubbleKind>())
+		foreach (var (x, y) in spots)
+		{
+			var sim = Simulation.NewWorld(seed: 1);
+			var s = sim.State;
+			if (x >= 0)
+				(s.GoblinX[0], s.GoblinY[0]) = (x, y);
+			var board = new BubbleBoard();
+			board.Observe([IncidentFor(kind, 0)], s, 0);
+			var image = await Render(sim, bubbles: board);
+			var (bubble, rect, anchor) = LayoutOf(sim, board).Single();
+			var where = $"{kind} at ({s.GoblinX[0]},{s.GoblinY[0]})";
+
+			Require(new Rect2(0, 0, image.GetWidth(), image.GetHeight()).Encloses(rect), $"{where}: the bubble {rect} leaves the map.");
+			Require(!rect.Intersects(anchor), $"{where}: the bubble covers its goblin.");
+			ExpectColor(image, (int)rect.Position.X + 1, (int)rect.Position.Y + 1, WarrenView.BubbleFillColor, $"{where}: no paper.");
+			ExpectColor(image, (int)rect.Position.X - 1, (int)rect.Position.Y + 3, WarrenView.BubbleRimColor, $"{where}: no rim.");
+			var symbol = WarrenView.BubbleSymbolCentre(rect);
+			ExpectColor(image, (int)symbol.X, (int)symbol.Y, WarrenView.BubbleColor(kind), $"{where}: the symbol is not in its colour.");
+			var ink = 0;
+			for (var py = (int)rect.Position.Y; py < (int)rect.End.Y; py++)
+			for (var px = (int)rect.Position.X + BubbleLayout.Pad + BubbleLayout.SymbolSize + BubbleLayout.Gap; px < (int)rect.End.X; px++)
+				if (IsNear(image.GetPixel(px, py), WarrenView.BubbleTextColor) || IsNear(image.GetPixel(px, py), WarrenView.BubbleNameColor))
+					ink++;
+			Require(ink >= 20, $"{where}: only {ink} pixels of text.");
+			var marker = new Rect2(s.GoblinX[0] * WarrenView.CellSize + 3, s.GoblinY[0] * WarrenView.CellSize + 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+			ExpectColor(image, (int)marker.GetCenter().X, (int)marker.GetCenter().Y, GoblinBody, $"{where}: the goblin's body is covered.");
+		}
+		Require(Enum.GetValues<BubbleKind>().Select(WarrenView.BubbleColor).Distinct().Count() == 4, "Two kinds of bubble share a symbol colour.");
+	}
+
+	// Three goblins on one tile all speaking at once: three bubbles, none over another or over the tile, each readable; a fourth makes three.
+	async System.Threading.Tasks.Task BubblePileUpCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		for (var g = 0; g < 4; g++)
+			(s.GoblinX[g], s.GoblinY[g]) = (s.GoblinX[0], s.GoblinY[0]);
+		var board = new BubbleBoard();
+		board.Observe([new ShirkStarted(0), new HaulCancelled(1), new TheftPickedUp(2, Material.Grub), new ScuffleStarted(3, 0)], s, 0);
+		Require(board.Active.Count == 3, "Four incidents on one tile left more than three bubbles.");
+		var image = await Render(sim, bubbles: board);
+		var laid = LayoutOf(sim, board);
+		Require(laid.Count == 3, "Three bubbles did not all lay out.");
+		for (var i = 0; i < laid.Count; i++)
+		{
+			ExpectColor(image, (int)WarrenView.BubbleSymbolCentre(laid[i].Rect).X, (int)WarrenView.BubbleSymbolCentre(laid[i].Rect).Y, WarrenView.BubbleColor(laid[i].Bubble.Kind), $"Bubble {i} lost its symbol.");
+			Require(!laid[i].Rect.Intersects(laid[i].Anchor), $"Bubble {i} covers the tile.");
+			for (var j = 0; j < i; j++)
+				Require(!laid[i].Rect.Intersects(laid[j].Rect), $"Bubbles {i} and {j} overlap.");
+		}
+	}
+
+	// A bubble does not cover the cues of the goblin it hangs from (pip, carried square, shirk band) nor of its neighbour; once it expires the
+	// same cues are there and its paper is gone.
+	async System.Threading.Tasks.Task BubbleKeepsCuesCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		(s.GoblinGrub[0], s.GoblinGrog[0], s.GoblinSleep[0]) = (20, 100, 100);
+		GoblinTasks.FinishPickUp(s, 0, Material.Dirt);
+		(s.GoblinX[1], s.GoblinY[1]) = (s.GoblinX[0] + 1, s.GoblinY[0]);
+		(s.GoblinGrub[1], s.GoblinGrog[1], s.GoblinSleep[1]) = (100, 10, 100);
+		var board = new BubbleBoard();
+		board.Observe([new HaulCancelled(0), new ShirkStarted(1)], s, 0);
+
+		Rect2 Marker(int g) => new(s.GoblinX[g] * WarrenView.CellSize + 3, s.GoblinY[g] * WarrenView.CellSize + 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+		void ExpectCues(Image image, string when)
+		{
+			var square = Square(s, 0, slot: 0, carriers: 1);
+			ExpectColor(image, square.X, square.Y, DirtSquare, $"{when}: the carried square is covered.");
+			ExpectColor(image, (int)WarrenView.PipRect(Marker(0)).GetCenter().X, (int)WarrenView.PipRect(Marker(0)).GetCenter().Y, WarrenView.NeedColor(Need.Grub), $"{when}: the Grub pip is covered.");
+			ExpectColor(image, (int)WarrenView.PipRect(Marker(1)).GetCenter().X, (int)WarrenView.PipRect(Marker(1)).GetCenter().Y, WarrenView.NeedColor(Need.Grog), $"{when}: the neighbour's Grog pip is covered.");
+			ExpectColor(image, (int)Marker(0).GetCenter().X, (int)Marker(0).Position.Y + 1, GoblinBody, $"{when}: a body is covered.");
+		}
+
+		ExpectCues(await Render(sim, bubbles: board), "With bubbles");
+		var rects = LayoutOf(sim, board).Select(l => l.Rect).ToList();
+		board.Advance(BubbleBoard.LifetimeSeconds);
+		Require(board.Active.Count == 0, "The bubbles did not expire.");
+		var after = await Render(sim, bubbles: board);
+		ExpectCues(after, "After expiry");
+		foreach (var rect in rects)
+			Require(!IsNear(Pixel(after, rect.Position + new Vector2(1, 1)), WarrenView.BubbleFillColor), $"The paper of {rect} outlived its bubble.");
+	}
+
+	// A bubble for a goblin on another level is not drawn on this one, wherever that goblin's coordinates would put it.
+	async System.Threading.Tasks.Task BubbleOffLevelCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		s.GoblinZ[0] = 1;
+		var board = new BubbleBoard();
+		board.Observe([new ShirkStarted(0)], s, viewZ: 1);
+		Require(board.Active.Count == 1, "The level-1 goblin had no bubble to hide.");
+		Require(LayoutOf(sim, board, viewZ: 0).Count == 0, "A bubble for a level-1 goblin laid out on level 0.");
+		var below = await Render(sim, viewZ: 0, bubbles: board);
+		var above = await Render(sim, viewZ: 1, bubbles: board);
+		var rect = LayoutOf(sim, board, viewZ: 1).Single().Rect;
+		var at = rect.Position + new Vector2(1, 1);
+		Require(!IsNear(Pixel(below, at), WarrenView.BubbleFillColor), "Level 0 shows a level-1 goblin's bubble.");
+		Require(IsNear(Pixel(above, at), WarrenView.BubbleFillColor), "Level 1 does not show its own goblin's bubble.");
+	}
+
 	// The "zzz" lies inside its tile, from the left edge of the goblin marker.
 	static void ZzzLayoutCheck()
 	{
@@ -573,11 +706,11 @@ public partial class CarryDrawChecks : Node
 		return ((int)center.X, (int)center.Y);
 	}
 
-	async System.Threading.Tasks.Task<Image> Render(Simulation sim, int viewZ = 0)
+	async System.Threading.Tasks.Task<Image> Render(Simulation sim, int viewZ = 0, BubbleBoard? bubbles = null)
 	{
 		var size = new Vector2I(sim.State.Width * WarrenView.CellSize, sim.State.Height * WarrenView.CellSize);
 		var viewport = new SubViewport { Size = size, RenderTargetUpdateMode = SubViewport.UpdateMode.Once };
-		viewport.AddChild(new WarrenView { Sim = sim, ViewZ = viewZ });
+		viewport.AddChild(new WarrenView { Sim = sim, ViewZ = viewZ, Bubbles = bubbles });
 		AddChild(viewport);
 		await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
 		var image = viewport.GetTexture().GetImage();

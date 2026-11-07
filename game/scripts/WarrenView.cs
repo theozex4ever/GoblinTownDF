@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 using Goblins.Sim;
 
@@ -38,6 +39,13 @@ public partial class WarrenView : Node2D
 	/// <summary>The ring and the mask on a goblin stealing, in any stage of a theft: a crimson clear of the lilac, the orange and the colours of Grub and Grog.</summary>
 	public static readonly Color ThiefColor = new(0.78f, 0.10f, 0.20f);
 	public const int PipSize = 4;
+	/// <summary>The paper of a chat bubble, its rim and its two inks: the line, and the goblin's name over it.</summary>
+	public static readonly Color BubbleFillColor = new(0.97f, 0.94f, 0.84f);
+	public static readonly Color BubbleRimColor = new(0.10f, 0.09f, 0.08f);
+	public static readonly Color BubbleTextColor = new(0.14f, 0.12f, 0.10f);
+	public static readonly Color BubbleNameColor = new(0.45f, 0.40f, 0.34f);
+	/// <summary>The symbol on a bubble for an eaten Haul: the grey of a Haul with nowhere to go, darker for the paper.</summary>
+	public static readonly Color LostHaulColor = new(0.38f, 0.42f, 0.50f);
 	static readonly Color LooseDirtColor = new(0.55f, 0.36f, 0.18f);
 	static readonly Color GrubColor = new(0.93f, 0.52f, 0.48f);
 	static readonly Color FungusColor = new(0.64f, 0.42f, 0.82f);
@@ -62,6 +70,9 @@ public partial class WarrenView : Node2D
 
 	public Simulation? Sim { get; set; }
 	public int ViewZ { get; set; }
+
+	/// <summary>The chat bubbles to draw over their goblins, or null for none. Read only; the view never changes the board.</summary>
+	public BubbleBoard? Bubbles { get; set; }
 
 	/// <summary>The cells a drag in progress has swept (corners in any order), outlined as it goes.</summary>
 	public (Vector2I From, Vector2I To)? Selection { get; set; }
@@ -225,6 +236,10 @@ public partial class WarrenView : Node2D
 		if (Hover is { } hover)
 			DrawRect(new Rect2(hover.X * CellSize, hover.Y * CellSize, CellSize, CellSize), HoverColor, filled: false, width: 1);
 
+		// Chat bubbles last, over everything on the map but the pause frame; they take no input, being only drawn.
+		foreach (var (bubble, rect, anchor) in LayoutBubbles())
+			DrawBubble(bubble, rect, anchor);
+
 		// Paused, the map wears a frame and a label just outside its edge, so nothing on the map itself is covered.
 		if (s.Paused)
 		{
@@ -232,6 +247,96 @@ public partial class WarrenView : Node2D
 			DrawRect(map.Grow(2), PausedColor, filled: false, width: 2);
 			DrawString(ThemeDB.FallbackFont, new Vector2(0, -6), "PAUSED · the warren holds its breath", HorizontalAlignment.Left, -1, PausedFontSize, PausedColor);
 		}
+	}
+
+	/// <summary>
+	/// Each bubble on show whose goblin is on the viewed level, with the rectangle it is drawn in and the goblin's marker it hangs from. The rectangles
+	/// are placed in the board's order (oldest first), each clear of the ones before it and, where the map has room, of every goblin's tile.
+	/// </summary>
+	public List<(Bubble Bubble, Rect2 Rect, Rect2 Anchor)> LayoutBubbles()
+	{
+		var laid = new List<(Bubble, Rect2, Rect2)>();
+		if (Sim is null || Bubbles is null || Bubbles.Active.Count == 0)
+			return laid;
+
+		var s = Sim.State;
+		var map = new Vector2(s.Width, s.Height) * CellSize;
+		var cells = new List<Rect2>();
+		for (var g = 0; g < s.GoblinCount; g++)
+			if (s.GoblinZ[g] == ViewZ)
+				cells.Add(new Rect2(s.GoblinX[g] * CellSize, s.GoblinY[g] * CellSize, CellSize, CellSize));
+
+		var placed = new List<Rect2>();
+		foreach (var bubble in Bubbles.Active)
+		{
+			if (bubble.Goblin >= s.GoblinCount || s.GoblinZ[bubble.Goblin] != ViewZ)
+				continue;
+			var cell = new Rect2(s.GoblinX[bubble.Goblin] * CellSize, s.GoblinY[bubble.Goblin] * CellSize, CellSize, CellSize);
+			var rect = BubbleLayout.Place(cell, BubbleLayout.Measure(bubble), map, placed, cells);
+			placed.Add(rect);
+			laid.Add((bubble, rect, MarkerRect(s, bubble.Goblin, 0)));
+		}
+		return laid;
+	}
+
+	/// <summary>The colour of a bubble's symbol: the map's own colour for that misbehaviour.</summary>
+	public static Color BubbleColor(BubbleKind kind) => kind switch
+	{
+		BubbleKind.Shirk => ShirkColor,
+		BubbleKind.Scuffle => FightColor,
+		BubbleKind.Theft => ThiefColor,
+		_ => LostHaulColor,
+	};
+
+	/// <summary>The middle of the symbol on a bubble drawn in <paramref name="rect"/>.</summary>
+	public static Vector2 BubbleSymbolCentre(Rect2 rect) => new(rect.Position.X + BubbleLayout.Pad + BubbleLayout.SymbolSize / 2f, rect.GetCenter().Y);
+
+	// A paper bubble with its goblin's name over its line, a tail to the goblin, and the symbol of what it did at the left.
+	void DrawBubble(Bubble bubble, Rect2 rect, Rect2 anchor)
+	{
+		var toward = new Vector2(Math.Clamp(rect.GetCenter().X, anchor.Position.X, anchor.End.X), Math.Clamp(rect.GetCenter().Y, anchor.Position.Y, anchor.End.Y));
+		var from = new Vector2(Math.Clamp(toward.X, rect.Position.X + 4, rect.End.X - 4), Math.Clamp(toward.Y, rect.Position.Y, rect.End.Y));
+		DrawLine(from, toward, BubbleRimColor, 3);
+		DrawLine(from, toward, BubbleFillColor, 1);
+		DrawRect(rect.Grow(1), BubbleRimColor);
+		DrawRect(rect, BubbleFillColor);
+
+		var colour = BubbleColor(bubble.Kind);
+		var centre = BubbleSymbolCentre(rect);
+		const float r = BubbleLayout.SymbolSize / 2f;
+		switch (bubble.Kind)
+		{
+			case BubbleKind.Shirk:
+				DrawArc(centre, r - 1, 0, Mathf.Tau, 20, colour, 2);
+				DrawLine(centre + new Vector2(-r + 2, r - 2), centre + new Vector2(r - 2, -r + 2), colour, 2);
+				break;
+			case BubbleKind.Scuffle:
+				for (var spoke = 0; spoke < 8; spoke++)
+				{
+					var direction = Vector2.Right.Rotated(spoke * Mathf.Tau / 8);
+					DrawLine(centre + direction * 2, centre + direction * r, colour, 2);
+				}
+				DrawCircle(centre, 2, colour);
+				break;
+			case BubbleKind.Theft:
+				DrawRect(new Rect2(centre.X - r, centre.Y - 3, 2 * r, 6), colour);
+				DrawRect(new Rect2(centre.X - r + 2, centre.Y - 1, 3, 2), BubbleFillColor);
+				DrawRect(new Rect2(centre.X + r - 5, centre.Y - 1, 3, 2), BubbleFillColor);
+				break;
+			default:
+				DrawRect(new Rect2(centre.X - r + 1, centre.Y - r + 1, 2 * r - 2, 2 * r - 2), colour, filled: false, width: 2);
+				DrawLine(centre + new Vector2(-r + 3, -r + 3), centre + new Vector2(r - 3, r - 3), colour, 2);
+				DrawLine(centre + new Vector2(r - 3, -r + 3), centre + new Vector2(-r + 3, r - 3), colour, 2);
+				break;
+		}
+
+		var font = ThemeDB.FallbackFont;
+		var left = rect.Position.X + BubbleLayout.Pad + BubbleLayout.SymbolSize + BubbleLayout.Gap;
+		var top = rect.Position.Y + BubbleLayout.Pad;
+		var ascent = font.GetAscent(BubbleLayout.FontSize);
+		var nameHeight = font.GetStringSize(bubble.Name, HorizontalAlignment.Left, -1, BubbleLayout.FontSize).Y;
+		DrawString(font, new Vector2(left, top + ascent), bubble.Name, HorizontalAlignment.Left, -1, BubbleLayout.FontSize, BubbleNameColor);
+		DrawMultilineString(font, new Vector2(left, top + nameHeight + ascent), bubble.Line, HorizontalAlignment.Left, BubbleLayout.MaxTextWidth, BubbleLayout.FontSize, -1, BubbleTextColor);
 	}
 
 	/// <summary>The ring round a goblin in a stage of a fight, or null for any other Task: hot while it pursues or scuffles, banked down while it recovers.</summary>
