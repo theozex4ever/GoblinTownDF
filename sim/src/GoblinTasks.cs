@@ -18,6 +18,8 @@ namespace Goblins.Sim;
 /// nearest Sleeping Heap tile) and Sleeping there, or Sleeping where it stands when no Heap is in reach. A goblin finishes the one Need it
 /// has begun before it considers another. Sleeping lasts until the Sleep meter is full, whatever else is craved; the one
 /// thing that ends a Task already satisfying a Need is Collapse, at Sleep 0, which puts the goblin to sleep on the spot.
+/// Acting out ends a Job too: a goblin with enough Chaos and no cooldown begins Shirking, loafing where it stands for <see cref="ChaosRules.ShirkTicks"/>
+/// ticks and taking no Job, putting down what it carries as a Craving does. A Craving or Collapse ends a shirk at once, for no relief; either way a cooldown follows.
 /// A new Task is added here and nowhere else. Movement along a path stays in <see cref="JobSystem"/>,
 /// which only counts <see cref="SimState.GoblinStepTicks"/>.
 /// </summary>
@@ -256,6 +258,33 @@ public static class GoblinTasks
 	}
 
 	/// <summary>
+	/// Any Task but a seeking, consuming, sleeping or shirking one → Shirking where the goblin stands. Drops any wander and abandons any Job, which
+	/// stays on the job list with its progress: a dig keeps its progress on the tile, while a Tend or a Brew loses the goblin's. A carried unit is put down on
+	/// <paramref name="dropTile"/> first, as in <see cref="BeginSeek"/>; the caller has chosen a tile that can legally take it, or defers the shirk.
+	/// </summary>
+	public static void BeginShirk(SimState s, int g, int dropTile)
+	{
+		var task = (GoblinTask)s.GoblinTask[g];
+		if (IsSatisfyingTask(task) || task == GoblinTask.Shirking)
+			throw new InvalidOperationException($"Goblin {g} is {task} and cannot begin to shirk.");
+		BeginNeedTask(s, g, dropTile, GoblinTask.Shirking);
+	}
+
+	/// <summary>
+	/// Counts one tick of shirking. True on the tick the <see cref="ChaosRules.ShirkTicks"/>th tick is counted, when the caller must end it with
+	/// <see cref="FinishShirk"/>.
+	/// </summary>
+	public static bool ShirkTick(SimState s, int g) => ++s.GoblinWorkTicks[g] >= ChaosRules.ShirkTicks;
+
+	/// <summary>Shirking → Idle: the goblin has loafed its full time, so it loses <see cref="ChaosRules.ActRelief"/> Chaos and starts its cooldown.</summary>
+	public static void FinishShirk(SimState s, int g)
+	{
+		Release(s, g);
+		s.GoblinActCooldown[g] = ChaosRules.CooldownTicks;
+		ChaosSystem.Add(s, g, -ChaosRules.ActRelief);
+	}
+
+	/// <summary>
 	/// Any Task but Sleeping → Sleeping where the goblin stands, because its Sleep meter has reached 0. Unlike a Craving this takes the goblin
 	/// off a Task that satisfies a Need as well, a meal or a walk to a Heap included; the unit it was about to eat stays where it is.
 	/// A carried unit is put down on <paramref name="dropTile"/> first, as in <see cref="BeginSleep"/>.
@@ -269,10 +298,12 @@ public static class GoblinTasks
 		BeginNeedTask(s, g, dropTile, GoblinTask.Sleeping);
 	}
 
-	// The common start of a Task that satisfies a Need: any carried unit goes down on dropTile, which the caller has chosen as
-	// a walkable tile that can take it, the Job and wander are dropped, and the counters start from nothing.
+	// The common start of a Task that takes a goblin off its work, to satisfy a Need or to shirk: any carried unit goes down on dropTile,
+	// which the caller has chosen as a walkable tile that can take it, the Job and wander are dropped, and the counters start from nothing.
+	// A shirk this ends was interrupted, so it starts the goblin's cooldown and gives it no relief.
 	static void BeginNeedTask(SimState s, int g, int dropTile, GoblinTask task)
 	{
+		var wasShirking = (GoblinTask)s.GoblinTask[g] == GoblinTask.Shirking;
 		var carried = (Material)s.GoblinCarry[g];
 		if (carried != Material.None)
 		{
@@ -289,6 +320,8 @@ public static class GoblinTasks
 		s.GoblinWanderTile[g] = -1;
 		s.GoblinWanderTicks[g] = 0;
 		s.GoblinTask[g] = (byte)task;
+		if (wasShirking)
+			s.GoblinActCooldown[g] = ChaosRules.CooldownTicks;
 	}
 
 	/// <summary>Seeking → Eating, on arrival at a tile holding Grub.</summary>
@@ -512,8 +545,8 @@ public static class GoblinTasks
 	/// on a unit of it, a Sleeping goblin's meter is below <see cref="NeedRules.MeterMax"/> (it has climbed past any Craving, or Collapsed), a wander target is walkable on the goblin's own
 	/// level and not its own tile, a tender works a farm tile that is not producing, and a Tending one stands on it, no two goblins claim one tile to dig it or to tend it, no more claim a tile's loose units than it holds, no more claim its Fungus to brew than it holds, and haulers and brewers together never claim more units than it has, a Bringing or Brewing goblin holds Fungus and a Brewery tile that no other goblin has, and a Brewing one stands on it, step ticks are below
 	/// <see cref="WalkTicksPerTile"/>, work ticks are below <see cref="HaulActionTicks"/> (<see cref="NeedRules.EatTicks"/> while Eating or Drinking, <see cref="ProductionRules.TendTicks"/> while Tending,
-	/// <see cref="NeedRules.FloorRecoveryTicks"/> while Sleeping) and only count while
-	/// PickingUp, Dropping, Eating, Drinking, Tending or Sleeping, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
+	/// <see cref="NeedRules.FloorRecoveryTicks"/> while Sleeping, <see cref="ChaosRules.ShirkTicks"/> while Shirking) and only count while
+	/// PickingUp, Dropping, Eating, Drinking, Tending, Sleeping or Shirking, a Shirking goblin holds no Job, wanders nowhere and has no cooldown, an idle pause is at most <see cref="MaxWanderPauseTicks"/>).
 	/// Precondition: the state is structurally sound: array lengths match the map and goblin cap, tile, material
 	/// and designation values are defined, and every goblin stands on the map.
 	/// </summary>
@@ -537,9 +570,9 @@ public static class GoblinTasks
 				return $"Goblin {g} is {task} with nothing to carry.";
 			if (!carrying && carry != Material.None)
 				return $"Goblin {g} is {task} but carries {carry}.";
-			if (s.GoblinWorkTicks[g] >= (IsConsumingTask(task) ? NeedRules.EatTicks : task == GoblinTask.Tending ? ProductionRules.TendTicks : task == GoblinTask.Sleeping ? NeedRules.FloorRecoveryTicks : task == GoblinTask.Brewing ? ProductionRules.BrewTicks : HaulActionTicks))
+			if (s.GoblinWorkTicks[g] >= (IsConsumingTask(task) ? NeedRules.EatTicks : task == GoblinTask.Tending ? ProductionRules.TendTicks : task == GoblinTask.Sleeping ? NeedRules.FloorRecoveryTicks : task == GoblinTask.Brewing ? ProductionRules.BrewTicks : task == GoblinTask.Shirking ? ChaosRules.ShirkTicks : HaulActionTicks))
 				return $"Goblin {g} has work ticks {s.GoblinWorkTicks[g]}.";
-			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Tending or GoblinTask.Sleeping or GoblinTask.Taking or GoblinTask.Brewing))
+			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Tending or GoblinTask.Sleeping or GoblinTask.Taking or GoblinTask.Brewing or GoblinTask.Shirking))
 				return $"Goblin {g} is {task} but has work ticks {s.GoblinWorkTicks[g]}.";
 
 			var job = s.GoblinJobTile[g];
@@ -630,6 +663,15 @@ public static class GoblinTasks
 						return $"Goblin {g} is tending tile {job} from tile {here}.";
 					if (FindOtherTender(s, g, job) is { } tendRival)
 						return $"Goblins {tendRival} and {g} both claim tile {job} to tend.";
+					break;
+
+				case GoblinTask.Shirking:
+					if (job != -1)
+						return $"Goblin {g} is not working but holds job tile {job}.";
+					if (wanderTile != -1 || wanderTicks != 0)
+						return $"Goblin {g} is shirking but wanders.";
+					if (s.GoblinActCooldown[g] != 0)
+						return $"Goblin {g} is shirking with a cooldown of {s.GoblinActCooldown[g]}, which only starts when the shirk ends.";
 					break;
 
 				case GoblinTask.Carrying:

@@ -90,7 +90,9 @@ public static class SimJson
 			&& s.GoblinWorkTicks is { Length: SimState.MaxGoblins }
 			&& s.GoblinGrub is { Length: SimState.MaxGoblins }
 			&& s.GoblinGrog is { Length: SimState.MaxGoblins }
-			&& s.GoblinSleep is { Length: SimState.MaxGoblins },
+			&& s.GoblinSleep is { Length: SimState.MaxGoblins }
+			&& s.GoblinChaos is { Length: SimState.MaxGoblins }
+			&& s.GoblinActCooldown is { Length: SimState.MaxGoblins },
 			$"Goblin arrays must hold {SimState.MaxGoblins} entries.");
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
@@ -102,6 +104,8 @@ public static class SimJson
 			Require(s.GoblinGrub[g] <= NeedRules.MeterMax, $"Goblin {g} has Grub meter {s.GoblinGrub[g]}, past {NeedRules.MeterMax}.");
 			Require(s.GoblinGrog[g] <= NeedRules.MeterMax, $"Goblin {g} has Grog meter {s.GoblinGrog[g]}, past {NeedRules.MeterMax}.");
 			Require(s.GoblinSleep[g] <= NeedRules.MeterMax, $"Goblin {g} has Sleep meter {s.GoblinSleep[g]}, past {NeedRules.MeterMax}.");
+			Require(s.GoblinChaos[g] <= ChaosRules.Max, $"Goblin {g} has Chaos {s.GoblinChaos[g]}, past {ChaosRules.Max}.");
+			Require(s.GoblinActCooldown[g] <= ChaosRules.CooldownTicks, $"Goblin {g} has a cooldown of {s.GoblinActCooldown[g]}, past {ChaosRules.CooldownTicks}.");
 		}
 
 		// The structure is sound, so the Task rules can read it.

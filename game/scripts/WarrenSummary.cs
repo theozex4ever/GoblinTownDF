@@ -19,7 +19,7 @@ public sealed class WarrenSummary
 	public int Asleep { get; private set; }
 	/// <summary>Awake with any Craving, whether or not it can be met.</summary>
 	public int Craving { get; private set; }
-	/// <summary>Awake, craving nothing, and Idle or Wandering.</summary>
+	/// <summary>Awake, craving nothing, and Idle, Wandering or Shirking: a shirker is not working.</summary>
 	public int Idle { get; private set; }
 	/// <summary>Awake, craving nothing, and on a Job.</summary>
 	public int Working { get; private set; }
@@ -42,7 +42,7 @@ public sealed class WarrenSummary
 			return GoblinState.Asleep;
 		if (NeedRules.LeadingCraving(s.GoblinGrub[goblin], s.GoblinGrog[goblin], s.GoblinSleep[goblin]) != Need.None)
 			return GoblinState.Craving;
-		return task is GoblinTask.Idle or GoblinTask.Wandering ? GoblinState.Idle : GoblinState.Working;
+		return task is GoblinTask.Idle or GoblinTask.Wandering or GoblinTask.Shirking ? GoblinState.Idle : GoblinState.Working;
 	}
 
 	public void Count(SimState s)

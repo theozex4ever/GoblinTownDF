@@ -11,6 +11,9 @@ public partial class Main : Node
 	TopBar _topBar = null!;
 	ToolPalette _palette = null!;
 	InspectorPanel _inspector = null!;
+	ScrollContainer _inspectorScroll = null!;
+	// The tile the Inspector shows, or -1 for none; the Inspector's scroll goes back to the top when it changes.
+	int _inspectedTile = -1;
 	SummaryPanel _summaryPanel = null!;
 	readonly WarrenSummary _summary = new();
 	// The map cell under the cursor, from the last mouse motion; kept so the Inspector follows the sim as it changes the tile.
@@ -116,9 +119,20 @@ public partial class Main : Node
 		_summaryPanel = new SummaryPanel();
 		rightColumn.AddChild(_summaryPanel);
 		rightColumn.AddChild(new HSeparator());
-		_inspector = new InspectorPanel();
-		rightColumn.AddChild(_inspector);
+		// The Inspector scrolls within the space the Warren summary leaves, so a tile of seven goblins never grows the panel or moves the map.
+		_inspectorScroll = new ScrollContainer
+		{
+			Name = "InspectorScroll",
+			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+			CustomMinimumSize = new Vector2(0, InspectorMinHeight),
+		};
+		rightColumn.AddChild(_inspectorScroll);
+		_inspector = new InspectorPanel { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+		_inspectorScroll.AddChild(_inspector);
 	}
+
+	const int InspectorMinHeight = 120;
 
 	const int LeftPanelWidth = 230;
 	const int RightPanelWidth = 290;
@@ -154,7 +168,7 @@ public partial class Main : Node
 
 	// A drag in progress owns the mouse before the panels see it, so dragging off the map over a panel still sweeps and
 	// still ends; the gesture clamps the far corner to the map. Motion also moves the hover here, so leaving the map for
-	// a panel clears it.
+	// anywhere but the Inspector clears it.
 	public override void _Input(InputEvent @event)
 	{
 		if (@event is InputEventMouseMotion motion)
@@ -167,6 +181,11 @@ public partial class Main : Node
 	{
 		if (@event is InputEventMouseMotion motion)
 			Hover(motion.Position);
+		if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } wheel && ScrollInspector(wheel))
+		{
+			GetViewport().SetInputAsHandled();
+			return;
+		}
 		if (HandleMouse(@event))
 			GetViewport().SetInputAsHandled();
 	}
@@ -175,8 +194,38 @@ public partial class Main : Node
 	{
 		_pointer = position;
 		_hoverOrigin = _view.GlobalPosition;
-		_hoverCell = CellAt(position);
+		var cell = CellAt(position);
+		// A pointer on its way from a tile to the Inspector, to scroll it, keeps the tile; any other way off the map clears it.
+		if (IsOnMap(cell) || !IsReachingInspector(position))
+			_hoverCell = cell;
 		UpdateHover();
+	}
+
+	// The wheel over a tile scrolls the Inspector's list for that tile, so a crowd mid-map can be read to the end without leaving it.
+	bool ScrollInspector(InputEventMouseButton wheel)
+	{
+		if (_selection.Dragging || _removal.Dragging || !IsOnMap(CellAt(wheel.Position)))
+			return false;
+		var bar = _inspectorScroll.GetVScrollBar();
+		if (bar.MaxValue <= bar.Page)
+			return false;
+		var notch = (int)Math.Max(1, bar.Page / 8 * Math.Max(1f, wheel.Factor));
+		_inspectorScroll.ScrollVertical += wheel.ButtonIndex == MouseButton.WheelUp ? -notch : notch;
+		return true;
+	}
+
+	bool IsOnMap(Vector2I cell) => cell.X >= 0 && cell.Y >= 0 && cell.X < _sim.State.Width && cell.Y < _sim.State.Height;
+
+	// True right of the map, from the map's top (or the Inspector's, if higher) down and out, and over the Inspector wherever it lies: the ground a
+	// pointer covers going to the Inspector or dragging its scrollbar, which a drag can take past the window.
+	bool IsReachingInspector(Vector2 position)
+	{
+		if (!IsOnMap(_hoverCell))
+			return false;
+		var inspector = _inspectorScroll.GetGlobalRect();
+		var east = _view.GlobalPosition.X + _sim.State.Width * WarrenView.CellSize;
+		var top = Math.Min(_view.GlobalPosition.Y, inspector.Position.Y);
+		return inspector.HasPoint(position) || (position.X >= east && position.Y >= top);
 	}
 
 	// Only one button owns a drag; removal is available with no tool picked.
@@ -192,8 +241,14 @@ public partial class Main : Node
 	void UpdateHover()
 	{
 		var s = _sim.State;
-		var inMap = _hoverCell.X >= 0 && _hoverCell.Y >= 0 && _hoverCell.X < s.Width && _hoverCell.Y < s.Height;
-		Inspection = inMap ? Inspector.Inspect(s, s.TileIndex(_hoverCell.X, _hoverCell.Y, _viewZ)) : Inspection.Nothing;
+		var inMap = IsOnMap(_hoverCell);
+		var tile = inMap ? s.TileIndex(_hoverCell.X, _hoverCell.Y, _viewZ) : -1;
+		Inspection = inMap ? Inspector.Inspect(s, tile) : Inspection.Nothing;
+		if (tile != _inspectedTile)
+		{
+			_inspectedTile = tile;
+			_inspectorScroll.ScrollVertical = 0;
+		}
 		_inspector.Show(Inspection);
 		Vector2I? hover = inMap ? _hoverCell : null;
 		if (_view.Hover != hover)

@@ -34,3 +34,7 @@ if [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
 else
 	"$GODOT" --headless --path "$ROOT/game" res://tests/CarryDrawChecks.tscn
 fi
+
+# Lays the real Main scene out at fixed viewport sizes and drives it with viewport input events; geometry needs no renderer.
+echo "== inspector layout checks"
+"$GODOT" --headless --path "$ROOT/game" res://tests/InspectorLayoutChecks.tscn

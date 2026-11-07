@@ -55,8 +55,12 @@ public static class RoomRules
 	/// tending a tile that is no longer a farm free to tend is freed, a gatherer of Fungus that is gone or taken by others is freed, and a brewer whose Brewery is gone carries its Fungus on to a Pile.
 	/// Run after anything that clears or sets a Room (painting, removing, digging stairs on one) or takes a unit of Grub,
 	/// Grog or Fungus off a tile, so <see cref="GoblinTasks.FindViolation"/> holds between ticks.
+	/// When a goblin has just consumed a unit on <paramref name="consumedTile"/>, a hauler whose claim on that tile it cancels gains
+	/// <see cref="ChaosRules.LostHaulGain"/> Chaos and a <see cref="HaulCancelled"/> event goes to <paramref name="events"/>. Claims are quantities on a tile,
+	/// not particular units, so whichever material was eaten, the claimants the tile can no longer feed are the highest-numbered. Any other cause
+	/// (painting a Pile, a unit picked up) cancels a claim with no annoyance.
 	/// </summary>
-	public static void Settle(SimState s)
+	public static void Settle(SimState s, List<SimEvent>? events = null, int consumedTile = -1)
 	{
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
@@ -65,8 +69,16 @@ public static class RoomRules
 				case GoblinTask.Fetching:
 				case GoblinTask.PickingUp:
 					// A tile claimed by more goblins than it has loose units frees its highest-numbered claimants.
-					if (GoblinTasks.SupplyClaims(s, s.GoblinJobTile[g], g) >= s.LooseTotal(s.GoblinJobTile[g]))
+					var claimed = s.GoblinJobTile[g];
+					if (GoblinTasks.SupplyClaims(s, claimed, g) >= s.LooseTotal(claimed))
+					{
 						GoblinTasks.Release(s, g);
+						if (claimed == consumedTile)
+						{
+							ChaosSystem.Add(s, g, ChaosRules.LostHaulGain);
+							events?.Add(new HaulCancelled(g));
+						}
+					}
 					break;
 				case GoblinTask.Gathering:
 				case GoblinTask.Taking:

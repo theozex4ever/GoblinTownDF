@@ -21,7 +21,7 @@ Goblins are earnest underdogs who take absurd traditions seriously. Failure shou
 ## Development status
 
 > [!NOTE]
-> **Early grey-box prototype.** P1, P2 and P3 have been played and logged. P3 passed its fun check with five yeses out of five, and P4 (Chaos) is next.
+> **Early grey-box prototype.** P1, P2 and P3 have been played and logged. P3 passed its fun check with five yeses out of five. P4 (Chaos) is under way: unmet Needs now raise Chaos and a goblin can shirk, while fights and theft are still to come.
 
 The first prototype asks one question: **is it fun to dig a warren and watch goblins mess it up?** It grows through six playable milestones, each tested for fun before any art or extra systems.
 
@@ -30,7 +30,7 @@ The first prototype asks one question: **is it fun to dig a warren and watch gob
 | ✅ | **P1 — Map and digging** | Designate tunnels and stairs; one goblin digs them out | [Played](docs/playtests/2026-10-30-P1.md) |
 | ✅ | **P2 — Hauling and piles** | Goblins carry dug material to Piles | [Played](docs/playtests/2026-10-31-P2.md) |
 | ✅ | **P3 — Needs** | Food, drink, sleep, Fungus farming and a Brewery | [Played, 5/5 yes](docs/playtests/2026-11-06-P3.md) |
-| ⬜ | **P4 — Chaos** | Unmet needs lead to shirking, fights and theft | Planned |
+| 🚧 | **P4 — Chaos** | Unmet needs lead to shirking, fights and theft | In progress: Chaos and shirking built, not yet played |
 | ⬜ | **P5 — One invasion** | Three heroes, one trap type, and Brutes fighting back | Planned |
 | ⬜ | **P6 — Legends** | A running event log of deaths, invasions and chaos | Planned |
 
@@ -49,6 +49,7 @@ A **32×32 map** across **three z-levels**. **Seven Grunts** start together on t
 | 🍄 | **Fungus Farm** | Tend it to grow Fungus, below the surface only |
 | 🍺 | **Brewery** | Brew Fungus into Grog |
 | 💤 | **Sleeping Heap** | Sleep there, faster than on the bare floor |
+| 😤 | **Chaos** | Build up from neglect, then shirk |
 
 <details>
 <summary><strong>How Needs work</strong></summary>
@@ -59,14 +60,38 @@ Each Grunt has three meters: **Grub**, **Grog** and **Sleep**.
 
 - **Craving.** When a meter falls below 30, the Grunt drops its work and anything it carries. It goes to eat or drink the nearest unit it can reach, or to sleep.
 - **Priority.** The lowest meter goes first. A tie goes Grub, then Grog, then Sleep.
-- **Stuck carrying.** A Grunt holding a unit with no Pile to take it loses Grog twice as fast, so it eventually drops the unit and goes for a drink.
+- **Stuck carrying.** A Grunt holding a unit with no Pile to take it waits, still carrying. Its Grog drains at the ordinary rate, but waiting raises its Chaos (below), and a Grog Craving still makes it drop the unit and go for a drink.
 - **Sleeping.** A Grunt sleeps until its Sleep meter is full. Hunger and thirst do not wake it.
 
 | Meter at 0 | Effect |
 |---|---|
 | Grub | **Starving:** moves at half speed |
-| Grog | Nothing yet |
+| Grog | No slowdown, but Chaos keeps rising |
 | Sleep | **Collapses** and sleeps where it stands |
+
+</details>
+
+<details>
+<summary><strong>How Chaos works</strong></summary>
+
+<br>
+
+Each Grunt has a **Chaos** meter from 0 to 100, starting at 0. Neglect raises it, contentment lowers it, and a high enough meter makes a Grunt walk off the job.
+
+| What happens | Chaos |
+|---|---|
+| Every 10 ticks, for each Need below 30, even when supply is within reach | +1 |
+| Every 20 ticks a Grunt stands waiting for a Pile to take its unit | +1 more |
+| Another Grunt eats or drinks the unit a hauler was walking to fetch | +15, once |
+| Every 10 ticks with every Need at 30 or more, and no unit left waiting | −1 |
+
+The Need a Grunt is eating, drinking or sleeping to restore adds nothing while it does, but any other low Need still does, even in its sleep. A meal does not clear Chaos; it only stops it growing. Painting a Pile over a claimed unit, or another hauler collecting it, annoys nobody.
+
+- **Shirking.** From 70 Chaos, a Grunt with no cooldown abandons its Job and loafs where it stands for 100 ticks, taking no work and not wandering. A Craving it can satisfy, Collapse and sleep all come first. A dig keeps its progress, a Tend or a Brew loses it, and a unit it carries is put down by the same rules as for a Craving. With nowhere legal to put the unit it holds on to it and tries again.
+- **Finishing.** A full 100 ticks of shirking removes 40 Chaos. A Craving it can meet, or Collapse, ends the shirk early for no relief, and it does not resume. Either way the Grunt then waits 300 ticks before it can act out again, though its Chaos can keep rising. Starving does not lengthen any of this.
+- **Seeing it.** A shirking Grunt wears a lilac ring and a lilac band across its body, and the Inspector shows its Chaos beside its Needs.
+
+**Try it: neglect, then recover.** Start the game, give no orders and press <kbd>4</kbd>. The starting Grub and Grog are eaten once; when the Needs run low again with nothing left, Chaos climbs on the Inspector's bars, and around tick 3000 the first Grunt loafs under a lilac ring and band. Then fix it as a player would: paint a Pile, a Grub Pit and a Brewery, dig stairs down and paint a Fungus Farm below, paint a Heap. Once the Grunts eat, drink and sleep again, Chaos drains away and the shirking stops. For a storage blockage instead, paint a one-tile Pile, dig a large area so it fills, and watch the Grunts left holding dirt; painting more Pile ends their wait.
 
 </details>
 
@@ -128,7 +153,7 @@ A tile holds one Room, so painting skips a tile that already holds a different o
 
 **Piles.** Each Pile tile holds up to 30 units of each material. Goblins carry to the nearest Pile with room, or wait holding the unit until one appears. Painting skips any tile holding more than 30 of a material. A Pile tile draws two counts in their materials' colours: a full material first (highlighted), then the largest.
 
-**Inspector.** The right-hand panel shows what is under the cursor: over a goblin, its name and Role, its Task and its Grub, Grog and Sleep meters as bars, with the Craving threshold marked; over a Pile tile, every count; over any other tile, what it is, what is marked on it and what lies loose there. Above it, the **Warren summary** totals each material, stored and loose, and counts the goblins working, idle, craving and asleep.
+**Inspector.** The right-hand panel shows what is under the cursor: over goblins, one block for each goblin on the tile in order, with its name and Role, its Task, its Grub, Grog and Sleep meters as bars with the Craving threshold marked, and its Chaos bar with the acting-out threshold marked (a crowd taller than the panel scrolls inside it, by the mouse wheel over the tile, or over the panel once the pointer has left the map for it, or by its scrollbar; the map never moves); over a Pile tile, every count; over any other tile, what it is, what is marked on it and what lies loose there. Above it, the **Warren summary** totals each material, stored and loose, and counts the goblins working, idle, craving and asleep.
 
 | You see | It means |
 |---|---|
@@ -137,6 +162,7 @@ A tile holds one Room, so painting skips a tile that already holds a different o
 | Blue pip | Craving Sleep (with several Cravings, the lowest meter's colour shows) |
 | "zzz" | Sleeping |
 | Yellow goblin | Starving |
+| Lilac ring and band | Shirking |
 | Blue tile | Sleeping Heap |
 | Green tile | Fungus Farm |
 | Rust-red tile | Brewery |
@@ -144,7 +170,7 @@ A tile holds one Room, so painting skips a tile that already holds a different o
 
 ### Saves
 
-Saves are whole-state JSON and are never migrated. A P2 save, which counted two materials, is rejected, and so are saves from before the Grog and Sleep meters. There is no player-facing save or load yet.
+Saves are whole-state JSON and are never migrated. A P2 save, which counted two materials, is rejected, and so are saves from before the Grog and Sleep meters or from before Chaos. There is no player-facing save or load yet.
 
 ## Development
 

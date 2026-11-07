@@ -18,10 +18,8 @@ public static class NeedRules
 	public const int GrubDrainTicks = 25;
 	/// <summary>The Sleep meter loses 1 point every this many ticks, except while the goblin sleeps.</summary>
 	public const int SleepDrainTicks = 45;
-	/// <summary>The Grog meter loses 1 point every this many ticks, and a waiting carrier's loses <see cref="WaitingGrogDrain"/>.</summary>
+	/// <summary>The Grog meter loses 1 point every this many ticks. A waiting carrier loses no faster: its wait raises Chaos instead (<see cref="ChaosRules"/>).</summary>
 	public const int GrogDrainTicks = 35;
-	/// <summary>Points a waiting carrier's Grog meter loses on each <see cref="GrogDrainTicks"/>th tick: double the rate of any other goblin.</summary>
-	public const int WaitingGrogDrain = 2;
 
 	/// <summary>Ticks to eat one unit, and what it adds to the meter.</summary>
 	public const int EatTicks = 10;
@@ -103,14 +101,13 @@ public static class ProductionRules
 	public const int BrewTicks = 20;
 }
 
-/// <summary>The Needs' own system: the slow drain of every goblin's meters. Cravings and meals are worked by <see cref="JobSystem"/>.</summary>
+/// <summary>The Needs' own system: the slow drain of every goblin's meters. Cravings and meals are worked by <see cref="JobSystem"/>; what unmet Needs do is <see cref="ChaosSystem"/>'s.</summary>
 public static class NeedsSystem
 {
 	/// <summary>
 	/// Runs once per tick, after the tick counter has advanced: Grub drops 1 point on every <see cref="NeedRules.GrubDrainTicks"/>th
-	/// tick, Grog 1 point on every <see cref="NeedRules.GrogDrainTicks"/>th, or <see cref="NeedRules.WaitingGrogDrain"/> for a
-	/// waiting carrier, and Sleep 1 point on every <see cref="NeedRules.SleepDrainTicks"/>th, except for a goblin asleep, whose Sleep
-	/// only climbs. Nothing is stored beyond the meters, so a save taken at any tick drains the same.
+	/// tick, Grog 1 point on every <see cref="NeedRules.GrogDrainTicks"/>th, and Sleep 1 point on every <see cref="NeedRules.SleepDrainTicks"/>th,
+	/// except for a goblin asleep, whose Sleep only climbs. Nothing is stored beyond the meters, so a save taken at any tick drains the same.
 	/// </summary>
 	public static void Drain(SimState s)
 	{
@@ -120,7 +117,8 @@ public static class NeedsSystem
 					s.GoblinGrub[g]--;
 		if (s.Tick % NeedRules.GrogDrainTicks == 0)
 			for (var g = 0; g < s.GoblinCount; g++)
-				s.GoblinGrog[g] = (byte)Math.Max(0, s.GoblinGrog[g] - (IsWaitingCarrier(s, g) ? NeedRules.WaitingGrogDrain : 1));
+				if (s.GoblinGrog[g] > 0)
+					s.GoblinGrog[g]--;
 		if (s.Tick % NeedRules.SleepDrainTicks == 0)
 			for (var g = 0; g < s.GoblinCount; g++)
 				if (s.GoblinSleep[g] > 0 && (GoblinTask)s.GoblinTask[g] != GoblinTask.Sleeping)
@@ -129,7 +127,7 @@ public static class NeedsSystem
 
 	/// <summary>
 	/// True for a goblin holding a unit that no Pile in its reach has room for: Carrying (or Dropping, which has just lost its
-	/// room) with no storage left for its material in its region. Reads the storage cache that
+	/// room) with no storage left for its material in its region. Waiting raises Chaos (<see cref="ChaosSystem"/>). Reads the storage cache that
 	/// <see cref="JobSystem.RecheckReachability"/> keeps, as the claim loop does.
 	/// </summary>
 	public static bool IsWaitingCarrier(SimState s, int goblin)

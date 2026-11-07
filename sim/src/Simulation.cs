@@ -93,6 +93,8 @@ public sealed class Simulation
 		for (var g = 0; g < s.GoblinCount; g++)
 			s.GoblinGrog[g] = NeedRules.Start(s.Rng);
 		s.GoblinSleep = new byte[SimState.MaxGoblins];
+		s.GoblinChaos = new byte[SimState.MaxGoblins];
+		s.GoblinActCooldown = new ushort[SimState.MaxGoblins];
 		// Drawn after every Grog meter, for the same reason.
 		for (var g = 0; g < s.GoblinCount; g++)
 			s.GoblinSleep[g] = NeedRules.Start(s.Rng);
@@ -190,6 +192,7 @@ public sealed class Simulation
 	{
 		State.Tick++;
 		NeedsSystem.Drain(State);
+		ChaosSystem.Tick(State);
 		FarmSystem.Grow(State);
 		_jobs.Step(State, _events);
 	}

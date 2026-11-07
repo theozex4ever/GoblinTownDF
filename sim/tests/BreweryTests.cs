@@ -1071,7 +1071,7 @@ public class BreweryTests
 		s.Rooms[At(s, 21, 20)] = (byte)RoomKind.Brewery + 1;
 		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));
 		s.Rooms[At(s, 21, 20)] = 0;
-		s.GoblinTask[0] = (byte)GoblinTask.Brewing + 1;
+		s.GoblinTask[0] = (byte)GoblinTask.Shirking + 1;
 		Assert.Throws<JsonException>(() => SimJson.Deserialize(SimJson.Serialize(sim)));
 	}
 

@@ -4,7 +4,7 @@ using static Goblins.Sim.Tests.SimTestHelpers;
 
 namespace Goblins.Sim.Tests;
 
-/// <summary>P3's Grog Need: the meter, drinking, which Craving wins, and the waiting carrier that gives up its unit for a drink.</summary>
+/// <summary>P3's Grog Need: the meter, drinking, which Craving wins, and the waiting carrier that gives up its unit for a drink. P4 replaced the carrier's doubled drain with Chaos (see ChaosTests).</summary>
 public class GrogTests
 {
 	static GoblinTask TaskOf(SimState s, int g) => (GoblinTask)s.GoblinTask[g];
@@ -163,20 +163,23 @@ public class GrogTests
 	}
 
 	[Fact]
-	public void A_goblin_with_Grog_at_0_and_no_Grog_anywhere_goes_on_for_a_long_time_unchanged()
+	public void A_goblin_with_Grog_at_0_and_no_Grog_anywhere_is_not_slowed_but_its_Chaos_rises_until_it_acts_out()
 	{
 		var sim = Lone(grog: 0);
+		var shirks = 0;
 
 		// Sleep is kept topped up so that the goblin's only Craving is the Grog nobody can fetch.
 		for (var i = 0; i < 30; i++)
 		{
 			sim.State.GoblinSleep[0] = 100;
 			RunTicks(sim, 100);
+			shirks += sim.DrainEvents().OfType<ShirkStarted>().Count();
 		}
 
 		Assert.Equal(0, sim.State.GoblinGrog[0]);
 		Assert.Equal(1, sim.State.GoblinCount);
-		Assert.True(TaskOf(sim.State, 0) is GoblinTask.Idle or GoblinTask.Wandering, "Grog at 0 should leave the goblin idling.");
+		// 70 Chaos takes 700 ticks of one unmet Need; each shirk (100 ticks) and cooldown (300) then nets it back to 70 in 400: ticks 700, 1100 ... 2700.
+		Assert.Equal(6, shirks);
 	}
 
 	// ---- Cravings interrupt
@@ -519,7 +522,7 @@ public class GrogTests
 	}
 
 	[Fact]
-	public void A_waiting_carrier_drains_Grog_at_double_rate()
+	public void A_waiting_carrier_drains_Grog_at_the_ordinary_rate()
 	{
 		var sim = WaitingCarrier(grog: 100);
 		var s = sim.State;
@@ -527,23 +530,23 @@ public class GrogTests
 		RunTicks(sim, 34);
 		Assert.Equal(100, s.GoblinGrog[0]);
 		RunTicks(sim, 1);
-		Assert.Equal(98, s.GoblinGrog[0]);
+		Assert.Equal(99, s.GoblinGrog[0]);
 		RunTicks(sim, 35);
-		Assert.Equal(96, s.GoblinGrog[0]);
+		Assert.Equal(98, s.GoblinGrog[0]);
 		RunTicks(sim, 350);
-		Assert.Equal(76, s.GoblinGrog[0]);
+		Assert.Equal(88, s.GoblinGrog[0]);
 		Assert.Equal(GoblinTask.Carrying, TaskOf(s, 0));
 	}
 
 	[Fact]
-	public void A_waiting_carrier_drains_only_Grog_at_double_rate_and_stops_at_0()
+	public void A_waiting_carrier_drains_only_Grog_and_stops_at_0()
 	{
 		var sim = WaitingCarrier(grog: 3, grub: 100);
 
-		RunTicks(sim, 70);
+		RunTicks(sim, 120);
 
 		Assert.Equal(0, sim.State.GoblinGrog[0]);
-		Assert.Equal(98, sim.State.GoblinGrub[0]);
+		Assert.Equal(96, sim.State.GoblinGrub[0]);
 	}
 
 	[Fact]
@@ -560,35 +563,7 @@ public class GrogTests
 	}
 
 	[Fact]
-	public void The_drain_follows_the_carrier_in_and_out_of_waiting()
-	{
-		var sim = WaitingCarrier(grog: 100);
-		var s = sim.State;
-		RunTicks(sim, 35);
-		Assert.Equal(98, s.GoblinGrog[0]);
-
-		// A Pile appears: the carrier walks off, delivers, and drains at the ordinary rate from then on.
-		Paint(sim, 17, 16);
-		RunTicks(sim, 35);
-		Assert.Equal(97, s.GoblinGrog[0]);
-		Assert.Equal(1, s.StoredCount(At(s, 17, 16), Material.Dirt));
-		Assert.Equal((byte)Material.None, s.GoblinCarry[0]);
-		RunTicks(sim, 70);
-		Assert.Equal(95, s.GoblinGrog[0]);
-
-		// The Pile fills, and a goblin picking up another unit is waiting again.
-		s.AddItems(At(s, 17, 16), Material.Dirt, SimState.PileCapacity - 1);
-		sim.RecheckReachability();
-		GoblinTasks.Release(s, 0);
-		GoblinTasks.FinishPickUp(s, 0, Material.Dirt);
-		Assert.True(NeedsSystem.IsWaitingCarrier(s, 0));
-		RunTicks(sim, 35);
-		Assert.Equal(93, s.GoblinGrog[0]);
-		Assert.Equal(GoblinTask.Carrying, TaskOf(s, 0));
-	}
-
-	[Fact]
-	public void A_goblin_that_is_not_carrying_never_drains_at_double_rate_whatever_it_is_doing()
+	public void A_goblin_that_is_not_carrying_drains_at_the_ordinary_rate_whatever_it_is_doing()
 	{
 		var sim = Lone(grog: 100);
 		var s = sim.State;
@@ -609,8 +584,11 @@ public class GrogTests
 		RunTicks(sim, 34);
 		Assert.Equal(GoblinTask.Carrying, TaskOf(s, 0));
 		Assert.Equal(31, s.GoblinGrog[0]);
+		RunTicks(sim, 35);
+		Assert.Equal(30, s.GoblinGrog[0]);
+		Assert.Equal(GoblinTask.Carrying, TaskOf(s, 0));
 
-		// The double drain takes it from 31 to 29 on the 35th tick, and the Craving acts at once.
+		// The second drain takes it from 30 to 29 on the 70th tick, and the Craving acts at once.
 		RunTicks(sim, 1);
 		Assert.Equal(29, s.GoblinGrog[0]);
 		Assert.Equal(GoblinTask.SeekingGrog, TaskOf(s, 0));
@@ -623,7 +601,7 @@ public class GrogTests
 	}
 
 	[Fact]
-	public void A_carrier_that_is_not_waiting_is_not_hurried_to_Craving_by_the_same_start()
+	public void A_carrier_that_is_not_waiting_keeps_its_unit_while_its_Grog_is_still_above_a_Craving()
 	{
 		var sim = WaitingCarrier(grog: 31);
 		var s = sim.State;
@@ -845,7 +823,7 @@ public class GrogTests
 	}
 
 	[Fact]
-	public void A_save_with_a_waiting_carrier_mid_drain_round_trips_and_replays_identically()
+	public void A_save_with_a_waiting_carrier_mid_wait_round_trips_and_replays_identically()
 	{
 		var sim = WaitingCarrier(grog: 60);
 		RunTicks(sim, 50);
@@ -857,7 +835,7 @@ public class GrogTests
 
 		Assert.Equal(SimJson.Serialize(sim), SimJson.Serialize(restored));
 		Assert.Equal(sim.State.GoblinGrog[0], restored.State.GoblinGrog[0]);
-		Assert.Equal(60 - 2 * 4, sim.State.GoblinGrog[0]);
+		Assert.Equal(60 - 4, sim.State.GoblinGrog[0]);
 	}
 
 	[Fact]
