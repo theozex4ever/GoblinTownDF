@@ -81,13 +81,16 @@ public partial class Main : Node
 
 		var left = new PanelContainer { CustomMinimumSize = new Vector2(LeftPanelWidth, 0) };
 		body.AddChild(left);
-		var leftColumn = new VBoxContainer();
-		left.AddChild(leftColumn);
+		// The column scrolls rather than pushing the map down when the colour key is unfolded in a short window.
+		var leftScroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+		left.AddChild(leftScroll);
+		var leftColumn = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+		leftScroll.AddChild(leftColumn);
 		_palette = new ToolPalette();
 		_palette.ToolClicked += PickTool;
 		leftColumn.AddChild(_palette);
 		leftColumn.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Ignore });
-		leftColumn.AddChild(new Legend());
+		leftColumn.AddChild(new ColourKey());
 
 		var mapArea = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
 		body.AddChild(mapArea);

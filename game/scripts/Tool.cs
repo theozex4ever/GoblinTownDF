@@ -62,12 +62,12 @@ public static class ToolInfo
 
 	public static string Tooltip(Tool tool) => tool switch
 	{
-		Tool.Dig => "Digs out whatever is in the way. The Grunt takes it personally.",
+		Tool.Dig => "Digs out whatever is in the way. The ground is not consulted.",
 		Tool.DigStairs => "Digs a hole with ambitions. Stairs join this level to the one below.",
 		Tool.Pile => "Heaps things in a pile. Thirty of each thing to a tile, counted very carefully.",
-		Tool.GrubPit => "Sets a pit aside for grubs, who need minding.",
-		Tool.FungusFarm => "Plants a fungus farm, but only down the stairs, since fungus will not grow where anyone can see it.",
-		Tool.Brewery => "Sets up a brewery, where a goblin stands over the fungus until it gives in and becomes grog.",
+		Tool.GrubPit => "Sets a pit aside for Grub, which needs minding.",
+		Tool.FungusFarm => "Plants a Fungus Farm, but only down the stairs, since Fungus will not grow where anyone can see it.",
+		Tool.Brewery => "Sets up a Brewery, where a goblin stands over the Fungus until it gives in and becomes Grog.",
 		Tool.Heap => "Lays out a heap to sleep on, which is a bed with the pretensions removed.",
 		_ => "",
 	};
@@ -75,13 +75,13 @@ public static class ToolInfo
 	/// <summary>The short how-to under the palette for the picked Tool.</summary>
 	public static string Hint(Tool tool) => tool switch
 	{
-		Tool.Dig => "Drag a box over solid ground to dig it out. Right-drag unsays it.",
-		Tool.DigStairs => "Drag a box to dig stairs down to the next level. Right-drag unsays it.",
-		Tool.Pile => "Paint a Pile on dug floor. Loose things are hauled here. Right-drag removes it.",
-		Tool.GrubPit => "Paint a Grub Pit on floor. A goblin tends it, and Grub turns up. Right-drag removes it.",
-		Tool.FungusFarm => "Paint a Fungus Farm below the Surface. A goblin tends it, and Fungus grows. Right-drag removes it.",
-		Tool.Brewery => "Paint a Brewery on floor. Fungus goes in, Grog comes out. Right-drag removes it.",
-		Tool.Heap => "Paint a Sleeping Heap on floor. Goblins sleep twice as fast on it. Right-drag removes it.",
-		_ => "Pick a Tool, then drag a box on the map. Right-drag unsays a dig, Tool or no Tool.",
+		Tool.Dig => "Drag a box over solid ground to dig it out. Right-drag unsays it, and nobody mentions it again.",
+		Tool.DigStairs => "Drag a box to dig stairs down a level. Down is where the good stuff is. Right-drag unsays it.",
+		Tool.Pile => "Paint a Pile on dug floor. Loose things are hauled here and counted. Right-drag removes it.",
+		Tool.GrubPit => "Paint a Grub Pit on floor. A goblin tends it, and Grub turns up, as Grub does. Right-drag removes it.",
+		Tool.FungusFarm => "Paint a Fungus Farm below the Surface. A goblin tends it, and Fungus grows, sulkily. Right-drag removes it.",
+		Tool.Brewery => "Paint a Brewery on floor. Fungus goes in, Grog comes out, and nobody asks how. Right-drag removes it.",
+		Tool.Heap => "Paint a Sleeping Heap on floor. Goblins sleep twice as fast on it, and snore with pride. Right-drag removes it.",
+		_ => "Pick a Tool, then drag a box on the map. Right-drag unsays a dig, Tool or no Tool. The Grunt takes it personally.",
 	};
 }

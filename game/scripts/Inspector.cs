@@ -115,7 +115,7 @@ public static class Inspector
 
 		var note = s.DesignationAt(tile) != DesignationKind.None && !s.IsReachable(tile) ? "No goblin can reach it yet."
 			: room == RoomKind.Pile ? stock.Count == 0 ? "An empty Pile, waiting with great dignity." : "Counted solemnly."
-			: stock.Exists(line => line.Waiting) ? "Greyed things wait for a Pile with room."
+			: stock.Exists(line => line.Waiting) ? "Greyed things are waiting for a Pile with room. Patiently, for now."
 			: "";
 		return new Inspection(title, doing, [], stock, note);
 	}

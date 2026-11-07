@@ -37,7 +37,8 @@ public partial class TopBar : HBoxContainer
 		{
 			var speed = Speeds[i];
 			_speeds[i] = MakeButton($"Speed{speed}", $"{speed}×", toggle: true);
-			_speeds[i].TooltipText = $"Runs the warren at {speed}× speed. Key {speed}.";
+			_speeds[i].TooltipText = speed == 1 ? "The warren at its natural pace, which is unhurried. Key 1."
+				: $"The warren at {speed}× speed. The goblins do not notice, and would not approve. Key {speed}.";
 			_speeds[i].Pressed += () => SpeedClicked?.Invoke(speed);
 		}
 

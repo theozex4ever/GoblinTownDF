@@ -73,17 +73,12 @@ public partial class SummaryPanel : VBoxContainer
 			SetCount(_stored[i], summary.Stored(Shown[i]));
 			SetCount(_loose[i], summary.Loose(Shown[i]));
 		}
-		_goblins.Text = summary.Goblins == 1 ? "1 Grunt" : $"{summary.Goblins} Grunts";
+		_goblins.Text = summary.Goblins == 1 ? "1 goblin" : $"{summary.Goblins} goblins";
 		SetCount(_states[0], summary.Working);
 		SetCount(_states[1], summary.Idle);
 		SetCount(_states[2], summary.Craving);
 		SetCount(_states[3], summary.Asleep);
-		_starving.Text = summary.Starving switch
-		{
-			0 => "",
-			1 => "1 Starving, and very dignified about it.",
-			var n => $"{n} Starving, and very dignified about it.",
-		};
+		_starving.Text = summary.Starving > 0 ? $"{summary.Starving} Starving, and very dignified about it." : "";
 		_starving.Visible = summary.Starving > 0;
 	}
 

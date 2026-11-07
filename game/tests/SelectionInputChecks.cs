@@ -494,7 +494,7 @@ public partial class SelectionInputChecks : Node
 				Require(main.Inspection.Note == "No goblin can reach it yet.", $"An unreachable dig says \"{main.Inspection.Note}\".");
 			});
 
-			// The real game: the starting Grub and Grog are hauled to a Pile painted with the Pile Tool, and the hover line reads it.
+			// The real game: the starting Grub and Grog are hauled to a Pile painted with the Pile Tool, and the Inspector reads it.
 			WithMain((main, view, sim) =>
 			{
 				var s = sim.State;
@@ -522,7 +522,7 @@ public partial class SelectionInputChecks : Node
 					$"The Inspector over the stocked Pile shows {main.Inspection.Title}: {StockText(main.Inspection)}.");
 			});
 
-			// The hover line names the Grub, Grog and Sleep meters of the goblin under the cursor, ahead of any Pile under it.
+			// The Inspector shows the Grub, Grog and Sleep meters of the goblin under the cursor, ahead of any Pile under it.
 			WithMain((main, view, sim) =>
 			{
 				var s = sim.State;

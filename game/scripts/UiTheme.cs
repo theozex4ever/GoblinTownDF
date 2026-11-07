@@ -29,7 +29,8 @@ public static class UiTheme
 	/// <summary>Secondary text: hints, notes and captions.</summary>
 	public const string MutedLabel = "MutedLabel";
 
-	public const int FontSize = 14;
+	// Godot's own default is 16; the HUD reads a size up from it.
+	public const int FontSize = 17;
 
 	/// <summary>Gives <paramref name="root"/>, and so every Control under it, this Theme.</summary>
 	public static void ApplyTo(Control root)
@@ -59,14 +60,14 @@ public static class UiTheme
 
 		theme.SetTypeVariation(HeaderLabel, "Label");
 		theme.SetColor("font_color", HeaderLabel, MutedColor);
-		theme.SetFontSize("font_size", HeaderLabel, 11);
+		theme.SetFontSize("font_size", HeaderLabel, 12);
 
 		theme.SetTypeVariation(TitleLabel, "Label");
-		theme.SetFontSize("font_size", TitleLabel, 17);
+		theme.SetFontSize("font_size", TitleLabel, 20);
 
 		theme.SetTypeVariation(MutedLabel, "Label");
 		theme.SetColor("font_color", MutedLabel, MutedColor);
-		theme.SetFontSize("font_size", MutedLabel, 12);
+		theme.SetFontSize("font_size", MutedLabel, 14);
 
 		var normal = Box(ButtonColor, BorderColor, padding: 6);
 		var hover = Box(ButtonHoverColor, BorderColor, padding: 6);
