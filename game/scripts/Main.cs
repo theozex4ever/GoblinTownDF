@@ -25,6 +25,11 @@ public partial class Main : Node
 	SelectionGesture _selection = null!;
 	SelectionGesture _removal = null!;
 	int _viewZ;
+	// The chat bubbles on show: provisional presentation of the sim's incident events, aged by unpaused real time. Never written to the sim.
+	readonly BubbleBoard _bubbles = new();
+	// A monotonic presentation clock: Godot may cap frame delta after a hitch. Never used by the sim.
+	internal Func<ulong> BubbleClock { get; init; } = Time.GetTicksUsec;
+	ulong _bubbleTimeUsec;
 	// The tool stays picked until Escape or its own key puts it away.
 	Tool _tool = Tool.None;
 
@@ -35,7 +40,7 @@ public partial class Main : Node
 		GD.Print($"A Thousand Goblins Deep: boot ok (seed {seed})");
 
 		var s = _sim.State;
-		_view = new WarrenView { Sim = _sim };
+		_view = new WarrenView { Sim = _sim, Bubbles = _bubbles };
 		BuildLayout(new Vector2(s.Width, s.Height) * WarrenView.CellSize);
 
 		_selection = new SelectionGesture(MouseButton.Left, new Vector2I(s.Width, s.Height), CellAt);
@@ -47,6 +52,7 @@ public partial class Main : Node
 		GetViewport().SizeChanged += OnViewportResized;
 
 		Refresh();
+		_bubbleTimeUsec = BubbleClock();
 	}
 
 	public override void _ExitTree() => GetViewport().SizeChanged -= OnViewportResized;
@@ -147,8 +153,17 @@ public partial class Main : Node
 			UpdateHover();
 			_topBar.SyncClock(_sim.State);
 		}
-		if (_sim.DrainEvents().Count > 0)
+		// Age existing bubbles before observing new incidents, which start with their whole lifetime.
+		var bubblesChanged = AgeBubbles();
+		var events = _sim.DrainEvents();
+		if (events.Count > 0)
+		{
+			bubblesChanged |= _bubbles.Observe(events, _sim.State, _viewZ);
 			SyncHud();
+		}
+		bubblesChanged |= _bubbles.KeepLevel(_sim.State, _viewZ);
+		if (bubblesChanged)
+			_view.QueueRedraw();
 		// Counted every frame, so changes made outside a tick (a Pile painted while paused) show at once.
 		_summary.Count(_sim.State);
 		_summaryPanel.Show(_summary);
@@ -156,6 +171,9 @@ public partial class Main : Node
 
 	/// <summary>The Warren summary as of the last frame.</summary>
 	public WarrenSummary Summary => _summary;
+
+	/// <summary>The chat bubbles on show. Presentation only: the sim neither reads nor knows them.</summary>
+	public BubbleBoard Bubbles => _bubbles;
 
 	/// <summary>The depth readout in the top bar: the viewed level and its Band.</summary>
 	public string DepthText => _topBar.DepthText;
@@ -363,6 +381,8 @@ public partial class Main : Node
 	void Refresh()
 	{
 		_view.ViewZ = _viewZ;
+		// A bubble belongs to the level its goblin is on; leaving the level takes it down.
+		_bubbles.KeepLevel(_sim.State, _viewZ);
 		_view.QueueRedraw();
 		SyncHud();
 		UpdateHover();
@@ -371,8 +391,18 @@ public partial class Main : Node
 	// A player's Command, from a key or a button: the HUD shows its effect at once rather than next frame.
 	void Apply(Command command)
 	{
+		// Settle time on the old side of a pause transition, including input between frames.
+		AgeBubbles();
 		_sim.Apply(command);
 		SyncHud();
+	}
+
+	bool AgeBubbles()
+	{
+		var now = BubbleClock();
+		var seconds = (now - _bubbleTimeUsec) / 1_000_000.0;
+		_bubbleTimeUsec = now;
+		return !_sim.State.Paused && _bubbles.Advance(seconds);
 	}
 
 	// Every button and readout shows the sim and view as they are now, however they got that way.

@@ -37,6 +37,8 @@ public partial class ColourKey : VBoxContainer
 		Row("Ring: in a fight (crossed mid-scuffle)", WarrenView.FightColor, outline: true);
 		Row("Ring: getting over a fight", WarrenView.FightRestColor, outline: true);
 		Row("Ring and mask: stealing", WarrenView.ThiefColor, outline: true);
+		foreach (var kind in System.Enum.GetValues<BubbleKind>())
+			Row($"Bubble: {BubbleCopy.Label(kind).ToLowerInvariant()}", WarrenView.BubbleColor(kind), outline: true);
 		MaterialRow();
 		Row("Loose, no Pile has room for it", WarrenView.WaitingHaulColor);
 		Row("A full Pile count: thirty", WarrenView.FullCountChipColor);

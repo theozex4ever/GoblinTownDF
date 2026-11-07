@@ -1,0 +1,261 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Godot;
+using Goblins.Sim;
+
+namespace AThousandGoblinsDeep;
+
+/// <summary>
+/// Scripted demonstration, not a check, not a human playtest. Runs the real Main scene in a native viewport with only ordinary player commands (a Pile over the starting
+/// supplies, a Grub Pit, a dig, stairs down, a Fungus Farm, a Brewery and a Pile below; engine-local key and mouse events handed to Main), no extra supplies, no preset Chaos and
+/// no debug controls. Phase 1 plays the sim forward with Main's own _Process at fixed frame times until each kind of bubble appears, pausing at each to save the
+/// viewport; phase 2 hands Main back to the engine's real frames and times a bubble against the wall clock at 1x, at 4x and across a pause.
+/// </summary>
+public partial class BubbleDemo : Node
+{
+	SubViewport _viewport = null!;
+	Main _main = null!;
+	string _dir = "";
+	readonly List<string> _log = [];
+	void Log(string line) { _log.Add(line); GD.Print(line); }
+
+	async Task Frames(int n) { for (var i = 0; i < n; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+
+	void Motion(Vector2 at)
+	{
+		using var input = new InputEventMouseMotion { Position = at, GlobalPosition = at };
+		_viewport.PushInput(input, inLocalCoords: true);
+	}
+
+	void PressKey(Key key)
+	{
+		using var input = new InputEventKey { Keycode = key, Pressed = true };
+		_main._UnhandledKeyInput(input);
+	}
+
+	Image? Shot(string name, Rect2? crop = null)
+	{
+		using var image = _viewport.GetTexture().GetImage();
+		image.SavePng(System.IO.Path.Combine(_dir, name + ".png"));
+		if (crop is { } c)
+		{
+			var origin = _main.View.GlobalPosition;
+			var r = new Rect2I((int)(origin.X + c.Position.X) - 12, (int)(origin.Y + c.Position.Y) - 40, (int)c.Size.X + 24, (int)c.Size.Y + 90);
+			r = r.Intersection(new Rect2I(0, 0, image.GetWidth(), image.GetHeight()));
+			using var part = image.GetRegion(r);
+			part.Resize(part.GetWidth() * 3, part.GetHeight() * 3, Image.Interpolation.Nearest);
+			part.SavePng(System.IO.Path.Combine(_dir, name + "-zoom.png"));
+		}
+		return null;
+	}
+
+	async Task Capture(string name, Rect2? crop = null)
+	{
+		await Frames(4);
+		await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+		Shot(name, crop);
+	}
+
+	string BubbleText() => string.Join(" | ", _main.Bubbles.Active.Select(b => $"{b.Kind} {b.Name}: \"{b.Line}\" ({b.Remaining:F3}s left)"));
+
+	public override async void _Ready()
+	{
+		try
+		{
+			_dir = OS.GetEnvironment("GOBLINTOWN_CAPTURE_DIR");
+			if (_dir == "") _dir = "/tmp/bubble-demo";
+			System.IO.Directory.CreateDirectory(_dir);
+			_viewport = new SubViewport { Size = new Vector2I(1280, 720), RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+			AddChild(_viewport);
+			_main = new Main();
+			_viewport.AddChild(_main);
+			await Frames(4);
+			_main.SetProcess(false);
+			var sim = _main.View.Sim!;
+			var s = sim.State;
+			Log($"seed {s.Seed}; ordinary commands only, no preset Chaos, no extra supplies, no debug controls; renderer {DisplayServer.GetName()}");
+			sim.Apply(new SetPaused(false));
+			sim.Apply(new SetSpeed(1));
+			sim.Apply(new PaintPile(0, 18, 16, 19, 17));
+			sim.Apply(new PaintRoom(RoomKind.GrubPit, 0, 12, 12, 13, 13));
+			sim.Apply(new Designate(DesignationKind.Dig, 0, 22, 12, 24, 14));
+			sim.Apply(new Designate(DesignationKind.DigStairs, 0, 16, 20, 16, 20));
+			var below = false;
+			var farm = false;
+			var captured = new HashSet<BubbleKind>();
+			var counters = new Dictionary<string, int> { ["eat"] = 0, ["drink"] = 0, ["haul-drop"] = 0, ["brew"] = 0, ["tend"] = 0 };
+			var last = new byte[s.GoblinCount];
+			var made = 0;
+			var perKind = Enum.GetValues<BubbleKind>().ToDictionary(k => k, _ => 0);
+			var levelShown = false;
+
+			// Phase 1: play forward at 1x with 0.1 s frames (one tick a frame) until every kind has been seen and captured.
+			while (captured.Count < 4 && s.Tick < 200_000)
+			{
+				_main._Process(0.1);
+
+				if (!below && s.KindAt(s.TileIndex(16, 20, 0)) == TileKind.Stairs)
+				{
+					sim.Apply(new Designate(DesignationKind.DigStairs, 1, 16, 20, 16, 20));
+					sim.Apply(new Designate(DesignationKind.Dig, 1, 17, 20, 20, 22));
+					below = true;
+				}
+				if (below && !farm && s.KindAt(s.TileIndex(20, 22, 1)) == TileKind.Floor && s.KindAt(s.TileIndex(17, 20, 1)) == TileKind.Floor)
+				{
+					sim.Apply(new PaintRoom(RoomKind.FungusFarm, 1, 17, 20, 18, 21));
+					sim.Apply(new PaintRoom(RoomKind.Brewery, 1, 19, 20, 20, 21));
+					sim.Apply(new PaintPile(1, 17, 22, 20, 22));
+					farm = true;
+					Log($"tick {s.Tick}: Fungus Farm, Brewery and a Pile painted on z1");
+				}
+				for (var g = 0; g < s.GoblinCount; g++)
+				{
+					if (s.GoblinTask[g] == last[g]) continue;
+					var from = (GoblinTask)last[g];
+					var task = (GoblinTask)s.GoblinTask[g];
+					last[g] = s.GoblinTask[g];
+					if (task == GoblinTask.Eating) counters["eat"]++;
+					if (task == GoblinTask.Drinking) counters["drink"]++;
+					if (from == GoblinTask.Dropping && task == GoblinTask.Idle) counters["haul-drop"]++;
+					if (from == GoblinTask.Brewing && task == GoblinTask.Idle) counters["brew"]++;
+					if (from == GoblinTask.Tending && task == GoblinTask.Idle) counters["tend"]++;
+				}
+
+				if (_main.Bubbles.Made == made) continue;
+				made = _main.Bubbles.Made;
+				var bubble = _main.Bubbles.Active[^1];
+				perKind[bubble.Kind]++;
+				Log($"tick {s.Tick}: bubble #{made} {bubble.Kind} over {bubble.Name} at ({s.GoblinX[bubble.Goblin]},{s.GoblinY[bubble.Goblin]},{s.GoblinZ[bubble.Goblin]}): \"{bubble.Line}\"; on show now: {_main.Bubbles.Active.Count}");
+				if (!captured.Add(bubble.Kind)) continue;
+
+				// Pause with Space (an ordinary key), put the pointer on the goblin, and save the viewport.
+				PressKey(Key.Space);
+				var cellRect = new Rect2(s.GoblinX[bubble.Goblin] * WarrenView.CellSize, s.GoblinY[bubble.Goblin] * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
+				Motion(_main.View.GlobalPosition + cellRect.GetCenter());
+				var laid = _main.View.LayoutBubbles();
+				var rect = laid.First(l => l.Bubble == bubble).Rect;
+				await Capture($"1-{bubble.Kind}".ToLowerInvariant(), rect.Merge(cellRect));
+				var inspected = string.Join(" | ", _main.Inspection.Goblins.Select(r => r.Title + " - " + r.Doing + $" (chaos {r.Chaos})"));
+				Log($"captured {bubble.Kind} at tick {s.Tick}; paused={s.Paused}; on show: {BubbleText()}; inspector: {inspected}");
+
+				// A pause freezes what is left: two seconds of wall clock later, the same time remains, and the tick has not moved.
+				var before = _main.Bubbles.Active.Select(b => b.Remaining).ToArray();
+				var tick = s.Tick;
+				var start = Time.GetTicksMsec();
+				while (Time.GetTicksMsec() - start < 2000) await Frames(1);
+				_main._Process(0.016);
+				Log($"  paused for {(Time.GetTicksMsec() - start) / 1000.0:F2} s wall clock: remaining before [{string.Join(", ", before.Select(r => r.ToString("F3")))}] after [{string.Join(", ", _main.Bubbles.Active.Select(b => b.Remaining.ToString("F3")))}]; tick {tick} -> {s.Tick}");
+				await Capture($"1-{bubble.Kind}-paused-2s-later".ToLowerInvariant(), rect.Merge(cellRect));
+
+				if (!levelShown)
+				{
+					levelShown = true;
+					PressKey(Key.Period);
+					_main._Process(0.0);
+					await Capture("2-other-level-down");
+					Log($"  went down a level: viewed level {_main.DepthText}; bubbles on show {_main.Bubbles.Active.Count}");
+					PressKey(Key.Comma);
+					_main._Process(0.0);
+					await Capture("2-back-on-level");
+					Log($"  back up: bubbles on show {_main.Bubbles.Active.Count} (a bubble belongs to the level its goblin is on and does not return)");
+				}
+				PressKey(Key.Space);
+			}
+			Log($"phase 1 over at tick {s.Tick}: bubbles made by kind {string.Join(", ", perKind.Select(p => p.Key + " " + p.Value))}; ordinary life eat {counters["eat"]}, drink {counters["drink"]}, hauls dropped {counters["haul-drop"]}, brews {counters["brew"]}, tends {counters["tend"]}");
+
+			// Phase 2: the engine runs Main on real frames; time a fresh bubble against the wall clock at 1x, at 4x, and across a pause.
+			async Task<bool> TimeOne(string label, int speed, bool pauseMid)
+			{
+				var wait = 0;
+				_main.SetProcess(false);
+				PressKey(Key.Key4);
+				var m0 = _main.Bubbles.Made;
+				while (_main.Bubbles.Made == m0 && s.Tick < 400_000) { _main._Process(0.1); wait++; }
+				if (_main.Bubbles.Made == m0) { Log($"phase 2 {label}: no further bubble by tick {s.Tick}"); return true; }
+				var bubble = _main.Bubbles.Active[^1];
+				PressKey(speed == 1 ? Key.Key1 : Key.Key4);
+				// The fast-forward blocked the engine, so its next frame would carry that stall as one huge delta: let frames settle before Main is handed back.
+				Motion(_main.View.GlobalPosition + new Vector2((s.GoblinX[bubble.Goblin] + 0.5f) * WarrenView.CellSize, (s.GoblinY[bubble.Goblin] + 0.5f) * WarrenView.CellSize));
+				await Frames(10);
+				var tick0 = s.Tick;
+				var born = Time.GetTicksMsec();
+				ulong pausedMs = 0;
+				var shots = new Queue<ulong>(pauseMid ? new ulong[] { 500 } : new ulong[] { 100, 1500, 2800, 3200 });
+				var paused = false;
+				ulong pauseStart = 0;
+				_main.SetProcess(true);
+				var cellRect = new Rect2(s.GoblinX[bubble.Goblin] * WarrenView.CellSize, s.GoblinY[bubble.Goblin] * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
+				Log($"phase 2 {label}: bubble #{_main.Bubbles.Made} {bubble.Kind} over {bubble.Name} born at tick {s.Tick} (speed {speed}x)");
+				var unpausedAtPause = 0.0;
+				while (_main.Bubbles.Active.Contains(bubble))
+				{
+					await Frames(1);
+					var now = Time.GetTicksMsec();
+					var elapsed = now - born - pausedMs - (paused ? now - pauseStart : 0);
+					if (shots.Count > 0 && elapsed >= shots.Peek() && !paused)
+					{
+						var at = shots.Dequeue();
+						var rect = _main.View.LayoutBubbles().FirstOrDefault(l => l.Bubble == bubble).Rect;
+						await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+						Shot($"3-{label}-t{at}ms", rect.Size == Vector2.Zero ? null : rect.Merge(cellRect));
+						Log($"  {label}: shot at {elapsed} ms unpaused; remaining {bubble.Remaining:F3} s; tick {s.Tick}");
+					}
+					if (pauseMid && !paused && elapsed >= 1000 && pausedMs == 0)
+					{
+						PressKey(Key.Space);
+						paused = true;
+						pauseStart = Time.GetTicksMsec();
+						unpausedAtPause = elapsed;
+						var rect = _main.View.LayoutBubbles().FirstOrDefault(l => l.Bubble == bubble).Rect;
+						await Frames(2);
+						Log($"  {label}: paused at {elapsed} ms unpaused; remaining {bubble.Remaining:F3} s");
+						await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+						Shot($"3-{label}-paused-at-1000ms", rect.Size == Vector2.Zero ? null : rect.Merge(cellRect));
+					}
+					if (paused && Time.GetTicksMsec() - pauseStart >= 3000)
+					{
+						var rect = _main.View.LayoutBubbles().FirstOrDefault(l => l.Bubble == bubble).Rect;
+						Log($"  {label}: still paused after {(Time.GetTicksMsec() - pauseStart) / 1000.0:F2} s wall clock: remaining {bubble.Remaining:F3} s; tick {s.Tick}");
+						await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+						Shot($"3-{label}-paused-3s-later", rect.Size == Vector2.Zero ? null : rect.Merge(cellRect));
+						PressKey(Key.Space);
+						pausedMs = Time.GetTicksMsec() - pauseStart;
+						paused = false;
+						Log($"  {label}: resumed");
+					}
+				}
+				var total = Time.GetTicksMsec() - born;
+				if (bubble.Remaining > 0.05)
+				{
+					Log($"  {label}: bubble ended early after {total} ms with {bubble.Remaining:F3} s left: {(s.GoblinZ[bubble.Goblin] != 0 ? "its goblin left the viewed level" : "a newer bubble replaced it")}; trying the next one");
+					_main.SetProcess(false);
+					return false;
+				}
+				Log($"  {label}: bubble gone after {total} ms wall clock, {total - pausedMs} ms unpaused (remaining at removal {bubble.Remaining:F4} s); sim ticks run meanwhile {s.Tick - tick0} = {(s.Tick - tick0) / ((total - pausedMs) / 1000.0):F1} per unpaused second");
+				if (!pauseMid)
+				{
+					var rect = new Rect2(s.GoblinX[bubble.Goblin] * WarrenView.CellSize, s.GoblinY[bubble.Goblin] * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
+					await Frames(2);
+					await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+					Shot($"3-{label}-after-expiry", rect);
+					var after = _main.Inspection;
+					Log($"  {label}: after expiry the pointer on the goblin's tile still reads: {string.Join(" | ", _main.Inspection.Goblins.Select(r => r.Title + " - " + r.Doing))}; bubbles on show {_main.Bubbles.Active.Count}");
+				}
+				_main.SetProcess(false);
+				return true;
+			}
+			foreach (var (label, speed, pauseMid) in new[] { ("1x", 1, false), ("4x", 4, false), ("1x-with-pause", 1, true) })
+				for (var attempt = 0; attempt < 8 && !await TimeOne(label, speed, pauseMid); attempt++) { }
+			Log($"finished at tick {s.Tick}");
+			System.IO.File.WriteAllLines(System.IO.Path.Combine(_dir, "rawlog.txt"), _log);
+			GetTree().Quit();
+		}
+		catch (Exception error)
+		{
+			GD.PushError(error.ToString());
+			GetTree().Quit(1);
+		}
+	}
+}

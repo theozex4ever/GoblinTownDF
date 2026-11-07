@@ -1,0 +1,59 @@
+seed 1794091265; ordinary commands only, no preset Chaos, no extra supplies, no debug controls; renderer X11
+tick 353: Fungus Farm, Brewery and a Pile painted on z1
+tick 3544: bubble #1 LostHaul over Nubbin Splatt at (18,16,0): "Someone ate my Haul. My Haul!"; on show now: 1
+captured LostHaul at tick 3544; paused=True; on show: LostHaul Nubbin Splatt: "Someone ate my Haul. My Haul!" (3.000s left); inspector: Kevin, Grunt - Eating (chaos 75) | Nubbin Splatt, Grunt - Off to tend the Fungus Farm (chaos 15)
+  paused for 2.00 s wall clock: remaining before [3.000] after [3.000]; tick 3544 -> 3544
+  went down a level: viewed level Depth 1 · Dirt; bubbles on show 0
+  back up: bubbles on show 0 (a bubble belongs to the level its goblin is on and does not return)
+tick 3547: bubble #2 Scuffle over Kevin at (18,16,0): "Right, Nubbin Splatt. Here is fine."; on show now: 1
+captured Scuffle at tick 3547; paused=True; on show: Scuffle Kevin: "Right, Nubbin Splatt. Here is fine." (3.000s left); inspector: Kevin, Grunt - Scuffling with Nubbin Splatt, with great commitment (chaos 75)
+  paused for 2.00 s wall clock: remaining before [3.000] after [3.000]; tick 3547 -> 3547
+tick 3637: bubble #3 Shirk over Snaggle Wartnose at (18,16,0): "I am on a very important sit."; on show now: 1
+captured Shirk at tick 3637; paused=True; on show: Shirk Snaggle Wartnose: "I am on a very important sit." (3.000s left); inspector: Snaggle Wartnose, Grunt - Shirking, on the spot, in protest (chaos 81) | Kevin, Grunt - Sitting down after a scuffle with Nubbin Splatt (chaos 26) | Gristle Mudfoot, Grunt - Eating (chaos 18)
+  paused for 2.00 s wall clock: remaining before [3.000] after [3.000]; tick 3637 -> 3637
+tick 4212: bubble #4 LostHaul over Third-Best Ugg at (16,16,0): "I walked all this way for that?"; on show now: 1
+tick 5047: bubble #5 LostHaul over Gristle Mudfoot at (12,17,0): "I walked all this way for that?"; on show now: 1
+tick 6387: bubble #6 LostHaul over Third-Best Ugg at (17,13,0): "My Haul had a future."; on show now: 1
+tick 7637: bubble #7 LostHaul over Kevin at (18,18,0): "I walked all this way for that?"; on show now: 1
+tick 7973: bubble #8 LostHaul over Mother Grubb at (12,12,0): "Someone ate my Haul. My Haul!"; on show now: 1
+tick 11387: bubble #9 LostHaul over Kevin at (16,13,0): "My Haul had a future."; on show now: 1
+tick 12827: bubble #10 LostHaul over Snaggle Wartnose at (16,20,0): "I walked all this way for that?"; on show now: 1
+tick 14212: bubble #11 LostHaul over Third-Best Ugg at (15,12,0): "Someone ate my Haul. My Haul!"; on show now: 1
+tick 16287: bubble #12 LostHaul over Kevin at (16,19,0): "That was MY errand. Eaten."; on show now: 1
+tick 16387: bubble #13 LostHaul over Old Bogwash at (16,19,0): "That was MY errand. Eaten."; on show now: 1
+tick 16437: bubble #14 LostHaul over Snaggle Wartnose at (12,18,0): "I walked all this way for that?"; on show now: 1
+tick 19065: bubble #15 LostHaul over Third-Best Ugg at (12,20,0): "Someone ate my Haul. My Haul!"; on show now: 1
+tick 19752: bubble #16 LostHaul over Gristle Mudfoot at (17,20,0): "Someone ate my Haul. My Haul!"; on show now: 1
+tick 20459: bubble #17 LostHaul over Mother Grubb at (15,17,0): "I walked all this way for that?"; on show now: 1
+tick 22082: bubble #18 Theft over Old Bogwash at (18,16,0): "Nobody saw. Nobody ever does."; on show now: 1
+captured Theft at tick 22082; paused=True; on show: Theft Old Bogwash: "Nobody saw. Nobody ever does." (3.000s left); inspector: Old Bogwash, Grunt - Making off with a Grog, looking innocent (chaos 99)
+  paused for 2.00 s wall clock: remaining before [3.000] after [3.000]; tick 22082 -> 22082
+phase 1 over at tick 22082: bubbles made by kind Shirk 1, Scuffle 1, Theft 1, LostHaul 15; ordinary life eat 127, drink 89, hauls dropped 787, brews 229, tends 351
+phase 2 1x: bubble #19 Theft over Old Bogwash born at tick 29806 (speed 1x)
+  1x: shot at 101 ms unpaused; remaining 2.895 s; tick 29807
+  1x: shot at 1507 ms unpaused; remaining 1.492 s; tick 29821
+  1x: shot at 2801 ms unpaused; remaining 0.179 s; tick 29834
+  1x: bubble gone after 2994 ms wall clock, 2994 ms unpaused (remaining at removal -0.0028 s); sim ticks run meanwhile 30 = 10.0 per unpaused second
+  1x: after expiry the pointer on the goblin's tile still reads: ; bubbles on show 0
+phase 2 4x: bubble #20 Shirk over Old Bogwash born at tick 30120 (speed 4x)
+  4x: shot at 102 ms unpaused; remaining 2.895 s; tick 30124
+  4x: shot at 1502 ms unpaused; remaining 1.487 s; tick 30180
+  4x: shot at 2800 ms unpaused; remaining 0.203 s; tick 30232
+  4x: bubble ended early after 2912 ms with 0.102 s left: its goblin left the viewed level; trying the next one
+phase 2 4x: bubble #21 Theft over Third-Best Ugg born at tick 30480 (speed 4x)
+  4x: shot at 103 ms unpaused; remaining 2.897 s; tick 30484
+  4x: shot at 1511 ms unpaused; remaining 1.490 s; tick 30540
+  4x: bubble ended early after 1634 ms with 1.376 s left: its goblin left the viewed level; trying the next one
+phase 2 4x: bubble #22 Scuffle over Kevin born at tick 30617 (speed 4x)
+  4x: shot at 103 ms unpaused; remaining 2.892 s; tick 30621
+  4x: shot at 1501 ms unpaused; remaining 1.508 s; tick 30676
+  4x: shot at 2800 ms unpaused; remaining 0.202 s; tick 30729
+  4x: bubble gone after 3000 ms wall clock, 3000 ms unpaused (remaining at removal -0.0003 s); sim ticks run meanwhile 120 = 40.0 per unpaused second
+  4x: after expiry the pointer on the goblin's tile still reads: Kevin, Grunt - Sitting down after a scuffle with Gristle Mudfoot; bubbles on show 0
+phase 2 1x-with-pause: bubble #23 LostHaul over Old Bogwash born at tick 36485 (speed 1x)
+  1x-with-pause: shot at 503 ms unpaused; remaining 2.482 s; tick 36491
+  1x-with-pause: paused at 1005 ms unpaused; remaining 1.982 s
+  1x-with-pause: still paused after 3.00 s wall clock: remaining 1.982 s; tick 36496
+  1x-with-pause: resumed
+  1x-with-pause: bubble gone after 6013 ms wall clock, 2954 ms unpaused (remaining at removal -0.0043 s); sim ticks run meanwhile 30 = 10.2 per unpaused second
+finished at tick 36515

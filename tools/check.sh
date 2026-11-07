@@ -27,6 +27,10 @@ fi
 echo "== selection input checks"
 "$GODOT" --headless --path "$ROOT/game" res://tests/SelectionInputChecks.tscn
 
+# Chat bubbles: incidents to bubbles, lifetime, limits, placement, timing through Main's _Process, and a run through Main against a bare run of the same seed.
+echo "== bubble checks"
+"$GODOT" --headless --path "$ROOT/game" res://tests/BubbleChecks.tscn
+
 # Reads rendered pixels, so it opens a window when there is a display and skips itself when there is none.
 echo "== carry draw checks"
 if [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then

@@ -21,7 +21,7 @@ Goblins are earnest underdogs who take absurd traditions seriously. Failure shou
 ## Development status
 
 > [!NOTE]
-> **Early grey-box prototype.** P1, P2 and P3 have been played and logged. P3 passed its fun check with five yeses out of five. P4 (Chaos) is under way: unmet Needs now raise Chaos and a goblin can shirk, pick a fight or steal supplies.
+> **Early grey-box prototype.** P1, P2 and P3 have been played and logged. P3 passed its fun check with five yeses out of five. P4 (Chaos) is built and waiting for its human fun check: unmet Needs raise Chaos and a goblin can shirk, pick a fight or steal supplies, each shown by a brief provisional chat bubble.
 
 The first prototype asks one question: **is it fun to dig a warren and watch goblins mess it up?** It grows through six playable milestones, each tested for fun before any art or extra systems.
 
@@ -30,7 +30,7 @@ The first prototype asks one question: **is it fun to dig a warren and watch gob
 | ✅ | **P1 — Map and digging** | Designate tunnels and stairs; one goblin digs them out | [Played](docs/playtests/2026-10-30-P1.md) |
 | ✅ | **P2 — Hauling and piles** | Goblins carry dug material to Piles | [Played](docs/playtests/2026-10-31-P2.md) |
 | ✅ | **P3 — Needs** | Food, drink, sleep, Fungus farming and a Brewery | [Played, 5/5 yes](docs/playtests/2026-11-06-P3.md) |
-| 🚧 | **P4 — Chaos** | Unmet needs lead to shirking, fights and theft | In progress: Chaos, shirking, fights and theft built; human fun check pending |
+| 🚧 | **P4 — Chaos** | Unmet needs lead to shirking, fights and theft | Built: Chaos, shirking, fights, theft and provisional chat bubbles; human fun check pending, checklist in [`docs/playtests/P4-CHECKLIST.md`](docs/playtests/P4-CHECKLIST.md) |
 | ⬜ | **P5 — One invasion** | Three heroes, one trap type, and Brutes fighting back | Planned |
 | ⬜ | **P6 — Legends** | A running event log of deaths, invasions and chaos | Planned |
 
@@ -92,6 +92,8 @@ The Need a Grunt is eating, drinking or sleeping to restore adds nothing while i
 - **Seeing it.** A shirking Grunt wears a lilac ring and a lilac band across its body, and the Inspector shows its Chaos beside its Needs.
 - **Fighting.** At 70 Chaos with no cooldown, a Grunt chooses equally among the behaviours available: shirking, fighting when an eligible Grunt is reachable, and theft when supplies and a private destination are available. With neither a fight nor a theft available, it simply shirks. A fight picks the nearest reachable Grunt, ties to the lower number, and skips anyone asleep, meeting a Need, acting out, in a cooldown, or holding a unit with nowhere legal to put it. The instigator stomps after its target for up to 100 ticks while the target carries on working; on contact, the same tile or a side-on neighbour, the target is rechecked, and if it is still fair game it abandons its work as a shirker would. The two scuffle for 30 ticks: the victim gains 15 Chaos, once, and nobody is hurt. A scuffle that runs its course takes 40 Chaos off the instigator alone, then both sit out 100 ticks of recovery and start their 300-tick cooldown together. A Craving it can meet, or Collapse, in either Grunt ends the scuffle for both with no relief and no recovery, though the victim keeps its 15; a Need can also end recovery early without restarting the cooldown. A pursuit that times out, loses its path or finds its target gone ends with the instigator's cooldown and nobody else's. Starving slows only the pursuer's walk.
 - **Seeing a fight.** An orange ring marks a Grunt chasing, scuffling or being scuffled, with an orange cross over the two scuffling; a duller ring marks the recovery. The Inspector names the other Grunt in each one's Task, and the Need pip and any carried square still show.
+
+- **Chat bubbles (provisional).** When a shirk begins, a scuffle starts, a thief picks up its unit or another goblin's meal eats a Haul, a small cream bubble with a symbol, the goblin's name and a line appears over it for three seconds of unpaused real time, so it lasts as long at 4× as at 1× and holds still while paused. A goblin has at most one bubble and the map at most three; a newer one replaces the oldest. A bubble hangs over its goblin on the level you are viewing and goes if you change level or the goblin does. It is only drawn: the map, the Inspector, names, fight partners, theft material and every marker work as before once it has gone, and nothing is logged. Whether to keep bubbles, swap them for icons or try something else is for Theo to decide after play; [`docs/playtests/P4-CHECKLIST.md`](docs/playtests/P4-CHECKLIST.md) has the P4 playtest checklist.
 
 **Try it: neglect, then recover.** Start the game, give no orders and press <kbd>4</kbd>. The starting Grub and Grog are eaten once; when the Needs run low again with nothing left, Chaos climbs on the Inspector's bars, and around tick 3000 the first Grunt loafs under a lilac ring and band. Then fix it as a player would: paint a Pile, a Grub Pit and a Brewery, dig stairs down and paint a Fungus Farm below, paint a Heap. Once the Grunts eat, drink and sleep again, Chaos drains away and the shirking stops. For a storage blockage instead, paint a one-tile Pile, dig a large area so it fills, and watch the Grunts left holding dirt; painting more Pile ends their wait.
 
@@ -167,6 +169,7 @@ A tile holds one Room, so painting skips a tile that already holds a different o
 | Lilac ring and band | Shirking |
 | Orange ring (crossed while scuffling) | Pursuing, scuffling or being scuffled |
 | Dull orange ring | Recovering from a scuffle |
+| Cream speech bubble over a goblin, three seconds | Provisional: it has just started shirking (⊘ lilac), started a scuffle (orange starburst), picked up stolen supplies (crimson mask), or had its Haul eaten (grey crossed box). One per goblin, three at most; real time, so the same length at 4×, and frozen while paused. |
 | Blue tile | Sleeping Heap |
 | Green tile | Fungus Farm |
 | Rust-red tile | Brewery |
@@ -194,7 +197,7 @@ Run the simulation tests with:
 dotnet test sim/tests
 ```
 
-For the full local check—simulation tests, Godot C# build, a headless boot that checks for console errors, and selection input checks—run:
+For the full local check—simulation tests, Godot C# build, a headless boot that checks for console errors, and selection input checks, chat bubble checks, render checks and Inspector layout checks—run:
 
 ```bash
 bash tools/check.sh

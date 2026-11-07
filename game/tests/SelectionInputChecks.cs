@@ -931,6 +931,52 @@ public partial class SelectionInputChecks : Node
 				Button(main, view, MouseButton.Left, false, 4, 4);
 			});
 
+			// Chat bubbles take no input: with three on show, a drag through the cells they cover still designates and cancels, the Inspector
+			// still lists every goblin on a shared tile with their fight, Need and Chaos readings, and all of it reads the same after they expire.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				for (var g = 0; g < s.GoblinCount; g++)
+					(s.GoblinX[g], s.GoblinY[g]) = (12, 12);
+				main.Bubbles.Observe([new ShirkStarted(0), new HaulCancelled(1), new TheftPickedUp(2, Goblins.Sim.Material.Grub)], s, 0);
+				Require(main.Bubbles.Active.Count == 3, "Three incidents did not put three bubbles up.");
+				var covered = view.LayoutBubbles().Select(l => l.Rect).ToList();
+				Require(covered.Count == 3, "The three bubbles did not lay out.");
+
+				Move(main, view, 12, 12);
+				var withBubbles = main.Inspection;
+				Require(withBubbles.Goblins.Count == s.GoblinCount, $"The Inspector lists {withBubbles.Goblins.Count} of {s.GoblinCount} goblins under bubbles.");
+				Require(withBubbles.Goblins.Select(g => g.Title).Distinct().Count() == s.GoblinCount, "Goblins under bubbles lost their distinct names.");
+
+				// Drag across the middle of every bubble, as a player would, over ground that is solid so there is something to designate.
+				var cells = covered.Select(r => new Vector2I((int)(r.GetCenter().X / WarrenView.CellSize), (int)(r.GetCenter().Y / WarrenView.CellSize))).Distinct().ToList();
+				foreach (var cell in cells)
+					s.TileKinds[s.TileIndex(cell.X, cell.Y, 0)] = (byte)TileKind.Solid;
+				Key(main, Godot.Key.D);
+				foreach (var cell in cells)
+				{
+					Drag(main, view, MouseButton.Left, cell.X, cell.Y, cell.X, cell.Y);
+					Require(s.DesignationAt(s.TileIndex(cell.X, cell.Y, 0)) == DesignationKind.Dig, $"A drag under a bubble designated nothing at {cell}.");
+				}
+				foreach (var cell in cells)
+				{
+					Drag(main, view, MouseButton.Right, cell.X, cell.Y, cell.X, cell.Y);
+					Require(s.DesignationAt(s.TileIndex(cell.X, cell.Y, 0)) == DesignationKind.None, $"A right-drag under a bubble did not cancel at {cell}.");
+				}
+				Require(main.Bubbles.Active.Count == 3, "Dragging took the bubbles down.");
+
+				sim.Apply(new SetPaused(false));
+				main.SetProcess(false);
+				// This is the input/Inspector check after expiry; BubbleChecks tests the real clock, including engine stalls.
+				main.Bubbles.Advance(BubbleBoard.LifetimeSeconds);
+				main._Process(0);
+				Require(main.Bubbles.Active.Count == 0, "The bubbles did not expire.");
+				Move(main, view, 12, 12);
+				var after = main.Inspection.Goblins;
+				Require(after.Count == s.GoblinCount && after.Select(g => g.Title).SequenceEqual(withBubbles.Goblins.Select(g => g.Title)), "The Inspector's list changed when the bubbles went.");
+				Require(Enumerable.Range(0, s.GoblinCount).All(g => after[g].Title.StartsWith(GoblinNames.For(g))), "Names are no longer by goblin index after bubbles.");
+			});
+
 			await RealMouseCheck();
 			CountLabelChecks();
 			PileCountChecks();
