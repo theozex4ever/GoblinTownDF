@@ -62,7 +62,7 @@ public static class Inspector
 		var fighting = GoblinTasks.IsFightTask(task);
 		var mood = task == GoblinTask.Sleeping ? "Fast asleep. Hunger and thirst may take a number."
 			: shirking ? "Has withdrawn labour. The principle is very important, and so is the floor."
-			: task is GoblinTask.Pursuing or GoblinTask.Scuffling ? "Has a grievance, a target and no health bar. Nobody is in any danger but the dignity."
+			: task is GoblinTask.Pursuing or GoblinTask.Scuffling ? "Has a grievance and a target. Dignity is taking cover."
 			: task == GoblinTask.Scuffled ? "Was minding its work. The work has been rudely interrupted."
 			: task == GoblinTask.Recovering ? "Sitting very still, in the manner of the recently thumped."
 			: NeedRules.IsStarving(grub) ? "Starving, and bearing it at half speed with great dignity."
