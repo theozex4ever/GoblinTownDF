@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Godot;
 using Goblins.Sim;
 
@@ -8,7 +9,7 @@ namespace AThousandGoblinsDeep;
 /// <summary>Headless input checks through Main's engine callbacks and the rendered sim state.</summary>
 public partial class SelectionInputChecks : Node
 {
-	public override void _Ready()
+	public override async void _Ready()
 	{
 		try
 		{
@@ -778,6 +779,7 @@ public partial class SelectionInputChecks : Node
 				Button(main, view, MouseButton.Left, false, 4, 4);
 			});
 
+			await RealMouseCheck();
 			CountLabelChecks();
 			PileCountChecks();
 
@@ -892,6 +894,56 @@ public partial class SelectionInputChecks : Node
 			Require(actualFirst == first && actualSecond == second,
 				$"Counts [{string.Join(", ", counts)}] drew {actualFirst}, {actualSecond}; expected {first}, {second}.");
 		}
+	}
+
+	// Real mouse events through the viewport and the GUI, after a layout pass: a click on a Tool button picks the Tool and
+	// stops there, a press on the map starts a drag the panels let through, and the drag ends where it is released, even
+	// over a panel, clamped to the map.
+	async Task RealMouseCheck()
+	{
+		_scenarios++;
+		var main = new Main();
+		AddChild(main);
+		try
+		{
+			for (var frame = 0; frame < 3; frame++)
+				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+			var view = main.View;
+			var sim = view.Sim!;
+			var s = sim.State;
+			sim.Apply(new SetPaused(true));
+
+			var stairs = ButtonNamed(main, "ToolDigStairs").GetGlobalRect().GetCenter();
+			Push(new InputEventMouseMotion { Position = stairs, GlobalPosition = stairs });
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = stairs, GlobalPosition = stairs });
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = stairs, GlobalPosition = stairs });
+			ExpectTool(main, "ToolDigStairs");
+			Require(Enumerable.Range(0, s.Designations.Length).All(t => s.Designations[t] == 0), "A click on a Tool button reached the map.");
+
+			var from = Position(view, 4, 4);
+			// Over the right panel, level with row 6.
+			var panel = ButtonNamed(main, "ToolDigStairs").GetGlobalRect().Position.X < from.X
+				? new Vector2(GetViewport().GetVisibleRect().Size.X - 20, Position(view, 0, 6).Y)
+				: throw new InvalidOperationException("The map is not right of the Tool palette.");
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = from, GlobalPosition = from });
+			Push(new InputEventMouseMotion { Position = panel, GlobalPosition = panel, ButtonMask = MouseButtonMask.Left });
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = panel, GlobalPosition = panel });
+			Require(view.Selection is null, "A drag released over a panel never ended.");
+			ExpectRectangle(s, 0, DesignationKind.DigStairs, 4, 4, s.Width - 1, 6);
+		}
+		finally
+		{
+			RemoveChild(main);
+			main.Free();
+		}
+	}
+
+	// Positions are in the viewport's own coordinates, as the map and the buttons are: under --headless the window is
+	// 64 px square, and stretch would rescale anything given in window coordinates.
+	void Push(InputEvent input)
+	{
+		GetViewport().PushInput(input, inLocalCoords: true);
+		input.Dispose();
 	}
 
 	// Every scenario goes through here, so the passing line reports how many actually ran.

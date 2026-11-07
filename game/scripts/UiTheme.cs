@@ -1,8 +1,13 @@
+using System.Collections.Generic;
 using Godot;
 
 namespace AThousandGoblinsDeep;
 
-/// <summary>The one Theme every HUD Control uses, built in code so the grey box needs no asset files.</summary>
+/// <summary>
+/// The one Theme every HUD Control uses, built in code so the grey box needs no asset files. Every Resource made here is
+/// handed to a node and its managed wrapper disposed at once: the node keeps its own reference, and no wrapper is left
+/// for the garbage collector to race the engine's shutdown.
+/// </summary>
 public static class UiTheme
 {
 	public static readonly Color Background = new(0.10f, 0.09f, 0.08f);
@@ -26,9 +31,28 @@ public static class UiTheme
 
 	public const int FontSize = 14;
 
-	public static Theme Build()
+	/// <summary>Gives <paramref name="root"/>, and so every Control under it, this Theme.</summary>
+	public static void ApplyTo(Control root)
+	{
+		var made = new List<Resource>();
+		using var theme = Build(made);
+		root.Theme = theme;
+		foreach (var resource in made)
+			resource.Dispose();
+	}
+
+	static Theme Build(List<Resource> made)
 	{
 		var theme = new Theme { DefaultFontSize = FontSize };
+		StyleBoxFlat Box(Color fill, Color border, int padding)
+		{
+			var box = new StyleBoxFlat { BgColor = fill, BorderColor = border };
+			box.SetBorderWidthAll(1);
+			box.SetCornerRadiusAll(4);
+			box.SetContentMarginAll(padding);
+			made.Add(box);
+			return box;
+		}
 
 		theme.SetStylebox("panel", "PanelContainer", Box(PanelColor, BorderColor, padding: 10));
 		theme.SetColor("font_color", "Label", TextColor);
@@ -52,7 +76,9 @@ public static class UiTheme
 		theme.SetStylebox("pressed", "Button", pressed);
 		theme.SetStylebox("hover_pressed", "Button", pressed);
 		theme.SetStylebox("disabled", "Button", normal);
-		theme.SetStylebox("focus", "Button", new StyleBoxEmpty());
+		var noFocus = new StyleBoxEmpty();
+		made.Add(noFocus);
+		theme.SetStylebox("focus", "Button", noFocus);
 		foreach (var name in new[] { "font_color", "font_hover_color", "font_focus_color" })
 			theme.SetColor(name, "Button", TextColor);
 		theme.SetColor("font_pressed_color", "Button", Colors.White);
@@ -62,33 +88,33 @@ public static class UiTheme
 		theme.SetStylebox("panel", "TooltipPanel", Box(Background, BorderColor, padding: 8));
 		theme.SetColor("font_color", "TooltipLabel", TextColor);
 
-		theme.SetStylebox("separator", "HSeparator", new StyleBoxLine { Color = BorderColor, Thickness = 1 });
+		var line = new StyleBoxLine { Color = BorderColor, Thickness = 1 };
+		made.Add(line);
+		theme.SetStylebox("separator", "HSeparator", line);
 		return theme;
 	}
 
-	static StyleBoxFlat Box(Color fill, Color border, int padding)
+	/// <summary>A 12 px square of <paramref name="color"/>, solid or, with <paramref name="outline"/>, a two-pixel frame, as a TextureRect.</summary>
+	public static TextureRect Swatch(Color color, bool outline = false)
 	{
-		var box = new StyleBoxFlat { BgColor = fill, BorderColor = border };
-		box.SetBorderWidthAll(1);
-		box.SetCornerRadiusAll(4);
-		box.SetContentMarginAll(padding);
-		return box;
+		using var texture = SwatchTexture(color, outline);
+		return new TextureRect { Texture = texture, StretchMode = TextureRect.StretchModeEnum.KeepCentered };
 	}
 
-	/// <summary>A solid square of <paramref name="color"/>, for a Button icon or a legend row.</summary>
-	public static ImageTexture Swatch(Color color, int size = 12)
+	/// <summary>Gives <paramref name="button"/> a solid square of <paramref name="color"/> as its icon.</summary>
+	public static void SetSwatchIcon(Button button, Color color)
 	{
-		var image = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
-		image.Fill(color);
-		return ImageTexture.CreateFromImage(image);
+		using var texture = SwatchTexture(color, outline: false);
+		button.Icon = texture;
 	}
 
-	/// <summary>A square outline of <paramref name="color"/>, two pixels wide, for a legend row about outlines.</summary>
-	public static ImageTexture OutlineSwatch(Color color, int size = 12)
+	static ImageTexture SwatchTexture(Color color, bool outline)
 	{
-		var image = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
+		const int size = 12;
+		using var image = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
 		image.Fill(color);
-		image.FillRect(new Rect2I(2, 2, size - 4, size - 4), Colors.Transparent);
+		if (outline)
+			image.FillRect(new Rect2I(2, 2, size - 4, size - 4), Colors.Transparent);
 		return ImageTexture.CreateFromImage(image);
 	}
 

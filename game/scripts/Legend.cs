@@ -35,17 +35,15 @@ public partial class Legend : VBoxContainer
 		Row("Pip: craving a lie-down", WarrenView.NeedColor(Need.Sleep));
 		Row("Loose, no Pile has room for it", WarrenView.WaitingHaulColor);
 		Row("A full Pile count: thirty", WarrenView.FullCountChipColor);
-		Row("Marked for digging", UiTheme.OutlineSwatch(WarrenView.DesignationColor));
-		Row("Marked, out of reach", UiTheme.OutlineSwatch(WarrenView.UnreachableColor));
+		Row("Marked for digging", WarrenView.DesignationColor, outline: true);
+		Row("Marked, out of reach", WarrenView.UnreachableColor, outline: true);
 	}
 
-	void Row(string text, Color color) => Row(text, UiTheme.Swatch(color));
-
-	void Row(string text, Texture2D swatch)
+	void Row(string text, Color color, bool outline = false)
 	{
 		var row = new HBoxContainer();
 		row.AddThemeConstantOverride("separation", 8);
-		row.AddChild(new TextureRect { Texture = swatch, StretchMode = TextureRect.StretchModeEnum.KeepCentered });
+		row.AddChild(UiTheme.Swatch(color, outline));
 		row.AddChild(UiTheme.Text(text, UiTheme.MutedLabel));
 		_rows.AddChild(row);
 	}

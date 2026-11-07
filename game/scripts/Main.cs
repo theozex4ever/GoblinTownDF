@@ -48,7 +48,8 @@ public partial class Main : Node
 	// mouse, so a click on one never reaches the map; everything else lets it through to _UnhandledInput.
 	void BuildLayout(Vector2 mapSize)
 	{
-		var root = new Control { Theme = UiTheme.Build(), MouseFilter = Control.MouseFilterEnum.Ignore };
+		var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
+		UiTheme.ApplyTo(root);
 		root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
 		AddChild(root);
 

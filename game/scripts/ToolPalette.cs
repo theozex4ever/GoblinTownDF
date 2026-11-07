@@ -37,13 +37,13 @@ public partial class ToolPalette : VBoxContainer
 			{
 				Name = $"Tool{tool}",
 				Text = $"{ToolInfo.Label(tool)} · {OS.GetKeycodeString(ToolInfo.KeyOf(tool))}",
-				Icon = UiTheme.Swatch(ToolInfo.Swatch(tool)),
 				TooltipText = ToolInfo.Tooltip(tool),
 				ToggleMode = true,
 				// No focus, or Space would press the last Tool clicked instead of pausing.
 				FocusMode = FocusModeEnum.None,
 				Alignment = HorizontalAlignment.Left,
 			};
+			UiTheme.SetSwatchIcon(button, ToolInfo.Swatch(tool));
 			button.Pressed += () => ToolClicked?.Invoke(tool);
 			_buttons[tool] = button;
 			AddChild(button);
