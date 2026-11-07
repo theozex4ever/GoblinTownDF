@@ -38,6 +38,12 @@ public partial class InspectorPanel : VBoxContainer
 		Show(Inspection.Nothing);
 	}
 
+	/// <summary>How many goblin entries are shown: one per goblin on the inspected tile.</summary>
+	public int EntryCount => _blocks.Count(block => block.Visible);
+
+	/// <summary>The nth shown goblin entry, as laid out now; for checks on where it sits.</summary>
+	public Control Entry(int index) => _blocks[index];
+
 	public void Show(Inspection inspection)
 	{
 		var goblins = inspection.Goblins;

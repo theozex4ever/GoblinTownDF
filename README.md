@@ -153,7 +153,7 @@ A tile holds one Room, so painting skips a tile that already holds a different o
 
 **Piles.** Each Pile tile holds up to 30 units of each material. Goblins carry to the nearest Pile with room, or wait holding the unit until one appears. Painting skips any tile holding more than 30 of a material. A Pile tile draws two counts in their materials' colours: a full material first (highlighted), then the largest.
 
-**Inspector.** The right-hand panel shows what is under the cursor: over goblins, one block for each goblin on the tile in order, with its name and Role, its Task, its Grub, Grog and Sleep meters as bars with the Craving threshold marked, and its Chaos bar with the acting-out threshold marked; over a Pile tile, every count; over any other tile, what it is, what is marked on it and what lies loose there. Above it, the **Warren summary** totals each material, stored and loose, and counts the goblins working, idle, craving and asleep.
+**Inspector.** The right-hand panel shows what is under the cursor: over goblins, one block for each goblin on the tile in order, with its name and Role, its Task, its Grub, Grog and Sleep meters as bars with the Craving threshold marked, and its Chaos bar with the acting-out threshold marked (a crowd taller than the panel scrolls inside it, by the mouse wheel over the tile, or over the panel once the pointer has left the map for it, or by its scrollbar; the map never moves); over a Pile tile, every count; over any other tile, what it is, what is marked on it and what lies loose there. Above it, the **Warren summary** totals each material, stored and loose, and counts the goblins working, idle, craving and asleep.
 
 | You see | It means |
 |---|---|
