@@ -696,7 +696,7 @@ public partial class SelectionInputChecks : Node
 		AddChild(main);
 		try
 		{
-			var view = main.GetChildren().OfType<WarrenView>().Single();
+			var view = main.View;
 			var sim = view.Sim!;
 			sim.Apply(new SetPaused(true));
 			check(main, view, sim);
@@ -709,7 +709,7 @@ public partial class SelectionInputChecks : Node
 	}
 
 	static Vector2 Position(WarrenView view, int x, int y) =>
-		view.Position + new Vector2((x + 0.5f) * WarrenView.CellSize, (y + 0.5f) * WarrenView.CellSize);
+		view.GlobalPosition + new Vector2((x + 0.5f) * WarrenView.CellSize, (y + 0.5f) * WarrenView.CellSize);
 
 	static void Button(Main main, WarrenView view, MouseButton button, bool pressed, int x, int y)
 	{

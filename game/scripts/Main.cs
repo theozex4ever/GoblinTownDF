@@ -38,10 +38,10 @@ public partial class Main : Node
 		_sim = Simulation.NewWorld(seed);
 		GD.Print($"A Thousand Goblins Deep: boot ok (seed {seed})");
 
-		_view = new WarrenView { Sim = _sim, Position = new Vector2(288, 36) };
-		AddChild(_view);
-
 		var s = _sim.State;
+		_view = new WarrenView { Sim = _sim };
+		BuildLayout(new Vector2(s.Width, s.Height) * WarrenView.CellSize);
+
 		_selection = new SelectionGesture(MouseButton.Left, new Vector2I(s.Width, s.Height), CellAt);
 		_removal = new SelectionGesture(MouseButton.Right, new Vector2I(s.Width, s.Height), CellAt);
 		_selection.Selected += OnSelected;
@@ -49,22 +49,61 @@ public partial class Main : Node
 		_selection.Changed += UpdateSelection;
 		_removal.Changed += UpdateSelection;
 
-		_depthLabel = new Label { Position = new Vector2(288, 8) };
-		AddChild(_depthLabel);
-		_hoverLabel = new Label { Position = new Vector2(288, 36 + s.Height * WarrenView.CellSize + 4) };
-		AddChild(_hoverLabel);
-		// The hint wraps in the margin left of the map: unwrapped it is about 1070 px wide, and two lines
-		// under the map would run past the bottom of the 648 px window.
-		AddChild(new Label
-		{
-			Text = KeyHint,
-			Position = new Vector2(8, 36),
-			CustomMinimumSize = new Vector2(272, 0),
-			AutowrapMode = TextServer.AutowrapMode.WordSmart,
-		});
-
 		Refresh();
 	}
+
+	/// <summary>The view of the warren, wherever the layout has put it.</summary>
+	public WarrenView View => _view;
+
+	// A top bar over three columns: the left panel, the map centred in what is left, and the right panel. Panels stop the
+	// mouse, so a click on one never reaches the map; everything else lets it through to _UnhandledInput.
+	void BuildLayout(Vector2 mapSize)
+	{
+		var root = new Control { Theme = UiTheme.Build(), MouseFilter = Control.MouseFilterEnum.Ignore };
+		root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		AddChild(root);
+
+		var background = new ColorRect { Color = UiTheme.Background, MouseFilter = Control.MouseFilterEnum.Ignore };
+		background.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		root.AddChild(background);
+
+		var margin = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+		margin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		foreach (var side in new[] { "left", "top", "right", "bottom" })
+			margin.AddThemeConstantOverride($"margin_{side}", 8);
+		root.AddChild(margin);
+
+		var column = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+		column.AddThemeConstantOverride("separation", 8);
+		margin.AddChild(column);
+
+		var topBar = new PanelContainer();
+		column.AddChild(topBar);
+		_depthLabel = new Label();
+		topBar.AddChild(_depthLabel);
+
+		var body = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+		body.AddThemeConstantOverride("separation", 8);
+		column.AddChild(body);
+
+		var left = new PanelContainer { CustomMinimumSize = new Vector2(LeftPanelWidth, 0) };
+		body.AddChild(left);
+		left.AddChild(UiTheme.Text(KeyHint, UiTheme.MutedLabel, wrap: true));
+
+		var mapArea = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+		body.AddChild(mapArea);
+		var mapFrame = new Control { MouseFilter = Control.MouseFilterEnum.Ignore, CustomMinimumSize = mapSize };
+		mapArea.AddChild(mapFrame);
+		mapFrame.AddChild(_view);
+
+		var right = new PanelContainer { CustomMinimumSize = new Vector2(RightPanelWidth, 0) };
+		body.AddChild(right);
+		_hoverLabel = UiTheme.Text("", wrap: true);
+		right.AddChild(_hoverLabel);
+	}
+
+	const int LeftPanelWidth = 230;
+	const int RightPanelWidth = 290;
 
 	public override void _Process(double delta)
 	{
@@ -80,27 +119,39 @@ public partial class Main : Node
 	/// <summary>The hover line: the Grub, Grog and Sleep meters of the goblin under the cursor, else every count on the Pile tile under it, else empty.</summary>
 	public string HoverText => _hoverLabel.Text;
 
+	// A drag in progress owns the mouse before the panels see it, so dragging off the map over a panel still sweeps and
+	// still ends; the gesture clamps the far corner to the map. Motion also moves the hover here, so leaving the map for
+	// a panel clears it.
+	public override void _Input(InputEvent @event)
+	{
+		if (@event is InputEventMouseMotion motion)
+			Hover(motion.Position);
+		if (@event is InputEventMouse && (_selection.Dragging || _removal.Dragging) && HandleMouse(@event))
+			GetViewport().SetInputAsHandled();
+	}
+
 	public override void _UnhandledInput(InputEvent @event)
 	{
 		if (@event is InputEventMouseMotion motion)
-		{
-			_hoverCell = CellAt(motion.Position);
-			UpdateHover();
-		}
-
-		// Only one button owns a drag; removal is available with no tool picked.
-		if (_selection.Dragging)
-		{
-			if (_selection.Handle(@event))
-				GetViewport().SetInputAsHandled();
-		}
-		else if (_removal.Dragging)
-		{
-			if (_removal.Handle(@event))
-				GetViewport().SetInputAsHandled();
-		}
-		else if (_removal.Handle(@event) || (_tool != Tool.None && _selection.Handle(@event)))
+			Hover(motion.Position);
+		if (HandleMouse(@event))
 			GetViewport().SetInputAsHandled();
+	}
+
+	void Hover(Vector2 position)
+	{
+		_hoverCell = CellAt(position);
+		UpdateHover();
+	}
+
+	// Only one button owns a drag; removal is available with no tool picked.
+	bool HandleMouse(InputEvent @event)
+	{
+		if (_selection.Dragging)
+			return _selection.Handle(@event);
+		if (_removal.Dragging)
+			return _removal.Handle(@event);
+		return _removal.Handle(@event) || (_tool != Tool.None && _selection.Handle(@event));
 	}
 
 	void UpdateHover()
@@ -132,7 +183,7 @@ public partial class Main : Node
 
 	Vector2I CellAt(Vector2 position)
 	{
-		var cell = (position - _view.Position) / WarrenView.CellSize;
+		var cell = (position - _view.GlobalPosition) / WarrenView.CellSize;
 		return new Vector2I(Mathf.FloorToInt(cell.X), Mathf.FloorToInt(cell.Y));
 	}
 

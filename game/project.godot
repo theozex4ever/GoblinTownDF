@@ -17,3 +17,10 @@ config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 [dotnet]
 
 project/assembly_name="AThousandGoblinsDeep"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
