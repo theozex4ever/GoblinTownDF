@@ -11,6 +11,8 @@ public partial class Main : Node
 	TopBar _topBar = null!;
 	ToolPalette _palette = null!;
 	InspectorPanel _inspector = null!;
+	SummaryPanel _summaryPanel = null!;
+	readonly WarrenSummary _summary = new();
 	// The map cell under the cursor, from the last mouse motion; kept so the Inspector follows the sim as it changes the tile.
 	Vector2I _hoverCell = new(-1, -1);
 	SelectionGesture _selection = null!;
@@ -95,6 +97,9 @@ public partial class Main : Node
 		var rightColumn = new VBoxContainer();
 		rightColumn.AddThemeConstantOverride("separation", 12);
 		right.AddChild(rightColumn);
+		_summaryPanel = new SummaryPanel();
+		rightColumn.AddChild(_summaryPanel);
+		rightColumn.AddChild(new HSeparator());
 		_inspector = new InspectorPanel();
 		rightColumn.AddChild(_inspector);
 	}
@@ -112,7 +117,13 @@ public partial class Main : Node
 		}
 		if (_sim.DrainEvents().Count > 0)
 			SyncHud();
+		// Counted every frame, so changes made outside a tick (a Pile painted while paused) show at once.
+		_summary.Count(_sim.State);
+		_summaryPanel.Show(_summary);
 	}
+
+	/// <summary>The Warren summary as of the last frame.</summary>
+	public WarrenSummary Summary => _summary;
 
 	/// <summary>The depth readout in the top bar: the viewed level and its Band.</summary>
 	public string DepthText => _topBar.DepthText;

@@ -711,6 +711,52 @@ public partial class SelectionInputChecks : Node
 				Require(CountRooms(s, RoomKind.SleepingHeap) == 0, "A put-away Tool still painted.");
 			});
 
+			// The Warren summary totals every material, stored and loose, and counts each goblin once by state.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				var (dirt, stone, grub, grog) = (Goblins.Sim.Material.Dirt, Goblins.Sim.Material.Stone, Goblins.Sim.Material.Grub, Goblins.Sim.Material.Grog);
+				Array.Clear(s.TileItems);
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinGrog, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinSleep, (byte)NeedRules.MeterMax);
+				sim.Apply(new PaintPile(0, 4, 4, 5, 4));
+				s.AddItems(s.TileIndex(4, 4, 0), grub, 14);
+				s.AddItems(s.TileIndex(5, 4, 0), grub, 3);
+				s.AddItems(s.TileIndex(5, 4, 0), stone, SimState.PileCapacity);
+				s.AddItems(s.TileIndex(8, 8, 0), grub, 2);
+				s.AddItems(s.TileIndex(8, 8, 0), dirt, 5);
+				s.GoblinSleep[0] = 20;
+				GoblinTasks.BeginSleep(s, 0, dropTile: -1, asleep: true);
+				s.GoblinGrub[1] = 10;
+				s.GoblinGrub[2] = 0;
+				main._Process(0);
+				var tally = main.Summary;
+				Require(tally.Stored(grub) == 17 && tally.Loose(grub) == 2, $"Grub reads {tally.Stored(grub)} stored, {tally.Loose(grub)} loose, not 17 and 2.");
+				Require(tally.Stored(stone) == 30 && tally.Loose(stone) == 0, $"Stone reads {tally.Stored(stone)} stored, {tally.Loose(stone)} loose, not 30 and 0.");
+				Require(tally.Stored(dirt) == 0 && tally.Loose(dirt) == 5, $"Dirt reads {tally.Stored(dirt)} stored, {tally.Loose(dirt)} loose, not 0 and 5.");
+				Require(tally.Stored(grog) == 0 && tally.Loose(grog) == 0, "Grog was counted where there is none.");
+				// The sleeper craves Sleep but counts as asleep; the Starving goblin counts as craving, and as Starving too.
+				Require((tally.Goblins, tally.Asleep, tally.Craving, tally.Idle, tally.Working, tally.Starving) == (7, 1, 2, 4, 0, 1),
+					$"Goblins read {tally.Goblins}: {tally.Asleep} asleep, {tally.Craving} craving, {tally.Idle} idle, {tally.Working} working, {tally.Starving} Starving.");
+
+				// A unit in a goblin's hands is loose: hauled to the Pile, the dirt moves from loose to stored and is never lost on the way.
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				sim.RecheckReachability();
+				sim.Apply(new SetPaused(false));
+				var carried = false;
+				for (var frame = 0; frame < 400 && tally.Stored(dirt) < 5; frame++)
+				{
+					main._Process(0.1);
+					tally = main.Summary;
+					Require(tally.Stored(dirt) + tally.Loose(dirt) == 5, $"Dirt reads {tally.Stored(dirt)} stored and {tally.Loose(dirt)} loose mid-haul, not 5 in all.");
+					var carrying = Enumerable.Range(0, s.GoblinCount).Any(g => s.GoblinCarry[g] == (byte)dirt);
+					Require(!carrying || tally.Working > 0, "A goblin hauling dirt was not counted as working.");
+					carried |= carrying;
+				}
+				Require(carried && tally.Stored(dirt) == 5, $"The dirt was not all hauled: {tally.Stored(dirt)} stored.");
+			});
+
 			CountLabelChecks();
 			PileCountChecks();
 
