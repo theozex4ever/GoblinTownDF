@@ -751,11 +751,31 @@ public partial class SelectionInputChecks : Node
 					main._Process(0.1);
 					tally = main.Summary;
 					Require(tally.Stored(dirt) + tally.Loose(dirt) == 5, $"Dirt reads {tally.Stored(dirt)} stored and {tally.Loose(dirt)} loose mid-haul, not 5 in all.");
-					var carrying = Enumerable.Range(0, s.GoblinCount).Any(g => s.GoblinCarry[g] == (byte)dirt);
-					Require(!carrying || tally.Working > 0, "A goblin hauling dirt was not counted as working.");
-					carried |= carrying;
+					// Each carrier is itself counted as working, not merely some goblin somewhere.
+					foreach (var carrier in Enumerable.Range(0, s.GoblinCount).Where(g => s.GoblinCarry[g] == (byte)dirt))
+					{
+						Require(WarrenSummary.StateOf(s, carrier) == WarrenSummary.GoblinState.Working,
+							$"Goblin {carrier}, hauling dirt as {(GoblinTask)s.GoblinTask[carrier]}, counts as {WarrenSummary.StateOf(s, carrier)}.");
+						carried = true;
+					}
+					Require(tally.Asleep + tally.Craving + tally.Idle + tally.Working == tally.Goblins, "A goblin was counted twice or not at all.");
 				}
 				Require(carried && tally.Stored(dirt) == 5, $"The dirt was not all hauled: {tally.Stored(dirt)} stored.");
+			});
+
+			// When the map moves under a still pointer (the window resized, a panel grown), the Inspector and the outline follow
+			// the pointer to the cell now under it, paused or not.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
+				Require(main.Inspection.Title == "Grunt", $"The Inspector over a Grunt shows {main.Inspection.Title}.");
+				view.Position += new Vector2(9 * WarrenView.CellSize, 0);
+				main._Process(0);
+				var under = new Vector2I(s.GoblinX[0] - 9, s.GoblinY[0]);
+				Require(view.Hover == under, $"The map outlines {view.Hover} after moving; the pointer is over {under}.");
+				var expected = Inspector.Inspect(s, s.TileIndex(under.X, under.Y, 0));
+				ExpectInspection(main, expected.Title, StockText(expected), expected.Note);
 			});
 
 			// The drag box wears the colour of what it will make, red when it unmakes; the hovered cell is outlined on the map.

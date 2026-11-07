@@ -51,7 +51,8 @@ public partial class SummaryPanel : VBoxContainer
 			_states[i] = Number();
 			states.AddChild(_states[i]);
 		}
-		_starving = new Label();
+		// Wrapped, so a long line grows the panel down, never sideways into the map.
+		_starving = UiTheme.Text("", wrap: true);
 		_starving.AddThemeColorOverride("font_color", UiTheme.WarningColor);
 		AddChild(_starving);
 	}

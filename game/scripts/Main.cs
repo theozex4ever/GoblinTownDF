@@ -15,6 +15,10 @@ public partial class Main : Node
 	readonly WarrenSummary _summary = new();
 	// The map cell under the cursor, from the last mouse motion; kept so the Inspector follows the sim as it changes the tile.
 	Vector2I _hoverCell = new(-1, -1);
+	// Where the pointer last was, and where the map stood then: the map can move under a still pointer (the window
+	// resized, a panel grown), and the hovered cell must follow the pointer, not the map.
+	Vector2 _pointer = new(-1, -1);
+	Vector2 _hoverOrigin;
 	SelectionGesture _selection = null!;
 	SelectionGesture _removal = null!;
 	int _viewZ;
@@ -37,9 +41,15 @@ public partial class Main : Node
 		_removal.Selected += OnRemoved;
 		_selection.Changed += UpdateSelection;
 		_removal.Changed += UpdateSelection;
+		GetViewport().SizeChanged += OnViewportResized;
 
 		Refresh();
 	}
+
+	public override void _ExitTree() => GetViewport().SizeChanged -= OnViewportResized;
+
+	// A resize can rescale the viewport, so the pointer's position in it changes without any motion.
+	void OnViewportResized() => Hover(GetViewport().GetMousePosition());
 
 	/// <summary>The view of the warren, wherever the layout has put it.</summary>
 	public WarrenView View => _view;
@@ -115,6 +125,8 @@ public partial class Main : Node
 
 	public override void _Process(double delta)
 	{
+		if (_view.GlobalPosition != _hoverOrigin)
+			Hover(_pointer);
 		if (_sim.Advance(delta) > 0)
 		{
 			_view.QueueRedraw();
@@ -161,6 +173,8 @@ public partial class Main : Node
 
 	void Hover(Vector2 position)
 	{
+		_pointer = position;
+		_hoverOrigin = _view.GlobalPosition;
 		_hoverCell = CellAt(position);
 		UpdateHover();
 	}

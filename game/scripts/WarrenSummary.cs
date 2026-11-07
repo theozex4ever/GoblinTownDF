@@ -26,6 +26,25 @@ public sealed class WarrenSummary
 	/// <summary>Starving, whatever else it is doing; also counted in one of the states above.</summary>
 	public int Starving { get; private set; }
 
+	/// <summary>The one state a goblin is counted under; the first that applies wins.</summary>
+	public enum GoblinState
+	{
+		Asleep,
+		Craving,
+		Idle,
+		Working,
+	}
+
+	public static GoblinState StateOf(SimState s, int goblin)
+	{
+		var task = (GoblinTask)s.GoblinTask[goblin];
+		if (task == GoblinTask.Sleeping)
+			return GoblinState.Asleep;
+		if (NeedRules.LeadingCraving(s.GoblinGrub[goblin], s.GoblinGrog[goblin], s.GoblinSleep[goblin]) != Need.None)
+			return GoblinState.Craving;
+		return task is GoblinTask.Idle or GoblinTask.Wandering ? GoblinState.Idle : GoblinState.Working;
+	}
+
 	public void Count(SimState s)
 	{
 		System.Array.Clear(_stored);
@@ -48,15 +67,13 @@ public sealed class WarrenSummary
 			if (NeedRules.IsStarving(s.GoblinGrub[g]))
 				Starving++;
 
-			var task = (GoblinTask)s.GoblinTask[g];
-			if (task == GoblinTask.Sleeping)
-				Asleep++;
-			else if (NeedRules.LeadingCraving(s.GoblinGrub[g], s.GoblinGrog[g], s.GoblinSleep[g]) != Need.None)
-				Craving++;
-			else if (task is GoblinTask.Idle or GoblinTask.Wandering)
-				Idle++;
-			else
-				Working++;
+			switch (StateOf(s, g))
+			{
+				case GoblinState.Asleep: Asleep++; break;
+				case GoblinState.Craving: Craving++; break;
+				case GoblinState.Idle: Idle++; break;
+				default: Working++; break;
+			}
 		}
 	}
 }
