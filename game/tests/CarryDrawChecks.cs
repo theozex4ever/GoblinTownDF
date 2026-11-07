@@ -27,10 +27,11 @@ public partial class CarryDrawChecks : Node
 			LooseLayoutChecks();
 			PipLayoutCheck();
 			ZzzLayoutCheck();
+			ShirkLayoutCheck();
 
 			if (DisplayServer.GetName() == "headless")
 			{
-				GD.Print("Carry draw checks: layout checks passed; the 10 pixel scenarios were SKIPPED, not passed: no renderer under --headless.");
+				GD.Print("Carry draw checks: layout checks passed; the 11 pixel scenarios were SKIPPED, not passed: no renderer under --headless.");
 				GetTree().Quit();
 				return;
 			}
@@ -45,7 +46,8 @@ public partial class CarryDrawChecks : Node
 			await SleepMarksCheck();
 			await FungusFarmTintCheck();
 			await BreweryTintCheck();
-			GD.Print("Carry draw checks passed (layout, colours, count order, 10 pixel scenarios).");
+			await ShirkMarkCheck();
+			GD.Print("Carry draw checks passed (layout, colours, count order, 11 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -310,6 +312,40 @@ public partial class CarryDrawChecks : Node
 		Require(IsNear(PipAt(4), WarrenView.NeedColor(Need.Sleep)), "With the lowest meter Sleep's pip should show over Grub's and Grog's.");
 		Require(!IsNear(WarrenView.NeedColor(Need.Sleep), WarrenView.NeedColor(Need.Grub)) && !IsNear(WarrenView.NeedColor(Need.Sleep), WarrenView.NeedColor(Need.Grog)),
 			"The Sleep pip is too close to the others in colour.");
+	}
+
+	// The shirk band lies inside the goblin marker and clear of the pip in its top right corner.
+	static void ShirkLayoutCheck()
+	{
+		var marker = new Rect2(3, 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+		var band = WarrenView.ShirkBandRect(marker);
+		Require(marker.Encloses(band), $"The shirk band {band} leaves its marker.");
+		Require(!band.Intersects(WarrenView.PipRect(marker)), "The shirk band overlaps the pip.");
+	}
+
+	// A shirking goblin wears a lilac band across its body and a lilac ring round it; one that works does not; and a shirker that craves
+	// still wears its Need pip, over the band's reach.
+	async System.Threading.Tasks.Task ShirkMarkCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		for (var g = 0; g < s.GoblinCount; g++)
+			(s.GoblinGrub[g], s.GoblinGrog[g], s.GoblinSleep[g]) = (100, 100, 100);
+		GoblinTasks.BeginShirk(s, 0, dropTile: -1);
+		GoblinTasks.BeginShirk(s, 2, dropTile: -1);
+		s.GoblinGrub[2] = 20;
+		var image = await Render(sim);
+
+		Rect2 Marker(int g) => new(s.GoblinX[g] * WarrenView.CellSize + 3, s.GoblinY[g] * WarrenView.CellSize + 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+		Color Band(int g) { var c = WarrenView.ShirkBandRect(Marker(g)).GetCenter(); return image.GetPixel((int)c.X, (int)c.Y); }
+		Color Ring(int g) => image.GetPixel((int)Marker(g).Position.X - 2, (int)Marker(g).GetCenter().Y);
+
+		Require(IsNear(Band(0), WarrenView.ShirkColor), "A shirking goblin has no band across its body.");
+		Require(IsNear(Ring(0), WarrenView.ShirkColor), "A shirking goblin has no ring round it.");
+		Require(IsNear(Band(1), GoblinBody) && !IsNear(Ring(1), WarrenView.ShirkColor), "A goblin that is not shirking wears the shirk marks.");
+		var pip = WarrenView.PipRect(Marker(2)).GetCenter();
+		Require(IsNear(image.GetPixel((int)pip.X, (int)pip.Y), WarrenView.NeedColor(Need.Grub)), "A shirking goblin that craves Grub has lost its pip.");
+		Require(IsNear(Band(2), WarrenView.ShirkColor), "A shirking goblin that craves has lost its band.");
 	}
 
 	// The "zzz" lies inside its tile, from the left edge of the goblin marker.

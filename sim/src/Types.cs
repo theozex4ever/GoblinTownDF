@@ -75,4 +75,5 @@ public enum GoblinTask : byte
 	Taking,
 	Bringing,
 	Brewing,
+	Shirking,
 }

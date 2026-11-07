@@ -29,6 +29,8 @@ public partial class WarrenView : Node2D
 	public static readonly Color FaintGoblinColor = new(0.35f, 0.75f, 0.30f, 0.35f);
 	// A Starving goblin's body, tinted from healthy green to a sickly yellow.
 	public static readonly Color StarvingGoblinColor = new(0.78f, 0.72f, 0.22f);
+	// A shirking goblin wears a lilac ring and a lilac band across its body.
+	public static readonly Color ShirkColor = new(0.80f, 0.45f, 0.95f);
 	public const int PipSize = 4;
 	static readonly Color LooseDirtColor = new(0.55f, 0.36f, 0.18f);
 	static readonly Color GrubColor = new(0.93f, 0.52f, 0.48f);
@@ -137,11 +139,18 @@ public partial class WarrenView : Node2D
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			var dz = s.GoblinZ[g] - ViewZ;
+			if (dz == 0 && (GoblinTask)s.GoblinTask[g] == GoblinTask.Shirking)
+				DrawRect(MarkerRect(s, g, dz).Grow(2), ShirkColor);
 			if (dz == 0)
 				DrawRect(MarkerRect(s, g, dz).Grow(1), GoblinOutlineColor);
 			if (Math.Abs(dz) <= 1)
 				DrawRect(MarkerRect(s, g, dz), dz == 0 ? BodyColor(s, g) : FaintGoblinColor);
 		}
+
+		// A shirker carries nothing, so its band has the body to itself; the pip and a hovering cursor still draw over it.
+		for (var g = 0; g < s.GoblinCount; g++)
+			if (s.GoblinZ[g] == ViewZ && (GoblinTask)s.GoblinTask[g] == GoblinTask.Shirking)
+				DrawRect(ShirkBandRect(MarkerRect(s, g, 0)), ShirkColor);
 
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
@@ -204,6 +213,9 @@ public partial class WarrenView : Node2D
 
 	/// <summary>The pip of a craving goblin, in the top right corner of its <paramref name="marker"/>, half outside it.</summary>
 	public static Rect2 PipRect(Rect2 marker) => new(marker.End.X - PipSize + 1, marker.Position.Y - 1, PipSize, PipSize);
+
+	/// <summary>The band across the middle of a shirking goblin's <paramref name="marker"/>: its full width and 3 px tall, clear of the pip in the top right corner.</summary>
+	public static Rect2 ShirkBandRect(Rect2 marker) => new(marker.Position.X, marker.Position.Y + (int)marker.Size.Y / 2 - 1, marker.Size.X, 3);
 
 	/// <summary>Where the "zzz" of a sleeping goblin starts: along the lower part of its <paramref name="marker"/>, clear of the pip in the top right corner.</summary>
 	public static Vector2 ZzzBaseline(Rect2 marker) => marker.Position + new Vector2(0, ZzzFontSize + 2);

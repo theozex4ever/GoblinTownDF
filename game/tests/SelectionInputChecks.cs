@@ -585,6 +585,26 @@ public partial class SelectionInputChecks : Node
 				Move(main, view, s.GoblinX[2], s.GoblinY[2]);
 				Require(main.Inspection.Title == $"{GoblinNames.Starting[2]}, Grunt", $"A shared tile shows \"{main.Inspection.Title}\", not goblin 2's name.");
 				var shared = (X: s.GoblinX[2], Y: s.GoblinY[2]);
+				// Every goblin on the tile is listed in index order, each with its own name, Needs, Chaos and activity.
+				(s.GoblinChaos[2], s.GoblinChaos[6]) = (12, 81);
+				(s.GoblinGrub[6], s.GoblinGrog[6], s.GoblinSleep[6]) = (60, 70, 80);
+				Move(main, view, shared.X, shared.Y);
+				var listed = main.Inspection.Goblins;
+				Require(listed.Count == 2 && listed[0].Title == $"{GoblinNames.Starting[2]}, Grunt" && listed[1].Title == $"{GoblinNames.Starting[6]}, Grunt",
+					$"A shared tile lists [{string.Join("; ", listed.Select(l => l.Title))}], not goblins 2 and 6 in order.");
+				Require(listed[0].Chaos == 12 && listed[1].Chaos == 81, $"The listed Chaos is {listed[0].Chaos} and {listed[1].Chaos}.");
+				Require(string.Join(" ", listed[1].Meters.Select(m => $"{m.Need} {m.Value}")) == "Grub 60 Grog 70 Sleep 80", "The second listed goblin shows the wrong Needs.");
+				Require(listed[0].Doing == Inspector.TaskWords(s, 2) && listed[1].Doing == Inspector.TaskWords(s, 6), "The listed activities are not the goblins' own.");
+				Require(!listed[0].Shirking && !listed[1].Shirking, "A goblin that works is shown as shirking.");
+				// A shirker is marked, and a Pile under the goblins does not hide them.
+				GoblinTasks.BeginShirk(s, 6, dropTile: -1);
+				sim.Apply(new PaintPile(0, shared.X, shared.Y, shared.X, shared.Y));
+				Move(main, view, shared.X, shared.Y);
+				listed = main.Inspection.Goblins;
+				Require(listed.Count == 2 && !listed[0].Shirking && listed[1].Shirking && listed[1].Doing.StartsWith("Shirking"),
+					$"The shirker is not marked: \"{listed[1].Doing}\" shirking={listed[1].Shirking}.");
+				Require(Inspector.Inspect(s, s.TileIndex(shared.X, shared.Y, 0)).Goblins.Count == 2, "A Pile hid the goblins on it.");
+				sim.Apply(new RemovePile(0, shared.X, shared.Y, shared.X, shared.Y));
 				s.GoblinX[2] += 3;
 				Move(main, view, shared.X, shared.Y);
 				Require(main.Inspection.Title == $"{GoblinNames.Starting[6]}, Grunt", $"The goblin left alone shows \"{main.Inspection.Title}\".");
@@ -659,16 +679,18 @@ public partial class SelectionInputChecks : Node
 				while ((GoblinTask)s.GoblinTask[0] != GoblinTask.Carrying && frames++ < 100)
 					main._Process(0.1);
 				Require(frames < 100, "The Grunt never picked the dirt up.");
-				// The last slot of the Pile goes to some other hauler's drop, so the Grunt waits holding the dirt, and its Grog drains twice as fast.
+				// The last slot of the Pile goes to some other hauler's drop, so the Grunt waits holding the dirt: its Grog drains at the ordinary rate, and its Chaos rises instead.
 				s.AddItems(pile, Goblins.Sim.Material.Dirt, 1);
 				sim.RecheckReachability();
 				Require(s.GoblinCarry[0] == (byte)Goblins.Sim.Material.Dirt && NeedsSystem.IsWaitingCarrier(s, 0),
 					"The Grunt did not wait holding the dirt.");
 				var grog = s.GoblinGrog[0];
-				for (var frame = 0; frame < 35; frame++)
+				var chaos = s.GoblinChaos[0];
+				for (var frame = 0; frame < 40; frame++)
 					main._Process(0.1);
-				Require((GoblinTask)s.GoblinTask[0] == GoblinTask.Carrying && s.GoblinGrog[0] == grog - 2,
-					$"The waiting Grunt's Grog went from {grog} to {s.GoblinGrog[0]} in 35 ticks, not by 2.");
+				Require((GoblinTask)s.GoblinTask[0] == GoblinTask.Carrying && s.GoblinGrog[0] == grog - 1,
+					$"The waiting Grunt's Grog went from {grog} to {s.GoblinGrog[0]} in 40 ticks, not by 1.");
+				Require(s.GoblinChaos[0] > chaos, $"The waiting Grunt's Chaos stayed at {s.GoblinChaos[0]}.");
 
 				frames = 0;
 				while ((GoblinTask)s.GoblinTask[0] != GoblinTask.SeekingGrog && frames++ < 400)

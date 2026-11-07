@@ -181,10 +181,11 @@ public sealed class JobSystem
 	{
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
-			// A Craving comes before any Job, and before a Starving goblin sits a tick out. Eating, drinking and sleeping are not slowed.
+			// A Craving comes before any Job, and before a Starving goblin sits a tick out. Eating, drinking, sleeping and shirking are not slowed.
 			TryCraving(s, g);
+			TryActOut(s, g, events);
 			var task = (GoblinTask)s.GoblinTask[g];
-			if (!GoblinTasks.IsConsumingTask(task) && task != GoblinTask.Sleeping && !NeedRules.ActsThisTick(s.GoblinGrub[g], s.Tick))
+			if (!GoblinTasks.IsConsumingTask(task) && task != GoblinTask.Sleeping && task != GoblinTask.Shirking && !NeedRules.ActsThisTick(s.GoblinGrub[g], s.Tick))
 				continue;
 
 			// An idle or wandering goblin takes any Job it can reach; with none, it wanders on.
@@ -242,7 +243,11 @@ public sealed class JobSystem
 					break;
 				case GoblinTask.Eating:
 				case GoblinTask.Drinking:
-					Consume(s, g);
+					Consume(s, g, events);
+					break;
+				case GoblinTask.Shirking:
+					if (GoblinTasks.ShirkTick(s, g))
+						GoblinTasks.FinishShirk(s, g);
 					break;
 				case GoblinTask.SeekingHeap:
 					SeekHeap(s, g);
@@ -281,6 +286,28 @@ public sealed class JobSystem
 				return;
 			passedOver |= NeedRules.Bit(need);
 		}
+	}
+
+	// A goblin with enough Chaos and no cooldown stops what it is doing and shirks, once its Craving has had its chance: this runs after
+	// TryCraving, so a goblin that set out to meet a Need is satisfying one and is not eligible, and Collapse (which a goblin that can set down its
+	// unit always makes) has already put it to sleep. Anything carried is put down by the same legal-drop rule as for a Craving; with no legal place the
+	// goblin keeps its unit and its work, and looks again next tick. Shirking is the only act so far, so nothing is drawn from the Rng to choose it;
+	// once there are several, the choice among those eligible is drawn from s.Rng.
+	void TryActOut(SimState s, int goblin, List<SimEvent> events)
+	{
+		if (!ChaosSystem.CanActOut(s, goblin))
+			return;
+
+		var carried = (Material)s.GoblinCarry[goblin];
+		var dropTile = -1;
+		if (carried != Material.None && !TryFindDropTile(s, goblin, carried, out dropTile))
+			return;
+
+		GoblinTasks.BeginShirk(s, goblin, dropTile);
+		// The unit put down is a new loose Haul, or has taken a Pile tile's last slot of its material.
+		if (carried != Material.None)
+			RecheckReachability(s);
+		events.Add(new ShirkStarted(goblin));
 	}
 
 	// True when the goblin set out to meet the Need: for a unit of Grub or Grog, or for a bed (the nearest Heap, or the floor under it).
@@ -412,7 +439,7 @@ public sealed class JobSystem
 
 	// The unit is consumed as the meal or drink ends, so when two goblins take the last one the first to finish has it. Settle
 	// frees the other, which finds it gone and looks again. A Pile tile that was full of the material has room again.
-	void Consume(SimState s, int goblin)
+	void Consume(SimState s, int goblin, List<SimEvent> events)
 	{
 		if (!GoblinTasks.EatTick(s, goblin))
 			return;
@@ -425,7 +452,8 @@ public sealed class JobSystem
 			GoblinTasks.FinishEating(s, goblin);
 		else
 			GoblinTasks.FinishDrinking(s, goblin);
-		RoomRules.Settle(s);
+		// A Haul this meal cancels annoys the hauler it displaces; no other cancellation does.
+		RoomRules.Settle(s, events, consumedTile: tile);
 		if (wasFull)
 			RecheckReachability(s);
 	}

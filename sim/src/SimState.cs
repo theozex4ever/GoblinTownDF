@@ -118,6 +118,18 @@ public sealed class SimState
 	/// </summary>
 	public byte[] GoblinSleep { get; set; } = [];
 
+	/// <summary>
+	/// Chaos per goblin, 0 to <see cref="ChaosRules.Max"/>: accumulated frustration that <see cref="ChaosSystem"/> raises from unmet Needs,
+	/// waiting for storage and lost Hauls, and lowers when the goblin is content. Empty until a world fills it, so a save written before
+	/// Chaos existed is rejected rather than read as every goblin calm.
+	/// </summary>
+	public byte[] GoblinChaos { get; set; } = [];
+	/// <summary>
+	/// Ticks left before a goblin may act out again, 0 when it may: set to <see cref="ChaosRules.CooldownTicks"/> when an act ends, whether it
+	/// finished or was interrupted, and counted down by <see cref="ChaosSystem"/>. Empty until a world fills it, like <see cref="GoblinChaos"/>.
+	/// </summary>
+	public ushort[] GoblinActCooldown { get; set; } = [];
+
 	/// <summary>The per-goblin meter of a Need.</summary>
 	public byte[] MeterOf(Need need) => need switch
 	{

@@ -7,6 +7,12 @@ namespace AThousandGoblinsDeep;
 public readonly record struct MeterReading(Need Need, int Value);
 
 /// <summary>
+/// One goblin on an inspected tile: its <see cref="Title"/> (stable name and Role), what it is <see cref="Doing"/> in plain words, its meters, its
+/// <see cref="Chaos"/>, whether it is <see cref="Shirking"/> (the map wears a marker for the same), and a <see cref="Note"/> in the goblin voice.
+/// </summary>
+public readonly record struct GoblinReading(string Title, string Doing, IReadOnlyList<MeterReading> Meters, int Chaos, bool Shirking, string Note);
+
+/// <summary>
 /// One material's count on an inspected tile. <see cref="Full"/> marks a Pile count at capacity; <see cref="Waiting"/> marks
 /// a loose material whose Haul waits for a Pile with room it can be carried to.
 /// </summary>
@@ -15,36 +21,51 @@ public readonly record struct StockLine(Material Material, int Count, bool Full,
 /// <summary>
 /// What the Inspector shows: a <see cref="Title"/> (a goblin's name and Role, or what the tile is), what it is <see cref="Doing"/> (a Task in
 /// plain words, or what is marked on the tile), the goblin's meters, the tile's stock, and a <see cref="Note"/> in the goblin voice.
-/// An empty Title means nothing is under the cursor.
+/// An empty Title means nothing is under the cursor. When goblins stand on the tile, <see cref="Goblins"/> lists every one of them in index order, and
+/// Title, Doing, Meters and Note describe the first, which a caller that wants a single goblin can use.
 /// </summary>
-public sealed record Inspection(string Title, string Doing, IReadOnlyList<MeterReading> Meters, IReadOnlyList<StockLine> Stock, string Note)
+public sealed record Inspection(string Title, string Doing, IReadOnlyList<MeterReading> Meters, IReadOnlyList<StockLine> Stock, string Note, IReadOnlyList<GoblinReading> Goblins)
 {
+	public Inspection(string title, string doing, IReadOnlyList<MeterReading> meters, IReadOnlyList<StockLine> stock, string note)
+		: this(title, doing, meters, stock, note, [])
+	{
+	}
+
 	public static readonly Inspection Nothing = new("", "", [], [], "");
 }
 
 /// <summary>Reads what is on one tile for the Inspector. Reads sim state; never writes it.</summary>
 public static class Inspector
 {
-	/// <summary>The goblin on the tile, the lowest-numbered if several, ahead of anything else there; else the tile itself.</summary>
+	/// <summary>Every goblin on the tile, in index order, ahead of anything else there; else the tile itself.</summary>
 	public static Inspection Inspect(SimState s, int tile)
 	{
-		var goblin = GoblinHover.GoblinAt(s, tile);
-		return goblin >= 0 ? InspectGoblin(s, goblin) : InspectTile(s, tile);
+		var goblins = GoblinHover.GoblinsAt(s, tile);
+		if (goblins.Count == 0)
+			return InspectTile(s, tile);
+
+		var readings = new GoblinReading[goblins.Count];
+		for (var i = 0; i < readings.Length; i++)
+			readings[i] = ReadGoblin(s, goblins[i]);
+		var first = readings[0];
+		return new Inspection(first.Title, first.Doing, first.Meters, [], first.Note, readings);
 	}
 
-	static Inspection InspectGoblin(SimState s, int goblin)
+	static GoblinReading ReadGoblin(SimState s, int goblin)
 	{
 		var grub = s.GoblinGrub[goblin];
 		var grog = s.GoblinGrog[goblin];
 		var sleep = s.GoblinSleep[goblin];
 		var craving = NeedRules.LeadingCraving(grub, grog, sleep);
+		var shirking = (GoblinTask)s.GoblinTask[goblin] == GoblinTask.Shirking;
 		var mood = (GoblinTask)s.GoblinTask[goblin] == GoblinTask.Sleeping ? "Fast asleep. Hunger and thirst may take a number."
+			: shirking ? "Has withdrawn labour. The principle is very important, and so is the floor."
 			: NeedRules.IsStarving(grub) ? "Starving, and bearing it at half speed with great dignity."
 			: craving == Need.Sleep ? "Thinking about nothing but a lie-down, on anything flat."
 			: craving != Need.None ? $"Thinking about nothing but {craving}."
 			: "At peace with the world, and with lunch.";
 		MeterReading[] meters = [new(Need.Grub, grub), new(Need.Grog, grog), new(Need.Sleep, sleep)];
-		return new Inspection($"{GoblinNames.For(goblin)}, {(Role)s.GoblinRole[goblin]}", TaskWords(s, goblin), meters, [], mood);
+		return new GoblinReading($"{GoblinNames.For(goblin)}, {(Role)s.GoblinRole[goblin]}", TaskWords(s, goblin), meters, s.GoblinChaos[goblin], shirking, mood);
 	}
 
 	/// <summary>A goblin's Task in plain words, naming what it carries or where it is headed.</summary>
@@ -76,6 +97,7 @@ public static class Inspector
 			GoblinTask.Taking => "Taking Fungus for brewing",
 			GoblinTask.Bringing => "Taking Fungus to the Brewery",
 			GoblinTask.Brewing => "Brewing",
+			GoblinTask.Shirking => "Shirking, on the spot, in protest",
 			var task => task.ToString(),
 		};
 	}

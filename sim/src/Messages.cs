@@ -59,3 +59,9 @@ public sealed record SpeedChanged(int Speed) : SimEvent;
 
 /// <summary>A tile was dug out. It carries the material the tile is made of; P2 turns that into hauling.</summary>
 public sealed record TileDug(int X, int Y, int Z, Material Material) : SimEvent;
+
+/// <summary>A goblin began to shirk: it abandoned its Job to loaf on the spot. A transient fact for the view; nothing is logged.</summary>
+public sealed record ShirkStarted(int Goblin) : SimEvent;
+
+/// <summary>Another goblin consumed supplies and so cancelled this goblin's claimed Haul, which annoyed it. A transient fact for the view; nothing is logged.</summary>
+public sealed record HaulCancelled(int Goblin) : SimEvent;
