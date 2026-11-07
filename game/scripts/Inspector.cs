@@ -13,7 +13,7 @@ public readonly record struct MeterReading(Need Need, int Value);
 public readonly record struct StockLine(Material Material, int Count, bool Full, bool Waiting);
 
 /// <summary>
-/// What the Inspector shows: a <see cref="Title"/> (a goblin's Role or what the tile is), what it is <see cref="Doing"/> (a Task in
+/// What the Inspector shows: a <see cref="Title"/> (a goblin's name and Role, or what the tile is), what it is <see cref="Doing"/> (a Task in
 /// plain words, or what is marked on the tile), the goblin's meters, the tile's stock, and a <see cref="Note"/> in the goblin voice.
 /// An empty Title means nothing is under the cursor.
 /// </summary>
@@ -44,7 +44,7 @@ public static class Inspector
 			: craving != Need.None ? $"Thinking about nothing but {craving}."
 			: "At peace with the world, and with lunch.";
 		MeterReading[] meters = [new(Need.Grub, grub), new(Need.Grog, grog), new(Need.Sleep, sleep)];
-		return new Inspection(((Role)s.GoblinRole[goblin]).ToString(), TaskWords(s, goblin), meters, [], mood);
+		return new Inspection($"{GoblinNames.For(goblin)}, {(Role)s.GoblinRole[goblin]}", TaskWords(s, goblin), meters, [], mood);
 	}
 
 	/// <summary>A goblin's Task in plain words, naming what it carries or where it is headed.</summary>
