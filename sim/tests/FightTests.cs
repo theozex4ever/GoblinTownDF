@@ -650,6 +650,161 @@ public class FightTests
 		Assert.Equal(0, s.GoblinChaos[1]);
 	}
 
+	// ---- A Need that arises on the scuffle's last tick
+
+	// A scuffle that begins on tick endTick - 30 and so reaches its last tick, the tick that would end it, on endTick. The sim's tick counter is
+	// moved, not the Needs: each Need drains on its own fixed ticks, so the boundary is reached by running the sim.
+	static Simulation ScuffleEndingAt(long endTick, int instigator, int victim)
+	{
+		var sim = Scuffle(instigator, victim);
+		sim.State.Tick = endTick - 31;
+		return sim;
+	}
+
+	public enum LastTickNeed
+	{
+		Sleep,
+		Grub,
+		Grog,
+		Collapse,
+	}
+
+	// The tick each Need's meter is taken below its threshold on by the drain itself (Collapse is made by the test's own hand, on the last tick too).
+	static long LastTickOf(LastTickNeed need) => need switch
+	{
+		LastTickNeed.Grub => 50,
+		LastTickNeed.Grog => 70,
+		_ => 45,
+	};
+
+	// Gives the goblin a meter that the drain on the scuffle's last tick takes below the Craving threshold, with a unit within reach to meet it.
+	static void ArmLastTickNeed(Simulation sim, LastTickNeed need, int craver)
+	{
+		var s = sim.State;
+		s.AddItems(At(s, 20, 22), Material.Grub, 1);
+		s.AddItems(At(s, 20, 22), Material.Grog, 1);
+		sim.RecheckReachability();
+		switch (need)
+		{
+			case LastTickNeed.Sleep:
+				s.GoblinSleep[craver] = 30; // Sleep drains on tick 45, and on no other in the scuffle
+				break;
+			case LastTickNeed.Grub:
+				s.GoblinGrub[craver] = 31; // Grub drains on ticks 25 and 50: 30 for the scuffle, 29 on its last tick
+				break;
+			case LastTickNeed.Grog:
+				s.GoblinGrog[craver] = 30; // Grog drains on tick 70, and on no other in the scuffle
+				break;
+		}
+	}
+
+	[Theory]
+	[InlineData(0, true, LastTickNeed.Sleep)]
+	[InlineData(0, false, LastTickNeed.Sleep)]
+	[InlineData(1, true, LastTickNeed.Sleep)]
+	[InlineData(1, false, LastTickNeed.Sleep)]
+	[InlineData(0, true, LastTickNeed.Grub)]
+	[InlineData(1, false, LastTickNeed.Grub)]
+	[InlineData(0, false, LastTickNeed.Grog)]
+	[InlineData(1, true, LastTickNeed.Grog)]
+	[InlineData(0, true, LastTickNeed.Collapse)]
+	[InlineData(0, false, LastTickNeed.Collapse)]
+	[InlineData(1, true, LastTickNeed.Collapse)]
+	[InlineData(1, false, LastTickNeed.Collapse)]
+	public void A_Need_that_arises_on_the_last_tick_of_a_scuffle_ends_it_for_both_with_no_relief_and_no_recovery(int instigator, bool instigatorCraves, LastTickNeed need)
+	{
+		var victim = 1 - instigator;
+		var craver = instigatorCraves ? instigator : victim;
+		var endTick = LastTickOf(need);
+		var sim = ScuffleEndingAt(endTick, instigator, victim);
+		ArmLastTickNeed(sim, need, craver);
+		var s = sim.State;
+
+		// The scuffle is on, with one tick still to run, and the Need has not yet arisen.
+		RunTicks(sim, 30);
+		Assert.Equal(endTick - 1, s.Tick);
+		Assert.Equal(GoblinTask.Scuffling, TaskOf(s, instigator));
+		Assert.Equal(GoblinTask.Scuffled, TaskOf(s, victim));
+		Assert.Equal(1, s.GoblinFightTicks[instigator]);
+		Assert.Equal(1, s.GoblinFightTicks[victim]);
+		if (need == LastTickNeed.Collapse)
+			s.GoblinSleep[craver] = 0;
+		else
+			Assert.False(NeedRules.IsCraving(need switch { LastTickNeed.Sleep => s.GoblinSleep[craver], LastTickNeed.Grub => s.GoblinGrub[craver], _ => s.GoblinGrog[craver] }));
+		var victimChaos = s.GoblinChaos[victim];
+		var instigatorChaos = s.GoblinChaos[instigator];
+		// The +15 has faded a point on each content interval since, and nowhere else.
+		Assert.InRange(victimChaos, ChaosRules.VictimGain - 4, ChaosRules.VictimGain);
+
+		// The save taken on that last-but-one tick must carry on exactly as the live run does.
+		var restored = Restore(sim);
+		RunTicks(sim, 1);
+		RunTicks(restored, 1);
+		Assert.Equal(SimJson.Serialize(sim), SimJson.Serialize(restored));
+
+		foreach (var run in new[] { sim, restored })
+		{
+			var r = run.State;
+			var expected = need switch
+			{
+				LastTickNeed.Grub => GoblinTask.Seeking,
+				LastTickNeed.Grog => GoblinTask.SeekingGrog,
+				_ => GoblinTask.Sleeping,
+			};
+			EndsForBoth(run, craver, 1 - craver, expected);
+			// No relief for the instigator, none of the victim's +15 taken back, and no recovery for anyone.
+			Assert.InRange(r.GoblinChaos[instigator], instigatorChaos - 1, 100);
+			Assert.InRange(r.GoblinChaos[victim], victimChaos - 1, 100);
+			RunTicks(run, 150);
+			Assert.DoesNotContain(Enumerable.Range(0, 2), g => TaskOf(r, g) == GoblinTask.Recovering);
+		}
+	}
+
+	[Theory]
+	[InlineData(0)]
+	[InlineData(1)]
+	public void Both_fighters_in_Need_on_the_last_tick_of_a_scuffle_each_set_out_to_meet_it_with_no_relief_and_no_recovery(int instigator)
+	{
+		var victim = 1 - instigator;
+		var sim = ScuffleEndingAt(45, instigator, victim);
+		var s = sim.State;
+		s.GoblinSleep[0] = 30;
+		s.GoblinSleep[1] = 30;
+		RunTicks(sim, 30);
+		var instigatorChaos = s.GoblinChaos[instigator];
+
+		RunTicks(sim, 1);
+
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 0));
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 1));
+		Assert.Equal((ChaosRules.CooldownTicks, ChaosRules.CooldownTicks), (s.GoblinActCooldown[0], s.GoblinActCooldown[1]));
+		Assert.InRange(s.GoblinChaos[instigator], instigatorChaos - 1, 100);
+	}
+
+	[Theory]
+	[InlineData(0)]
+	[InlineData(1)]
+	public void A_Craving_nothing_can_meet_on_the_last_tick_of_a_scuffle_does_not_stop_it_finishing_with_relief_and_recovery(int instigator)
+	{
+		var victim = 1 - instigator;
+		var sim = ScuffleEndingAt(50, instigator, victim);
+		var s = sim.State;
+		// No Grub anywhere: the Craving that arises on tick 50 cannot be met.
+		s.GoblinGrub[victim] = 31;
+		s.GoblinGrub[instigator] = 31;
+		RunTicks(sim, 30);
+		var instigatorChaos = s.GoblinChaos[instigator];
+		var victimChaos = s.GoblinChaos[victim];
+
+		RunTicks(sim, 1);
+
+		Assert.Equal(GoblinTask.Recovering, TaskOf(s, instigator));
+		Assert.Equal(GoblinTask.Recovering, TaskOf(s, victim));
+		Assert.InRange(s.GoblinChaos[instigator], 0, instigatorChaos - ChaosRules.ActRelief + 5);
+		Assert.True(s.GoblinChaos[victim] >= victimChaos - 1);
+		Assert.Equal((ChaosRules.RecoveryTicks, ChaosRules.RecoveryTicks), (s.GoblinFightTicks[0], s.GoblinFightTicks[1]));
+	}
+
 	// ---- Recovery interrupted
 
 	[Fact]

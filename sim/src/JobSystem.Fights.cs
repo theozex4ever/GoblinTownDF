@@ -7,7 +7,9 @@ public sealed partial class JobSystem
 	readonly bool[] _eligible = new bool[SimState.MaxGoblins];
 
 	// A fight stage ends on the tick its clock reaches 0: a pursuit that found no one, a scuffle that ran its course, a rest that is over. A scuffle is ended
-	// from its instigator, which ends it for the victim too, so the victim's own turn here is a no-op.
+	// from its instigator, which ends it for the victim too, so the victim's own turn here is a no-op. Needs come first: a Craving that can be met, or a Collapse,
+	// that has arisen by a scuffle's last tick ends it for both with no relief and no recovery, as it would a tick earlier, so both fighters get their chance at
+	// it, in index order, before the scuffle is allowed to have run its course.
 	void EndDueFights(SimState s)
 	{
 		for (var g = 0; g < s.GoblinCount; g++)
@@ -20,7 +22,12 @@ public sealed partial class JobSystem
 					GoblinTasks.FailPursuit(s, g);
 					break;
 				case GoblinTask.Scuffling:
-					GoblinTasks.FinishScuffle(s, g);
+					var partner = s.GoblinFightPartner[g];
+					TryCraving(s, Math.Min(g, partner));
+					TryCraving(s, Math.Max(g, partner));
+					// A Need met by either one has already ended the scuffle for both.
+					if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Scuffling)
+						GoblinTasks.FinishScuffle(s, g);
 					break;
 				case GoblinTask.Recovering:
 					GoblinTasks.FinishRecovery(s, g);
