@@ -1,0 +1,116 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Godot;
+using Goblins.Sim;
+
+namespace AThousandGoblinsDeep;
+
+/// <summary>Scripted demonstration, not a check: runs the real Main, unaided, at 4x until a fight happens, and captures each stage with the pointer on the fighter. Engine-local events only.</summary>
+public partial class FightDemo : Node
+{
+	SubViewport _viewport = null!;
+	Main _main = null!;
+	string _dir = "";
+	readonly List<string> _log = [];
+
+	void Log(string line) { _log.Add(line); GD.Print(line); }
+
+	async Task Frames(int n) { for (var i = 0; i < n; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+
+	void Motion(Vector2 at)
+	{
+		using var input = new InputEventMouseMotion { Position = at, GlobalPosition = at };
+		_viewport.PushInput(input, inLocalCoords: true);
+	}
+
+	async Task Capture(string name)
+	{
+		await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+		using var image = _viewport.GetTexture().GetImage();
+		image.SavePng(System.IO.Path.Combine(_dir, name + ".png"));
+	}
+
+	public override async void _Ready()
+	{
+		try
+		{
+			_dir = OS.GetEnvironment("GOBLINTOWN_CAPTURE_DIR");
+			if (_dir == "") _dir = "<scratch>";
+			System.IO.Directory.CreateDirectory(_dir);
+			_viewport = new SubViewport { Size = new Vector2I(1280, 720), RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+			AddChild(_viewport);
+			_main = new Main();
+			_viewport.AddChild(_main);
+			await Frames(4);
+			var sim = _main.View.Sim!;
+			var s = sim.State;
+			Log($"seed {s.Seed}; sim speed 4x; no orders, no extra supplies, no debug controls");
+			sim.Apply(new SetSpeed(4));
+
+			var last = new byte[s.GoblinCount];
+			var stage = 0;
+			var instigator = -1;
+			var victim = -1;
+			var started = Time.GetTicksMsec();
+			var shirks = 0;
+			var chaosAtContact = 0;
+			while (stage < 4 && Time.GetTicksMsec() - started < 600_000)
+			{
+				await Frames(1);
+				for (var g = 0; g < s.GoblinCount; g++)
+				{
+					if (s.GoblinTask[g] == last[g])
+						continue;
+					var task = (GoblinTask)s.GoblinTask[g];
+					if (task == GoblinTask.Shirking) shirks++;
+					if (GoblinTasks.IsFightTask(task) || (GoblinTask)last[g] is GoblinTask.Pursuing or GoblinTask.Scuffling or GoblinTask.Scuffled or GoblinTask.Recovering)
+						Log($"tick {s.Tick}: {GoblinNames.For(g)} {(GoblinTask)last[g]} -> {task} (chaos {s.GoblinChaos[g]}, cooldown {s.GoblinActCooldown[g]}, partner {(s.GoblinFightPartner[g] < 0 ? "-" : GoblinNames.For(s.GoblinFightPartner[g]))})");
+					last[g] = s.GoblinTask[g];
+				}
+
+				var want = stage switch { 0 => GoblinTask.Pursuing, 1 => GoblinTask.Scuffling, 2 => GoblinTask.Recovering, _ => GoblinTask.Idle };
+				if (stage < 3)
+				{
+					var g = Enumerable.Range(0, s.GoblinCount).FirstOrDefault(i => (GoblinTask)s.GoblinTask[i] == want, -1);
+					if (g < 0) continue;
+					if (stage == 0) { instigator = g; victim = s.GoblinFightPartner[g]; Log($"victim chaos before contact: {s.GoblinChaos[victim]}"); }
+					if (stage == 1) { chaosAtContact = s.GoblinChaos[victim]; Log($"scuffle: victim chaos {chaosAtContact}, instigator chaos {s.GoblinChaos[instigator]}"); }
+					if (stage == 2) Log($"recovery: instigator chaos {s.GoblinChaos[instigator]} (relief taken), victim chaos {s.GoblinChaos[victim]}");
+					sim.Apply(new SetPaused(true));
+					var who = stage == 2 ? instigator : instigator;
+					Motion(_main.View.GlobalPosition + new Vector2((s.GoblinX[who] + 0.5f) * WarrenView.CellSize, (s.GoblinY[who] + 0.5f) * WarrenView.CellSize));
+					await Frames(4);
+					await Capture($"{stage + 1}-{want}".ToLowerInvariant());
+					Log($"captured {want} at tick {s.Tick}; inspector says: {string.Join(" | ", _main.Inspection.Goblins.Select(r => r.Title + " - " + r.Doing))}");
+					if (stage == 1)
+					{
+						Motion(_main.View.GlobalPosition + new Vector2((s.GoblinX[victim] + 0.5f) * WarrenView.CellSize, (s.GoblinY[victim] + 0.5f) * WarrenView.CellSize));
+						await Frames(4);
+						await Capture("2b-victim");
+						Log($"victim inspector: {string.Join(" | ", _main.Inspection.Goblins.Select(r => r.Title + " - " + r.Doing))}");
+					}
+					sim.Apply(new SetPaused(false));
+					stage++;
+				}
+				else if (instigator >= 0 && (GoblinTask)s.GoblinTask[instigator] != GoblinTask.Recovering && (GoblinTask)s.GoblinTask[victim] != GoblinTask.Recovering)
+				{
+					Log($"recovered: instigator {GoblinNames.For(instigator)} now {(GoblinTask)s.GoblinTask[instigator]} chaos {s.GoblinChaos[instigator]} cooldown {s.GoblinActCooldown[instigator]}; victim {GoblinNames.For(victim)} now {(GoblinTask)s.GoblinTask[victim]} chaos {s.GoblinChaos[victim]} cooldown {s.GoblinActCooldown[victim]}");
+					sim.Apply(new SetPaused(true));
+					await Frames(4);
+					await Capture("4-after-recovery");
+					stage++;
+				}
+			}
+			Log($"finished at tick {s.Tick}, stage {stage}, shirks seen {shirks}");
+			System.IO.File.WriteAllLines(System.IO.Path.Combine(_dir, "rawlog.txt"), _log);
+			GetTree().Quit(stage >= 4 ? 0 : 1);
+		}
+		catch (Exception error)
+		{
+			GD.PushError(error.ToString());
+			GetTree().Quit(1);
+		}
+	}
+}

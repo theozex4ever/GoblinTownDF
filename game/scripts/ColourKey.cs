@@ -33,6 +33,9 @@ public partial class ColourKey : VBoxContainer
 		Row("Pip: craving Grub", WarrenView.NeedColor(Need.Grub));
 		Row("Pip: craving Grog", WarrenView.NeedColor(Need.Grog));
 		Row("Pip: craving a lie-down", WarrenView.NeedColor(Need.Sleep));
+		Row("Ring: shirking", WarrenView.ShirkColor, outline: true);
+		Row("Ring: in a fight (crossed mid-scuffle)", WarrenView.FightColor, outline: true);
+		Row("Ring: getting over a fight", WarrenView.FightRestColor, outline: true);
 		MaterialRow();
 		Row("Loose, no Pile has room for it", WarrenView.WaitingHaulColor);
 		Row("A full Pile count: thirty", WarrenView.FullCountChipColor);

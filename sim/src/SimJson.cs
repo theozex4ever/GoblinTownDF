@@ -92,7 +92,9 @@ public static class SimJson
 			&& s.GoblinGrog is { Length: SimState.MaxGoblins }
 			&& s.GoblinSleep is { Length: SimState.MaxGoblins }
 			&& s.GoblinChaos is { Length: SimState.MaxGoblins }
-			&& s.GoblinActCooldown is { Length: SimState.MaxGoblins },
+			&& s.GoblinActCooldown is { Length: SimState.MaxGoblins }
+			&& s.GoblinFightPartner is { Length: SimState.MaxGoblins }
+			&& s.GoblinFightTicks is { Length: SimState.MaxGoblins },
 			$"Goblin arrays must hold {SimState.MaxGoblins} entries.");
 		for (var g = 0; g < s.GoblinCount; g++)
 		{

@@ -65,3 +65,6 @@ public sealed record ShirkStarted(int Goblin) : SimEvent;
 
 /// <summary>Another goblin consumed supplies and so cancelled this goblin's claimed Haul, which annoyed it. A transient fact for the view; nothing is logged.</summary>
 public sealed record HaulCancelled(int Goblin) : SimEvent;
+
+/// <summary>A goblin made contact with its target and a scuffle began: the instigator and the victim, by goblin index. A transient fact for the view; nothing is logged.</summary>
+public sealed record ScuffleStarted(int Instigator, int Victim) : SimEvent;

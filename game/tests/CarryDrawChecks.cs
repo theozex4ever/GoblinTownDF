@@ -28,10 +28,11 @@ public partial class CarryDrawChecks : Node
 			PipLayoutCheck();
 			ZzzLayoutCheck();
 			ShirkLayoutCheck();
+			FightLayoutCheck();
 
 			if (DisplayServer.GetName() == "headless")
 			{
-				GD.Print("Carry draw checks: layout checks passed; the 11 pixel scenarios were SKIPPED, not passed: no renderer under --headless.");
+				GD.Print("Carry draw checks: layout checks passed; the 12 pixel scenarios were SKIPPED, not passed: no renderer under --headless.");
 				GetTree().Quit();
 				return;
 			}
@@ -47,7 +48,8 @@ public partial class CarryDrawChecks : Node
 			await FungusFarmTintCheck();
 			await BreweryTintCheck();
 			await ShirkMarkCheck();
-			GD.Print("Carry draw checks passed (layout, colours, count order, 11 pixel scenarios).");
+			await FightMarkCheck();
+			GD.Print("Carry draw checks passed (layout, colours, count order, 12 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -346,6 +348,58 @@ public partial class CarryDrawChecks : Node
 		var pip = WarrenView.PipRect(Marker(2)).GetCenter();
 		Require(IsNear(image.GetPixel((int)pip.X, (int)pip.Y), WarrenView.NeedColor(Need.Grub)), "A shirking goblin that craves Grub has lost its pip.");
 		Require(IsNear(Band(2), WarrenView.ShirkColor), "A shirking goblin that craves has lost its band.");
+	}
+
+	// The fight ring and cross lie inside their tile, and the fight colours are told apart from a shirk's.
+	static void FightLayoutCheck()
+	{
+		var tile = new Rect2(0, 0, WarrenView.CellSize, WarrenView.CellSize);
+		var marker = new Rect2(3, 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+		Require(tile.Encloses(marker.Grow(2)), "The fight ring leaves its tile.");
+		Require(WarrenView.FightRingColor(GoblinTask.Pursuing) == WarrenView.FightColor && WarrenView.FightRingColor(GoblinTask.Scuffling) == WarrenView.FightColor
+			&& WarrenView.FightRingColor(GoblinTask.Scuffled) == WarrenView.FightColor && WarrenView.FightRingColor(GoblinTask.Recovering) == WarrenView.FightRestColor,
+			"A stage of a fight wears the wrong ring.");
+		Require(WarrenView.FightRingColor(GoblinTask.Idle) is null && WarrenView.FightRingColor(GoblinTask.Shirking) is null, "A goblin in no fight wears a fight ring.");
+		foreach (var fight in new[] { WarrenView.FightColor, WarrenView.FightRestColor })
+			Require(Math.Abs(fight.R - WarrenView.ShirkColor.R) + Math.Abs(fight.G - WarrenView.ShirkColor.G) + Math.Abs(fight.B - WarrenView.ShirkColor.B) > 0.3f,
+				"A fight's ring is too close to a shirk's in colour.");
+	}
+
+	// A goblin pursuing, scuffling or being scuffled wears an orange ring, and a scuffler an orange cross over its body; a recovering one wears the banked-down ring;
+	// one in no fight wears none; and a fighter that craves still wears its Need pip.
+	async System.Threading.Tasks.Task FightMarkCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		var places = new[] { (3, 3), (3, 12), (10, 10), (11, 10), (6, 20), (6, 21), (20, 6) };
+		for (var g = 0; g < s.GoblinCount; g++)
+		{
+			(s.GoblinGrub[g], s.GoblinGrog[g], s.GoblinSleep[g]) = (100, 100, 100);
+			(s.GoblinX[g], s.GoblinY[g]) = places[g];
+		}
+		GoblinTasks.BeginPursuit(s, 0, 1, dropTile: -1);
+		GoblinTasks.BeginPursuit(s, 2, 3, dropTile: -1);
+		GoblinTasks.BeginScuffle(s, 2, 3, victimDropTile: -1);
+		GoblinTasks.BeginPursuit(s, 4, 5, dropTile: -1);
+		GoblinTasks.BeginScuffle(s, 4, 5, victimDropTile: -1);
+		GoblinTasks.FinishScuffle(s, 4);
+		s.GoblinGrub[2] = 20;
+		var image = await Render(sim);
+
+		Rect2 Marker(int g) => new(s.GoblinX[g] * WarrenView.CellSize + 3, s.GoblinY[g] * WarrenView.CellSize + 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+		Color Ring(int g) => image.GetPixel((int)Marker(g).Position.X - 2, (int)Marker(g).GetCenter().Y);
+		Color Centre(int g) => image.GetPixel((int)Marker(g).GetCenter().X, (int)Marker(g).GetCenter().Y);
+
+		Require(IsNear(Ring(0), WarrenView.FightColor), "A pursuing goblin has no fight ring.");
+		Require(IsNear(Centre(0), GoblinBody), "A pursuing goblin wears the scuffle cross.");
+		Require(IsNear(Ring(2), WarrenView.FightColor) && IsNear(Ring(3), WarrenView.FightColor), "A scuffling goblin or its victim has no fight ring.");
+		Require(IsNear(Centre(2), WarrenView.FightColor) && IsNear(Centre(3), WarrenView.FightColor), "A scuffling goblin or its victim has no cross over its body.");
+		Require(IsNear(Ring(4), WarrenView.FightRestColor) && IsNear(Ring(5), WarrenView.FightRestColor), "A recovering goblin has no banked-down ring.");
+		Require(IsNear(Centre(4), GoblinBody), "A recovering goblin wears the scuffle cross.");
+		Require(!IsNear(Ring(1), WarrenView.FightColor), "The target of a pursuit wears a fight ring before contact.");
+		Require(!IsNear(Ring(6), WarrenView.FightColor) && !IsNear(Ring(6), WarrenView.FightRestColor), "A goblin in no fight wears a fight ring.");
+		var pip = WarrenView.PipRect(Marker(2)).GetCenter();
+		Require(IsNear(image.GetPixel((int)pip.X, (int)pip.Y), WarrenView.NeedColor(Need.Grub)), "A scuffling goblin that craves Grub has lost its pip under the cross.");
 	}
 
 	// The "zzz" lies inside its tile, from the left edge of the goblin marker.
