@@ -85,6 +85,8 @@ public partial class Main : Node
 		_palette = new ToolPalette();
 		_palette.ToolClicked += PickTool;
 		leftColumn.AddChild(_palette);
+		leftColumn.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Ignore });
+		leftColumn.AddChild(new Legend());
 
 		var mapArea = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
 		body.AddChild(mapArea);
@@ -175,12 +177,19 @@ public partial class Main : Node
 		var inMap = _hoverCell.X >= 0 && _hoverCell.Y >= 0 && _hoverCell.X < s.Width && _hoverCell.Y < s.Height;
 		Inspection = inMap ? Inspector.Inspect(s, s.TileIndex(_hoverCell.X, _hoverCell.Y, _viewZ)) : Inspection.Nothing;
 		_inspector.Show(Inspection);
+		Vector2I? hover = inMap ? _hoverCell : null;
+		if (_view.Hover != hover)
+		{
+			_view.Hover = hover;
+			_view.QueueRedraw();
+		}
 	}
 
 	void UpdateSelection()
 	{
 		_view.Selection = _removal.Dragging ? _removal.Rectangle
 			: _selection.Dragging ? _selection.Rectangle : null;
+		_view.SelectionColor = _removal.Dragging ? WarrenView.RemovalColor : ToolInfo.Swatch(_tool);
 		_view.QueueRedraw();
 	}
 
@@ -297,6 +306,8 @@ public partial class Main : Node
 	void SyncHud()
 	{
 		_topBar.Sync(_sim.State, _viewZ);
+		// The map's paused frame comes and goes with the pause.
+		_view.QueueRedraw();
 		_palette.Sync(_tool);
 	}
 }

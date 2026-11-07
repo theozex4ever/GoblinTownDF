@@ -83,6 +83,15 @@ public static class UiTheme
 		return ImageTexture.CreateFromImage(image);
 	}
 
+	/// <summary>A square outline of <paramref name="color"/>, two pixels wide, for a legend row about outlines.</summary>
+	public static ImageTexture OutlineSwatch(Color color, int size = 12)
+	{
+		var image = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
+		image.Fill(color);
+		image.FillRect(new Rect2I(2, 2, size - 4, size - 4), Colors.Transparent);
+		return ImageTexture.CreateFromImage(image);
+	}
+
 	/// <summary>A Label in one of this Theme's type variations.</summary>
 	public static Label Text(string text, string variation = "", bool wrap = false)
 	{

@@ -757,6 +757,27 @@ public partial class SelectionInputChecks : Node
 				Require(carried && tally.Stored(dirt) == 5, $"The dirt was not all hauled: {tally.Stored(dirt)} stored.");
 			});
 
+			// The drag box wears the colour of what it will make, red when it unmakes; the hovered cell is outlined on the map.
+			WithMain((main, view, sim) =>
+			{
+				Move(main, view, 6, 7);
+				Require(view.Hover == new Vector2I(6, 7), $"The map outlines {view.Hover} under the cursor at (6, 7).");
+				Move(main, view, -3, 7);
+				Require(view.Hover is null, "The map outlines a cell with the cursor off the map.");
+
+				Key(main, Godot.Key.G);
+				Button(main, view, MouseButton.Left, true, 4, 4);
+				Require(view.SelectionColor == ToolInfo.Swatch(Tool.GrubPit), "A Grub Pit drag is not drawn in the Grub Pit's colour.");
+				Button(main, view, MouseButton.Left, false, 4, 4);
+				Button(main, view, MouseButton.Right, true, 4, 4);
+				Require(view.SelectionColor == WarrenView.RemovalColor, "A right-drag is not drawn in the removal colour.");
+				Button(main, view, MouseButton.Right, false, 4, 4);
+				Key(main, Godot.Key.D);
+				Button(main, view, MouseButton.Left, true, 4, 4);
+				Require(view.SelectionColor == ToolInfo.Swatch(Tool.Dig), "A dig drag is not drawn in the Designation colour.");
+				Button(main, view, MouseButton.Left, false, 4, 4);
+			});
+
 			CountLabelChecks();
 			PileCountChecks();
 
