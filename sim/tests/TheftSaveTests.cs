@@ -62,6 +62,29 @@ public partial class TheftTests
 	static void Rejects(GoblinTask stage, Action<SimState> change) =>
 		Assert.Throws<JsonException>(() => SimJson.Deserialize(SaveAt(stage, change)));
 
+	[Theory]
+	[InlineData(GoblinTask.Sneaking, 10, 1, 0)]
+	[InlineData(GoblinTask.Pilfering, 10, 1, 0)]
+	[InlineData(GoblinTask.Sneaking, 10, 13, 1)]
+	[InlineData(GoblinTask.Pilfering, 10, 13, 1)]
+	[InlineData(GoblinTask.Sneaking, 10, 13, 0)]
+	[InlineData(GoblinTask.Pilfering, 10, 13, 0)]
+	public void A_save_before_pickup_rejects_a_destination_outside_the_local_source_area(GoblinTask stage, int x, int y, int z)
+	{
+		// The source is (10, 13, 0): twelve steps away, another level, or the source itself could never be selected.
+		Rejects(stage, s => s.GoblinTheftDestination[0] = At(s, x, y, z));
+	}
+
+	[Theory]
+	[InlineData(GoblinTask.Sneaking)]
+	[InlineData(GoblinTask.Pilfering)]
+	public void A_save_before_pickup_accepts_a_destination_exactly_four_steps_from_the_source(GoblinTask stage)
+	{
+		var json = SaveAt(stage, s => s.GoblinTheftDestination[0] = At(s, 10, 9));
+
+		Assert.Equal(json, SimJson.Serialize(SimJson.Deserialize(json)));
+	}
+
 	[Fact]
 	public void A_save_without_the_theft_arrays_or_with_the_wrong_number_of_values_is_rejected()
 	{

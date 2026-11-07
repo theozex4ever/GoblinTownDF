@@ -21,7 +21,7 @@ Goblins are earnest underdogs who take absurd traditions seriously. Failure shou
 ## Development status
 
 > [!NOTE]
-> **Early grey-box prototype.** P1, P2 and P3 have been played and logged. P3 passed its fun check with five yeses out of five. P4 (Chaos) is under way: unmet Needs now raise Chaos and a goblin can shirk or pick a fight, while theft is still to come.
+> **Early grey-box prototype.** P1, P2 and P3 have been played and logged. P3 passed its fun check with five yeses out of five. P4 (Chaos) is under way: unmet Needs now raise Chaos and a goblin can shirk, pick a fight or steal supplies.
 
 The first prototype asks one question: **is it fun to dig a warren and watch goblins mess it up?** It grows through six playable milestones, each tested for fun before any art or extra systems.
 
@@ -30,7 +30,7 @@ The first prototype asks one question: **is it fun to dig a warren and watch gob
 | ✅ | **P1 — Map and digging** | Designate tunnels and stairs; one goblin digs them out | [Played](docs/playtests/2026-10-30-P1.md) |
 | ✅ | **P2 — Hauling and piles** | Goblins carry dug material to Piles | [Played](docs/playtests/2026-10-31-P2.md) |
 | ✅ | **P3 — Needs** | Food, drink, sleep, Fungus farming and a Brewery | [Played, 5/5 yes](docs/playtests/2026-11-06-P3.md) |
-| 🚧 | **P4 — Chaos** | Unmet needs lead to shirking, fights and theft | In progress: Chaos, shirking and fights built, not yet played |
+| 🚧 | **P4 — Chaos** | Unmet needs lead to shirking, fights and theft | In progress: Chaos, shirking, fights and theft built; human fun check pending |
 | ⬜ | **P5 — One invasion** | Three heroes, one trap type, and Brutes fighting back | Planned |
 | ⬜ | **P6 — Legends** | A running event log of deaths, invasions and chaos | Planned |
 
@@ -174,7 +174,7 @@ A tile holds one Room, so painting skips a tile that already holds a different o
 
 ### Saves
 
-Saves are whole-state JSON and are never migrated. A P2 save, which counted two materials, is rejected, and so are saves from before the Grog and Sleep meters, from before Chaos or from before fights. There is no player-facing save or load yet.
+Saves are whole-state JSON and are never migrated. A P2 save, which counted two materials, is rejected, and so are saves from before the Grog and Sleep meters, from before Chaos, from before fights or from before theft. There is no player-facing save or load yet.
 
 ## Development
 

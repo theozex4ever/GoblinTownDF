@@ -990,6 +990,15 @@ public static class GoblinTasks
 			return destination == -1 ? null : $"Goblin {g} is Stalled but still has theft destination {destination}.";
 		if (!(destination >= 0 && destination < tiles))
 			return $"Goblin {g} is {task} for destination {destination}, which is off the map.";
+		if (before)
+		{
+			// The source survives until pickup: reject fixed geometry no legal plan could have selected, even if a path exists now.
+			var layer = s.Width * s.Height;
+			var distance = Math.Abs(job % s.Width - destination % s.Width)
+				+ Math.Abs(job / s.Width % s.Height - destination / s.Width % s.Height);
+			if (job / layer != destination / layer || distance == 0 || distance > ChaosRules.TheftRange)
+				return $"Goblin {g} is {task} with destination {destination}, which is not a distinct tile within {ChaosRules.TheftRange} steps of source {job} on its level.";
+		}
 		if (task == GoblinTask.Scoffing && destination != here)
 			return $"Goblin {g} is scoffing at destination {destination} from tile {here}.";
 		return null;

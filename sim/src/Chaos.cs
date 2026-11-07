@@ -38,6 +38,8 @@ public static class ChaosRules
 	public const int RecoveryTicks = 100;
 	/// <summary>Chaos the victim gains, once, when the scuffle starts.</summary>
 	public const int VictimGain = 15;
+	/// <summary>Maximum walking steps from a theft's source to its private consumption tile.</summary>
+	public const int TheftRange = 4;
 }
 
 /// <summary>Chaos' own system: how it rises and falls with the sim-wide clock, and who may act out. Starting an act is worked by <see cref="JobSystem"/>.</summary>

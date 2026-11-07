@@ -3,9 +3,6 @@ namespace Goblins.Sim;
 // Thefts: the acting-out behaviour that takes one communal unit. The Task transitions are GoblinTasks'; this is the choosing and the walking.
 public sealed partial class JobSystem
 {
-	// A thief consumes its unit this many walking steps from the Pile at the farthest, and at least one: a Pile tile is never the place.
-	const int TheftRange = 4;
-
 	// The nearest Pile tile holding Grub or Grog that a path leads to, by walking distance, ties to the lowest tile index; Grog if it holds both. Theft is only
 	// available when a destination for it exists too, so a goblin is never sent for a unit it has nowhere to eat. Nothing is reserved.
 	bool TryFindTheft(SimState s, int goblin, out int source, out Material supply, out int destination)
@@ -27,21 +24,22 @@ public sealed partial class JobSystem
 		return TryFindDestination(s, source, out destination);
 	}
 
-	// The farthest tile that is not a Pile within TheftRange walking steps of the source, on its level, ties to the lowest tile index. The tiles are tried in
+	// The farthest tile that is not a Pile within the theft range of the source, on its level, ties to the lowest tile index. The tiles are tried in
 	// index order and only a strictly longer walk replaces the best, which is what makes the tie go to the lowest.
 	bool TryFindDestination(SimState s, int source, out int destination)
 	{
+		const int range = ChaosRules.TheftRange;
 		destination = -1;
 		var layer = s.Width * s.Height;
 		var z = source / layer;
 		var sx = source % s.Width;
 		var sy = source / s.Width % s.Height;
 		var farthest = 0;
-		for (var y = Math.Max(0, sy - TheftRange); y <= Math.Min(s.Height - 1, sy + TheftRange); y++)
-		for (var x = Math.Max(0, sx - TheftRange); x <= Math.Min(s.Width - 1, sx + TheftRange); x++)
+		for (var y = Math.Max(0, sy - range); y <= Math.Min(s.Height - 1, sy + range); y++)
+		for (var x = Math.Max(0, sx - range); x <= Math.Min(s.Width - 1, sx + range); x++)
 		{
 			var steps = Math.Abs(x - sx) + Math.Abs(y - sy);
-			if (steps == 0 || steps > TheftRange)
+			if (steps == 0 || steps > range)
 				continue;
 			var tile = s.TileIndex(x, y, z);
 			if (!TileRules.IsWalkable(s.KindAt(tile)) || s.IsPile(tile))
@@ -50,7 +48,7 @@ public sealed partial class JobSystem
 			_goals.Clear();
 			_goals.Add(tile);
 			if (!_pathfinder.TryFindPath(s, source, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _)
-				|| _path.Count > TheftRange || _path.Count <= farthest)
+				|| _path.Count > range || _path.Count <= farthest)
 				continue;
 			farthest = _path.Count;
 			destination = tile;

@@ -14,6 +14,6 @@
 | Done: Chaos 71 to 30, cooldown 300, Grub meter 100 | `5-idle.png` |
 | 4000 ticks later the warren carries on | `6-later-warren.png` |
 
-Ordinary life around the theft (same run, counted from task transitions): by the theft's end 18 meals, 11 drinks, 134 hauls, 32 brews, 60 tends; over the next 4000 ticks, +24 meals, +17 drinks, +149 hauls, +44 brews, +66 tends. Grub went 60 to 59 at the pickup (carried counted), not twice.
+Ordinary life around the theft (same run, counted from task transitions): by the theft's end 18 meals, 11 drinks, 134 hauls, 32 brews, 60 tends; over the next 4000 ticks, +24 meals, +17 drinks, +149 hauls, +44 brews, +66 tends. Grub totals, including carried units, stayed at 60 through pickup and fell to 59 only when the stolen unit was consumed.
 
 **Limits.** The Sneaking stage was not captured in the final run (an earlier 60,000-tick run logged Sneaking; its screenshots were overwritten when the driver was fixed to follow the thief's level). Stalled is covered only by tests: it needs every reachable tile to be a full Pile and does not arise in ordinary play. The game was launched through the Godot MCP server (`run_project`): boot ok, no errors in `get_debug_output`.
