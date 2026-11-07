@@ -645,6 +645,43 @@ public partial class SelectionInputChecks : Node
 				Require(!Read(2).Fighting, "A bystander is marked as fighting.");
 			});
 
+			// A theft names the supply in each stage, marks the thief in its reading, carries the unit in the summary's loose count, and counts the thief as idle.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinGrog, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinSleep, (byte)NeedRules.MeterMax);
+				(s.GoblinX[1], s.GoblinY[1]) = (s.GoblinX[0] + 5, s.GoblinY[0] + 4);
+				GoblinReading Read(int g) => Inspector.Inspect(s, s.TileIndex(s.GoblinX[g], s.GoblinY[g], 0)).Goblins.First(r => r.Title.StartsWith(GoblinNames.For(g)));
+				var source = s.TileIndex(s.GoblinX[0], s.GoblinY[0], 0);
+				var stage = new System.Collections.Generic.Dictionary<GoblinTask, string>();
+
+				GoblinTasks.BeginTheft(s, 0, source, Goblins.Sim.Material.Grog, destination: source + 1, dropTile: -1, atSource: false);
+				stage[GoblinTask.Sneaking] = Read(0).Doing;
+				Require(Read(0).Stealing && !Read(0).Shirking && !Read(0).Fighting && !Read(1).Stealing, $"A thief on its way reads stealing={Read(0).Stealing}.");
+				GoblinTasks.StartPilfering(s, 0);
+				stage[GoblinTask.Pilfering] = Read(0).Doing;
+				s.RemoveItems(source, Goblins.Sim.Material.Grog, s.ItemCount(source, Goblins.Sim.Material.Grog));
+				GoblinTasks.FinishPilfer(s, 0);
+				stage[GoblinTask.MakingOff] = Read(0).Doing;
+				Require(WarrenSummary.StateOf(s, 0) == WarrenSummary.GoblinState.Idle, "A thief counts as working.");
+				var summary = new WarrenSummary();
+				summary.Count(s);
+				Require(summary.Loose(Goblins.Sim.Material.Grog) >= 1, "The unit in a thief's hands is not counted.");
+				s.GoblinX[0]++;
+				GoblinTasks.StartScoffing(s, 0);
+				stage[GoblinTask.Scoffing] = Read(0).Doing;
+				GoblinTasks.StallTheft(s, 0);
+				stage[GoblinTask.Stalled] = Read(0).Doing;
+
+				foreach (var entry in stage)
+					Require(entry.Value.Contains("Grog"), $"{entry.Key} reads \"{entry.Value}\", which does not name the Grog.");
+				Require(stage.Values.Distinct().Count() == stage.Count, "Two stages of a theft read the same.");
+				Require(stage.Values.All(doing => doing.Length <= 56), "A theft's activity is too long for the Inspector.");
+				Require(Read(0).Stealing, "A stalled thief is not marked.");
+			});
+
 			// A name belongs to the goblin index, not to the seed.
 			foreach (var seed in new[] { 1, 2, 12345 })
 			{

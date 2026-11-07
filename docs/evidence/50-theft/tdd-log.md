@@ -246,3 +246,23 @@ Total tests: 2
 
 ### S8 replay with shirk + fight + theft — characterization, passed on first run (disclosed)
 `The_same_seed_and_commands_replay_the_same_with_shirking_fights_and_theft_all_happening_and_a_mid_run_save_agrees` adds no behaviour; it pins that two runs of one seed + command log (3000 ticks, 7 goblins near 70 Chaos, supplies on a Pile) agree to the last byte, that the run really contains ≥1 `ShirkStarted`, `ScuffleStarted` and `TheftPickedUp`, that another seed differs, and that a save taken at tick 1200 continues to the same bytes.
+
+### B1 bridge: Inspector reading, map cue, Warren summary — red
+The bridge checks were written first (`SelectionInputChecks` theft block: every stage names the supply, `Stealing` flag, thief counted idle, unit counted loose; `CarryDrawChecks` `ThiefLayoutCheck` + `ThiefMarkCheck`: ring + mask in the thief colour, carried unit and Need pip still visible, colour told apart from shirk/fight). Against the unchanged bridge the Godot C# build fails on the missing members:
+```
+$ dotnet build game
+tests/CarryDrawChecks.cs(413,25): error CS0117: 'WarrenView' does not contain a definition for 'ThiefMaskRect'
+tests/CarryDrawChecks.cs(418,32): error CS0117: 'WarrenView' does not contain a definition for 'ThiefColor'
+tests/SelectionInputChecks.cs(662,21): error CS1061: 'GoblinReading' does not contain a definition for 'Stealing'
+```
+
+### B1 bridge — green
+After `GoblinReading.Stealing`, the theft `TaskWords`/mood lines, `WarrenView.ThiefColor`/`ThiefMaskRect` + ring and mask drawing, the Warren summary counting thieves idle, and a Colour key row:
+```
+$ godot-mono --headless --path game res://tests/SelectionInputChecks.tscn
+Selection input checks passed (42 scenarios, count labels, pile counts).        (was 41)
+$ godot-mono --headless --path game res://tests/InspectorLayoutChecks.tscn
+Inspector layout checks passed (2 viewports, seven goblins on one Heap; ...)
+$ godot-mono --path game res://tests/CarryDrawChecks.tscn                       (real renderer)
+Carry draw checks passed (layout, colours, count order, 13 pixel scenarios).    (was 12)
+```

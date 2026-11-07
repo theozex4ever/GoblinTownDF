@@ -137,7 +137,7 @@ public partial class InspectorPanel : VBoxContainer
 		{
 			_title.Text = reading.Title;
 			_doing.Text = reading.Doing;
-			_doing.AddThemeColorOverride("font_color", reading.Shirking ? WarrenView.ShirkColor : reading.Fighting ? WarrenView.FightColor : UiTheme.TextColor);
+			_doing.AddThemeColorOverride("font_color", reading.Shirking ? WarrenView.ShirkColor : reading.Fighting ? WarrenView.FightColor : reading.Stealing ? WarrenView.ThiefColor : UiTheme.TextColor);
 			for (var i = 0; i < _bars.Length; i++)
 			{
 				var value = i < reading.Meters.Count ? reading.Meters[i].Value : reading.Chaos;
