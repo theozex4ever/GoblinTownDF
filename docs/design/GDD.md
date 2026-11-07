@@ -160,7 +160,7 @@ The first prototype answers one question: is it fun to dig a warren and watch go
   - **Saves:** as P1. Simulation saves containing a Pile tile with more than 30 units of any material are rejected, with no migration or grandfathered overflow. Loose item counts above 30 remain valid. There is still no player-facing save or load.
   - **Judged on:** fun tests 1 and 2. The other three are answered and logged as a baseline.
 
-- [ ] **P3 — Needs.** Grub, Grog and Sleep meters. Grub Pit, Fungus Farm, Brewery and Sleeping Heap rooms. Goblins eat, drink, sleep.
+- [x] **P3 — Needs.** Grub, Grog and Sleep meters. Grub Pit, Fungus Farm, Brewery and Sleeping Heap rooms. Goblins eat, drink, sleep.
 
   **P3 decisions**
 
