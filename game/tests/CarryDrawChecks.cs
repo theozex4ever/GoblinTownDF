@@ -537,6 +537,28 @@ public partial class CarryDrawChecks : Node
 			for (var j = 0; j < i; j++)
 				Require(!laid[i].Rect.Intersects(laid[j].Rect), $"Bubbles {i} and {j} overlap.");
 		}
+		// The oldest surviving bubble must be just as readable with the others present: their tails may cross its rectangle.
+		// Advance the authoring count once so the solo reference has the exact same name and line as the crowd's first bubble.
+		var solo = new BubbleBoard();
+		solo.Observe([new ShirkStarted(0)], s, 0);
+		solo.Advance(BubbleBoard.LifetimeSeconds);
+		solo.Observe([new HaulCancelled(1)], s, 0);
+		var reference = await Render(sim, bubbles: solo);
+		Require(LayoutOf(sim, solo)[0].Rect == laid[0].Rect, "The solo reference moved the first bubble.");
+		var first = laid[0].Rect;
+		var changed = 0;
+		for (var y = (int)Math.Ceiling(first.Position.Y); y < (int)first.End.Y; y++)
+		for (var x = (int)Math.Ceiling(first.Position.X); x < (int)first.End.X; x++)
+			if (!IsNear(image.GetPixel(x, y), reference.GetPixel(x, y)))
+				changed++;
+		var captures = System.Environment.GetEnvironmentVariable("GOBLINTOWN_CAPTURE_DIR");
+		if (!string.IsNullOrEmpty(captures))
+		{
+			System.IO.Directory.CreateDirectory(captures);
+			image.SavePng(System.IO.Path.Combine(captures, "crowd.png"));
+			reference.SavePng(System.IO.Path.Combine(captures, "solo.png"));
+		}
+		Require(changed == 0, $"Later bubbles overwrite {changed} pixels of the first bubble's paper, name or line.");
 	}
 
 	// A bubble does not cover the cues of the goblin it hangs from (pip, carried square, shirk band) nor of its neighbour; once it expires the

@@ -237,8 +237,12 @@ public partial class WarrenView : Node2D
 			DrawRect(new Rect2(hover.X * CellSize, hover.Y * CellSize, CellSize, CellSize), HoverColor, filled: false, width: 1);
 
 		// Chat bubbles last, over everything on the map but the pause frame; they take no input, being only drawn.
-		foreach (var (bubble, rect, anchor) in LayoutBubbles())
-			DrawBubble(bubble, rect, anchor);
+		var bubbles = LayoutBubbles();
+		// Tails can cross other bubbles in a crowd; every paper body and its text must cover every tail.
+		foreach (var (_, rect, anchor) in bubbles)
+			DrawBubbleTail(rect, anchor);
+		foreach (var (bubble, rect, _) in bubbles)
+			DrawBubble(bubble, rect);
 
 		// Paused, the map wears a frame and a label just outside its edge, so nothing on the map itself is covered.
 		if (s.Paused)
@@ -291,13 +295,17 @@ public partial class WarrenView : Node2D
 	/// <summary>The middle of the symbol on a bubble drawn in <paramref name="rect"/>.</summary>
 	public static Vector2 BubbleSymbolCentre(Rect2 rect) => new(rect.Position.X + BubbleLayout.Pad + BubbleLayout.SymbolSize / 2f, rect.GetCenter().Y);
 
-	// A paper bubble with its goblin's name over its line, a tail to the goblin, and the symbol of what it did at the left.
-	void DrawBubble(Bubble bubble, Rect2 rect, Rect2 anchor)
+	void DrawBubbleTail(Rect2 rect, Rect2 anchor)
 	{
 		var toward = new Vector2(Math.Clamp(rect.GetCenter().X, anchor.Position.X, anchor.End.X), Math.Clamp(rect.GetCenter().Y, anchor.Position.Y, anchor.End.Y));
 		var from = new Vector2(Math.Clamp(toward.X, rect.Position.X + 4, rect.End.X - 4), Math.Clamp(toward.Y, rect.Position.Y, rect.End.Y));
 		DrawLine(from, toward, BubbleRimColor, 3);
 		DrawLine(from, toward, BubbleFillColor, 1);
+	}
+
+	// A paper bubble with its goblin's name over its line and the symbol of what it did at the left.
+	void DrawBubble(Bubble bubble, Rect2 rect)
+	{
 		DrawRect(rect.Grow(1), BubbleRimColor);
 		DrawRect(rect, BubbleFillColor);
 

@@ -37,3 +37,14 @@ Seed is the wall-clock seed `Main` picks, so the run is not reproducible; it is 
 - `BubbleChecks` (headless, 11 scenarios): event to bubble, authored copy, lifetime, replacement and the limits, off-level, placement geometry, timing through `Main._Process` at 1×/4×/paused, level changes, a real incident, and a run through `Main` against a bare run of the same seed with identical saved state and RNG.
 - `CarryDrawChecks` (needs a renderer, 17 pixel scenarios, 4 new): symbol, rim, paper and text pixels for each kind at corners and edges, three bubbles on one tile, cues kept and paper gone after expiry, off-level.
 - `SelectionInputChecks` (43 scenarios, 1 new): drags and right-drags under three bubbles, the Inspector listing every goblin on a shared tile, unchanged after expiry.
+
+
+## Review corrections after the original captures
+
+The original incident/timing captures above are from `10f2a72`, before the review corrections; they are scripted evidence, not Theo's fun check.
+
+- **R1-P2 timing:** a new test stalls the actual engine thread for 3.2 seconds and lets Godot call Main normally. Before the correction, a bubble survived 3.218 seconds elapsed. After switching presentation timing to `Time.GetTicksUsec`, both 1× and 4× expire on the first frame after the stall. The simulation continues to use its existing frame delta unchanged. Controlled-clock tests retain exact 3-second and paused-lifetime checks; an additional input test pauses and unpauses between frames, excluding the whole paused interval.
+- **R1-P2 crowd text:** the renderer test compares every interior pixel of the oldest crowd bubble with that same bubble rendered alone. The original draw order overwrote 107 pixels; drawing every tail before every body and text leaves zero differences. Set `GOBLINTOWN_CAPTURE_DIR` when running CarryDrawChecks to save `crowd.png` and `solo.png`.
+- **Evidence wording:** the synchronous Main-versus-bare determinism comparison exercises callbacks, incident creation and lifetime, and queues redraws. It does not render those frames; CarryDrawChecks supplies the rendered evidence.
+
+Raw correction runs, including the failing runs and rendered before/after images, are available locally at `/tmp/goblintown-pr57-review-fixes/`. The final check has 14 bubble scenarios; the existing 902 simulation tests, 43 selection scenarios and 17 renderer scenarios retain their counts. No human playtest is claimed.

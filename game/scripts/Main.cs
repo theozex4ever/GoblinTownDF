@@ -27,6 +27,9 @@ public partial class Main : Node
 	int _viewZ;
 	// The chat bubbles on show: provisional presentation of the sim's incident events, aged by unpaused real time. Never written to the sim.
 	readonly BubbleBoard _bubbles = new();
+	// A monotonic presentation clock: Godot may cap frame delta after a hitch. Never used by the sim.
+	internal Func<ulong> BubbleClock { get; init; } = Time.GetTicksUsec;
+	ulong _bubbleTimeUsec;
 	// The tool stays picked until Escape or its own key puts it away.
 	Tool _tool = Tool.None;
 
@@ -49,6 +52,7 @@ public partial class Main : Node
 		GetViewport().SizeChanged += OnViewportResized;
 
 		Refresh();
+		_bubbleTimeUsec = BubbleClock();
 	}
 
 	public override void _ExitTree() => GetViewport().SizeChanged -= OnViewportResized;
@@ -143,14 +147,14 @@ public partial class Main : Node
 	{
 		if (_view.GlobalPosition != _hoverOrigin)
 			Hover(_pointer);
-		// Bubbles shown before this frame age by the real time it took, unless the game is paused; those the frame makes start whole.
-		var bubblesChanged = !_sim.State.Paused && _bubbles.Advance(delta);
 		if (_sim.Advance(delta) > 0)
 		{
 			_view.QueueRedraw();
 			UpdateHover();
 			_topBar.SyncClock(_sim.State);
 		}
+		// Age existing bubbles before observing new incidents, which start with their whole lifetime.
+		var bubblesChanged = AgeBubbles();
 		var events = _sim.DrainEvents();
 		if (events.Count > 0)
 		{
@@ -387,8 +391,18 @@ public partial class Main : Node
 	// A player's Command, from a key or a button: the HUD shows its effect at once rather than next frame.
 	void Apply(Command command)
 	{
+		// Settle time on the old side of a pause transition, including input between frames.
+		AgeBubbles();
 		_sim.Apply(command);
 		SyncHud();
+	}
+
+	bool AgeBubbles()
+	{
+		var now = BubbleClock();
+		var seconds = (now - _bubbleTimeUsec) / 1_000_000.0;
+		_bubbleTimeUsec = now;
+		return !_sim.State.Paused && _bubbles.Advance(seconds);
 	}
 
 	// Every button and readout shows the sim and view as they are now, however they got that way.

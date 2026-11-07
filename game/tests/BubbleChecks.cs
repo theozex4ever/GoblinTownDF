@@ -9,14 +9,16 @@ namespace AThousandGoblinsDeep;
 /// <summary>
 /// Checks the provisional chat bubbles: how an incident becomes a bubble, how long it lives, how many there can be, where it is placed, and that
 /// showing, hiding and timing them never touches the sim. Board and layout checks are pure; the Main checks drive the real scene's
-/// <c>_Process</c> with set frame times (the engine's own calls are switched off), so they run headless. What a bubble looks like on screen is
+/// <c>_Process</c> with a controlled monotonic clock; a separate real engine-stall check uses normal callbacks. Both run headless. Appearance is
 /// checked in <c>CarryDrawChecks</c>, which needs a renderer.
 /// </summary>
 public partial class BubbleChecks : Node
 {
 	int _scenarios;
+	sealed class FrameClock { public ulong Usec; }
+	readonly Dictionary<Main, FrameClock> _clocks = [];
 
-	public override void _Ready()
+	public override async void _Ready()
 	{
 		try
 		{
@@ -27,9 +29,11 @@ public partial class BubbleChecks : Node
 			OffLevelIncidents();
 			Placement();
 			MainTimingAtOneAndFourTimesAndPaused();
+			PauseInputBetweenFrames();
 			MainDropsOffLevelAndKeepsOnLevelChange();
 			RealIncidentsMakeBubbles();
 			PresentationLeavesTheSimAlone();
+			await MainExpiresAfterEngineStall();
 			GD.Print($"Bubble checks passed ({_scenarios} scenarios).");
 			GetTree().Quit();
 		}
@@ -232,7 +236,9 @@ public partial class BubbleChecks : Node
 	// A fresh Main with its engine callbacks off, so the checks set how much time passes in a frame.
 	Main NewMain(Action<Main, Simulation> setUp)
 	{
-		var main = new Main();
+		var clock = new FrameClock();
+		var main = new Main { BubbleClock = () => clock.Usec };
+		_clocks.Add(main, clock);
 		AddChild(main);
 		main.SetProcess(false);
 		var sim = main.View.Sim!;
@@ -243,14 +249,18 @@ public partial class BubbleChecks : Node
 
 	void Dispose(Main main)
 	{
+		_clocks.Remove(main);
 		RemoveChild(main);
 		main.Free();
 	}
 
-	static void Frames(Main main, int count, double delta)
+	void Frames(Main main, int count, double delta)
 	{
 		for (var i = 0; i < count; i++)
+		{
+			_clocks[main].Usec += (ulong)Math.Round(delta * 1_000_000);
 			main._Process(delta);
+		}
 	}
 
 	// The same three seconds at 1× and 4× (the sim runs four times the ticks in them), frozen by a pause, and no bubble made of an idle frame.
@@ -291,6 +301,29 @@ public partial class BubbleChecks : Node
 			}
 			finally { Dispose(main); }
 		}
+	}
+
+	// Pause input can arrive between frames: settle the unpaused interval before freezing, and exclude time spent paused.
+	void PauseInputBetweenFrames()
+	{
+		_scenarios++;
+		var main = NewMain((_, _) => { });
+		try
+		{
+			main.Bubbles.Observe([new ShirkStarted(0)], main.View.Sim!.State, 0);
+			_clocks[main].Usec += 1_000_000;
+			using var pause = new InputEventKey { Keycode = Key.Space, Pressed = true };
+			main._UnhandledKeyInput(pause);
+			Require(Math.Abs(main.Bubbles.Active[0].Remaining - 2) < 1e-9, "Pausing between frames lost the unpaused second.");
+			_clocks[main].Usec += 5_000_000;
+			main._UnhandledKeyInput(pause);
+			Require(Math.Abs(main.Bubbles.Active[0].Remaining - 2) < 1e-9, "Unpausing between frames charged the paused interval.");
+			Frames(main, 19, 0.1);
+			Require(main.Bubbles.Active.Count == 1, "A bubble expired before its remaining two unpaused seconds.");
+			Frames(main, 1, 0.1);
+			Require(main.Bubbles.Active.Count == 0, "A bubble outlived its remaining two unpaused seconds.");
+		}
+		finally { Dispose(main); }
 	}
 
 	// Bubbles on a level go when the player leaves it, and are made only for goblins on the level the player is on.
@@ -334,7 +367,7 @@ public partial class BubbleChecks : Node
 			var made = 0;
 			for (var frame = 0; frame < 4000 && made == 0; frame++)
 			{
-				main._Process(0.05);
+				Frames(main, 1, 0.05);
 				made = main.Bubbles.Made;
 			}
 			Require(made > 0, "A warren of goblins at 80 Chaos produced no bubble in 4000 frames.");
@@ -362,8 +395,8 @@ public partial class BubbleChecks : Node
 		finally { Dispose(main); }
 	}
 
-	// Two runs of one seed and one frame sequence, one through the real Main scene (bubbles made, aged, placed, drawn) and one bare: the saved
-	// state, including the RNG, is identical at the end. The presentation reads the sim and draws; it writes nothing.
+	// Two runs of one seed and one frame sequence, one through Main's callbacks (bubbles made and aged) and one bare: the saved
+	// state, including the RNG, is identical. This synchronous comparison queues redraws but does not render them; CarryDrawChecks covers pixels.
 	void PresentationLeavesTheSimAlone()
 	{
 		_scenarios++;
@@ -403,7 +436,7 @@ public partial class BubbleChecks : Node
 				}
 				bare.Advance(delta);
 				bare.DrainEvents();
-				main._Process(delta);
+				Frames(main, 1, delta);
 				if (main.Bubbles.Active.Count > 0 && viewZ == 0)
 					main.View.QueueRedraw();
 			}
@@ -420,5 +453,31 @@ public partial class BubbleChecks : Node
 	{
 		if (!condition)
 			throw new InvalidOperationException(message);
+	}
+
+	// Let the engine supply its capped delta after a real main-thread stall; a direct _Process(3.2) call cannot catch this.
+	async System.Threading.Tasks.Task MainExpiresAfterEngineStall()
+	{
+		foreach (var speed in new[] { 1, 4 })
+		{
+			_scenarios++;
+			var main = new Main();
+			AddChild(main);
+			try
+			{
+				main.View.Sim!.Apply(new SetSpeed(speed));
+				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+				main.Bubbles.Observe([new ShirkStarted(0)], main.View.Sim.State, 0);
+				var start = Time.GetTicksUsec();
+				OS.DelayMsec(3200);
+				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+				var elapsed = (Time.GetTicksUsec() - start) / 1_000_000.0;
+				GD.Print($"Engine stall {speed}×: {elapsed:F3}s elapsed, {main.Bubbles.Active.Count} bubbles remain.");
+				Require(main.Bubbles.Active.Count == 0, $"{speed}×: a bubble survived a real {elapsed:F3}s engine stall.");
+			}
+			finally { Dispose(main); }
+		}
 	}
 }

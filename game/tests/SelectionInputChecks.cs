@@ -967,8 +967,9 @@ public partial class SelectionInputChecks : Node
 
 				sim.Apply(new SetPaused(false));
 				main.SetProcess(false);
-				for (var i = 0; i < 31; i++)
-					main._Process(0.1);
+				// This is the input/Inspector check after expiry; BubbleChecks tests the real clock, including engine stalls.
+				main.Bubbles.Advance(BubbleBoard.LifetimeSeconds);
+				main._Process(0);
 				Require(main.Bubbles.Active.Count == 0, "The bubbles did not expire.");
 				Move(main, view, 12, 12);
 				var after = main.Inspection.Goblins;
