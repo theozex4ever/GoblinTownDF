@@ -1,0 +1,20 @@
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+Vulkan 1.4.351 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 3060
+
+A Thousand Goblins Deep: boot ok (seed 1794081660)
+seed 1794081660; ordinary commands only, no extra supplies, no debug controls; startup Grub 14, Grog 7
+tick 359: Fungus Farm, Brewery and a Pile painted on z1
+tick 3937: Old Bogwash Idle -> Pilfering (chaos 73, cooldown 0, carry None, at 18,16)
+captured Pilfering at tick 3937; inspector: Old Bogwash, Grunt - Pocketing a Grub, very casually (chaos 73)
+tick 3941: THEFT PICKUP event: Old Bogwash took a Grub; Grub 60, Grog 28 (carried counted)
+tick 3941: Old Bogwash Pilfering -> MakingOff (chaos 72, cooldown 0, carry Grub, at 18,16)
+captured MakingOff at tick 3947; inspector: Old Bogwash, Grunt - Making off with a Grub, looking innocent (chaos 72)
+tick 3953: Old Bogwash MakingOff -> Scoffing (chaos 71, cooldown 0, carry Grub, at 18,12)
+captured Scoffing at tick 3953; inspector: Old Bogwash, Grunt - Scoffing a stolen Grub, in private (chaos 71)
+tick 3963: Old Bogwash Scoffing -> Idle (chaos 30, cooldown 300, carry None, at 18,12)
+tick 3963: theft over: Old Bogwash Idle, chaos 30, cooldown 300; Grub 59, Grog 28; grub meter 100, grog meter 60
+captured Idle at tick 3963; inspector: Old Bogwash, Grunt - Standing about, between jobs (chaos 30)
+ordinary life: through tick 3963 -> eat 18, drink 11, hauls dropped 134, brews 32, tends 60
+ordinary life: through tick 7963 -> eat 42, drink 28, hauls dropped 283, brews 76, tends 126
+ordinary life after the theft (4000 ticks): +24 meals, +17 drinks, +149 hauls, +44 brews, +66 tends
+finished at tick 7963; theft pickups 1

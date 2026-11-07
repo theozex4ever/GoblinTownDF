@@ -1,0 +1,87 @@
+== sim tests
+Test run for /home/theozex/.t3/worktrees/GoblinTownDF/t3-b306ed41/sim/tests/bin/Debug/net8.0/Goblins.Sim.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:   894, Skipped:     0, Total:   894, Duration: 43 s - Goblins.Sim.Tests.dll (net8.0)
+== godot build
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Started Project initialization (5 steps)[39m[0m
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Scanning file structure...[39m[0m
+[  16% ] [90m[1mfirst_scan_filesystem[22m | Loading global class names...[39m[0m
+[  33% ] [90m[1mfirst_scan_filesystem[22m | Verifying GDExtensions...[39m[0m
+[  50% ] [90m[1mfirst_scan_filesystem[22m | Creating autoload scripts...[39m[0m
+[  66% ] [90m[1mfirst_scan_filesystem[22m | Initializing plugins...[39m[0m
+[  83% ] [90m[1mfirst_scan_filesystem[22m | Starting file scan...[39m[0m
+[92m[ DONE ][39m [1mfirst_scan_filesystem[22m
+[0m
+[   0% ] [90m[1mdotnet_build_project[22m | Started Building .NET project... (1 steps)[39m[0m
+[   0% ] [90m[1mdotnet_build_project[22m | Building project[39m[0m
+[   0% ] [90m[1mloading_editor_layout[22m | Started Loading editor (5 steps)[39m[0m
+[   0% ] [90m[1mloading_editor_layout[22m | Loading editor layout...[39m[0m
+[  16% ] [90m[1mloading_editor_layout[22m | Loading docks...[39m[0m
+[92m[ DONE ][39m [1mloading_editor_layout[22m
+[0m
+[92m[ DONE ][39m [1mdotnet_build_project[22m
+[0m
+== godot headless boot
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+
+A Thousand Goblins Deep: boot ok (seed 1794081769)
+== selection input checks
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+
+A Thousand Goblins Deep: boot ok (seed 1794081770)
+A Thousand Goblins Deep: boot ok (seed 1794081770)
+A Thousand Goblins Deep: boot ok (seed 1794081770)
+A Thousand Goblins Deep: boot ok (seed 1794081770)
+A Thousand Goblins Deep: boot ok (seed 1794081770)
+A Thousand Goblins Deep: boot ok (seed 1794081770)
+A Thousand Goblins Deep: boot ok (seed 1794081770)
+A Thousand Goblins Deep: boot ok (seed 1794081770)
+A Thousand Goblins Deep: boot ok (seed 1794081771)
+A Thousand Goblins Deep: boot ok (seed 1794081772)
+A Thousand Goblins Deep: boot ok (seed 1794081772)
+A Thousand Goblins Deep: boot ok (seed 1794081773)
+A Thousand Goblins Deep: boot ok (seed 1794081773)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081774)
+A Thousand Goblins Deep: boot ok (seed 1794081776)
+A Thousand Goblins Deep: boot ok (seed 1794081776)
+A Thousand Goblins Deep: boot ok (seed 1794081776)
+A Thousand Goblins Deep: boot ok (seed 1794081776)
+A Thousand Goblins Deep: boot ok (seed 1794081776)
+A Thousand Goblins Deep: boot ok (seed 1794081776)
+A Thousand Goblins Deep: boot ok (seed 1794081777)
+A Thousand Goblins Deep: boot ok (seed 1794081777)
+A Thousand Goblins Deep: boot ok (seed 1794081777)
+A Thousand Goblins Deep: boot ok (seed 1794081777)
+A Thousand Goblins Deep: boot ok (seed 1794081777)
+A Thousand Goblins Deep: boot ok (seed 1794081777)
+Selection input checks passed (42 scenarios, count labels, pile counts).
+== carry draw checks
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+Vulkan 1.4.351 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 3060
+
+Carry draw checks passed (layout, colours, count order, 13 pixel scenarios).
+== inspector layout checks
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+
+A Thousand Goblins Deep: boot ok (seed 1794081779)
+A Thousand Goblins Deep: boot ok (seed 1794081784)
+Inspector layout checks passed (2 viewports, seven goblins on one Heap; no renderer: screenshots skipped).

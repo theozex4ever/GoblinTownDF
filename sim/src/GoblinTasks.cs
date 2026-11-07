@@ -25,6 +25,10 @@ namespace Goblins.Sim;
 /// runs its course relieves the instigator and leaves both Recovering, taking no work, for <see cref="ChaosRules.RecoveryTicks"/> ticks with a cooldown that began with the scuffle's end;
 /// a Craving or Collapse in either ends it for both at once, for no relief and no recovery. A failed or interrupted pursuit touches only the instigator. The fight clock is
 /// <see cref="SimState.GoblinFightTicks"/>, counted down on every sim tick, and fighters are paired through <see cref="SimState.GoblinFightPartner"/>.
+/// A theft is the third way to act out: the thief goes Sneaking to the nearest Pile holding Grub or Grog, Pilfers one unit for <see cref="HaulActionTicks"/> ticks (the only moment the unit leaves the Pile),
+/// goes MakingOff with it to a destination chosen when it set out, and Scoffs it for <see cref="NeedRules.EatTicks"/> ticks, which restores the Need, relieves <see cref="ChaosRules.ActRelief"/> Chaos and starts the cooldown.
+/// Nothing is reserved. A plan that changes, or a Craving or Collapse, ends the theft for no relief with the cooldown, a unit in hand put down by the same legal-drop rule; with no legal place the thief is Stalled,
+/// holding the unit and consuming nothing, until one opens. The chosen supply and destination are <see cref="SimState.GoblinTheftSupply"/> and <see cref="SimState.GoblinTheftDestination"/>, and the source Pile tile is its Job tile.
 /// A new Task is added here and nowhere else. Movement along a path stays in <see cref="JobSystem"/>,
 /// which only counts <see cref="SimState.GoblinStepTicks"/>.
 /// </summary>

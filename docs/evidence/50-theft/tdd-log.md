@@ -1,10 +1,10 @@
 # #50 theft — TDD log
 
-Each slice: the focused tests were written and run RED against the scaffold (new Task names, two arrays and the event existed as bare data; no behaviour), then the minimum behaviour was added and the same tests run GREEN. Output is trimmed to the pass/fail lines.
+Each slice: the focused tests were written and run RED against the scaffold (new Task names, two arrays and the event existed as bare data; no behaviour), then the minimum behaviour was added and the same tests run GREEN. Output is trimmed to the pass/fail lines. Some headings were written by the logging script as it ran; where a heading and its note disagree (S3's first "green", S5's "red"), the note is the truth. S5 and S8 were not red-first and say so.
 
 
 ### S1 choosing: source, destination, equal-probability draw — red
-`dotnet test sim/tests --filter "FullyQualifiedName~TheftTests"`
+`dotnet test sim/tests --filter "FullyQualifiedName~TheftTests"` (19 tests: 13 failed, 6 passed — the 6 are the ones that expect shirking, which the scaffold already did)
 ```
   Failed Goblins.Sim.Tests.TheftTests.A_goblin_at_70_Chaos_with_Grub_on_a_Pile_sets_out_to_steal_when_the_draw_picks_theft 
   Failed Goblins.Sim.Tests.TheftTests.A_nearer_destination_is_taken_when_the_corridor_is_shorter_than_four_steps 
@@ -70,7 +70,7 @@ Total tests: 30
 Total tests: 40
 ```
 
-### S3 changed plans before the pickup — green
+### S3 changed plans before the pickup — first green attempt: 39/40, the failure a set-up mistake in the new two-thief test (goblin 0 also had a fight target, so its draw was one of three); fixed in the test, not the code
 `dotnet test sim/tests --filter "FullyQualifiedName~TheftTests"`
 ```
      Failed: 1
@@ -123,7 +123,7 @@ Total tests: 47
 Total tests: 47
 ```
 
-### S5 Need interruption at every stage (corrected set-ups) — red
+### S5 Need interruption at every stage (set-ups corrected after a first run with test-side mistakes) — PASSED, not red
 `dotnet test sim/tests --filter "FullyQualifiedName~TheftTests"`
 ```
      Passed: 70
