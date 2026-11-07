@@ -9,19 +9,24 @@ public partial class WarrenView : Node2D
 {
 	public const int CellSize = 18;
 
-	static readonly Color FloorColor = new(0.62f, 0.62f, 0.64f);
+	public static readonly Color FloorColor = new(0.62f, 0.62f, 0.64f);
 	static readonly Color DirtColor = new(0.30f, 0.26f, 0.22f);
 	static readonly Color StoneColor = new(0.36f, 0.40f, 0.48f);
 	static readonly Color GridColor = new(0f, 0f, 0f, 0.15f);
-	static readonly Color StairsColor = new(0.78f, 0.74f, 0.58f);
+	public static readonly Color StairsColor = new(0.78f, 0.74f, 0.58f);
 	static readonly Color StairsMarkColor = new(0.25f, 0.22f, 0.15f);
-	static readonly Color DesignationColor = new(1f, 0.85f, 0.2f);
-	static readonly Color UnreachableColor = new(0.55f, 0.55f, 0.55f);
+	public static readonly Color DesignationColor = new(1f, 0.85f, 0.2f);
+	public static readonly Color UnreachableColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color ProgressColor = new(1f, 0.85f, 0.2f, 0.55f);
-	static readonly Color SelectionColor = new(1f, 1f, 1f, 0.9f);
-	static readonly Color SelectionFillColor = new(1f, 1f, 1f, 0.15f);
-	static readonly Color GoblinColor = new(0.35f, 0.75f, 0.30f);
-	static readonly Color FaintGoblinColor = new(0.35f, 0.75f, 0.30f, 0.35f);
+	// A right-drag unmakes, so its box is red whatever the Tool.
+	public static readonly Color RemovalColor = new(0.92f, 0.36f, 0.28f);
+	static readonly Color HoverColor = new(1f, 1f, 1f, 0.85f);
+	// A dark rim around each goblin on the viewed level, so green bodies stand out on grey floor and green Piles.
+	public static readonly Color GoblinOutlineColor = new(0.08f, 0.10f, 0.06f, 0.85f);
+	public static readonly Color PausedColor = new(0.95f, 0.72f, 0.25f);
+	public const int PausedFontSize = 13;
+	public static readonly Color GoblinColor = new(0.35f, 0.75f, 0.30f);
+	public static readonly Color FaintGoblinColor = new(0.35f, 0.75f, 0.30f, 0.35f);
 	// A Starving goblin's body, tinted from healthy green to a sickly yellow.
 	public static readonly Color StarvingGoblinColor = new(0.78f, 0.72f, 0.22f);
 	public const int PipSize = 4;
@@ -30,7 +35,7 @@ public partial class WarrenView : Node2D
 	static readonly Color FungusColor = new(0.64f, 0.42f, 0.82f);
 	static readonly Color GrogColor = new(0.18f, 0.72f, 0.74f);
 	public static readonly Color WaitingHaulColor = new(0.55f, 0.55f, 0.55f);
-	static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
+	public static readonly Color PileTint = new(0.70f, 0.92f, 0.55f, 0.6f);
 	public static readonly Color GrubPitTint = new(0.82f, 0.60f, 0.28f, 0.6f);
 	public static readonly Color FungusFarmTint = new(0.30f, 0.58f, 0.42f, 0.6f);
 	public static readonly Color BreweryTint = new(0.75f, 0.32f, 0.28f, 0.6f);
@@ -52,6 +57,12 @@ public partial class WarrenView : Node2D
 
 	/// <summary>The cells a drag in progress has swept (corners in any order), outlined as it goes.</summary>
 	public (Vector2I From, Vector2I To)? Selection { get; set; }
+
+	/// <summary>The colour of the drag box: what the Tool makes, or <see cref="RemovalColor"/> for a right-drag.</summary>
+	public Color SelectionColor { get; set; } = Colors.White;
+
+	/// <summary>The map cell under the cursor, outlined; null with the cursor off the map.</summary>
+	public Vector2I? Hover { get; set; }
 
 	public override void _Draw()
 	{
@@ -126,6 +137,8 @@ public partial class WarrenView : Node2D
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			var dz = s.GoblinZ[g] - ViewZ;
+			if (dz == 0)
+				DrawRect(MarkerRect(s, g, dz).Grow(1), GoblinOutlineColor);
 			if (Math.Abs(dz) <= 1)
 				DrawRect(MarkerRect(s, g, dz), dz == 0 ? BodyColor(s, g) : FaintGoblinColor);
 		}
@@ -170,8 +183,19 @@ public partial class WarrenView : Node2D
 			var min = new Vector2I(Math.Min(sel.From.X, sel.To.X), Math.Min(sel.From.Y, sel.To.Y));
 			var max = new Vector2I(Math.Max(sel.From.X, sel.To.X), Math.Max(sel.From.Y, sel.To.Y));
 			var box = new Rect2(min.X * CellSize, min.Y * CellSize, (max.X - min.X + 1) * CellSize, (max.Y - min.Y + 1) * CellSize);
-			DrawRect(box, SelectionFillColor);
+			DrawRect(box, new Color(SelectionColor, 0.3f));
 			DrawRect(box, SelectionColor, filled: false, width: 2);
+		}
+
+		if (Hover is { } hover)
+			DrawRect(new Rect2(hover.X * CellSize, hover.Y * CellSize, CellSize, CellSize), HoverColor, filled: false, width: 1);
+
+		// Paused, the map wears a frame and a label just outside its edge, so nothing on the map itself is covered.
+		if (s.Paused)
+		{
+			var map = new Rect2(0, 0, s.Width * CellSize, s.Height * CellSize);
+			DrawRect(map.Grow(2), PausedColor, filled: false, width: 2);
+			DrawString(ThemeDB.FallbackFont, new Vector2(0, -6), "PAUSED · the warren holds its breath", HorizontalAlignment.Left, -1, PausedFontSize, PausedColor);
 		}
 	}
 

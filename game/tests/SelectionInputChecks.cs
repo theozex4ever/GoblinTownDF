@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Godot;
 using Goblins.Sim;
 
@@ -8,7 +9,7 @@ namespace AThousandGoblinsDeep;
 /// <summary>Headless input checks through Main's engine callbacks and the rendered sim state.</summary>
 public partial class SelectionInputChecks : Node
 {
-	public override void _Ready()
+	public override async void _Ready()
 	{
 		try
 		{
@@ -202,6 +203,9 @@ public partial class SelectionInputChecks : Node
 					main._Process(0.1);
 				Require(frames < 200, "No Grunt started digging.");
 				var digger = Enumerable.Range(0, s.GoblinCount).First(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Digging);
+				Move(main, view, s.GoblinX[digger], s.GoblinY[digger]);
+				Require(GoblinHover.GoblinAt(s, s.TileIndex(s.GoblinX[digger], s.GoblinY[digger], 0)) != digger
+					|| main.Inspection.Doing == "Digging", $"A digging Grunt is \"{main.Inspection.Doing}\".");
 				// A few ticks into the dig, so it has progress to keep.
 				for (var tick = 0; tick < 5; tick++)
 					main._Process(0.1);
@@ -444,30 +448,53 @@ public partial class SelectionInputChecks : Node
 				s.AddItems(s.TileIndex(4, 4, 0), Goblins.Sim.Material.Stone, SimState.PileCapacity);
 				s.AddItems(s.TileIndex(4, 4, 0), Goblins.Sim.Material.Grog, 7);
 				s.AddItems(s.TileIndex(6, 4, 0), Goblins.Sim.Material.Dirt, 2);
+				sim.RecheckReachability();
 
-				// One line names every count on the Pile tile under the cursor, in Material order, full ones marked.
+				// The Inspector names every count on the Pile tile under the cursor, in Material order, full ones marked.
 				Move(main, view, 4, 4);
-				ExpectHover(main, "A Pile, counted solemnly: Stone 30 (full), Grub 14, Grog 7.");
+				ExpectInspection(main, "Pile", "Stone 30 full, Grub 14, Grog 7");
 				Move(main, view, 5, 4);
-				ExpectHover(main, "An empty Pile, waiting with great dignity.");
-				// A loose item is not on a Pile, and neither is bare floor or somewhere off the map.
+				ExpectInspection(main, "Pile", "", "An empty Pile, waiting with great dignity.");
+				// A loose item is not on a Pile: the Inspector shows the Floor it lies on, and the unit, which has a Pile to go to.
 				Move(main, view, 6, 4);
-				ExpectHover(main, "");
+				ExpectInspection(main, "Floor", "Dirt 2");
+				Move(main, view, 7, 4);
+				ExpectInspection(main, "Floor", "");
+				// Off the map there is nothing to inspect.
 				Move(main, view, 4, 4);
 				Move(main, view, -1, 4);
-				ExpectHover(main, "");
-				// The line follows the count as the Pile fills, and goes when the level changes.
+				ExpectInspection(main, "", "");
+				// The Inspector follows the count as the Pile fills, and the level when it changes.
 				Move(main, view, 5, 4);
 				s.AddItems(s.TileIndex(5, 4, 0), Goblins.Sim.Material.Fungus, 3);
 				sim.Apply(new SetPaused(false));
 				main._Process(0.1);
 				sim.Apply(new SetPaused(true));
-				ExpectHover(main, "A Pile, counted solemnly: Fungus 3.");
+				ExpectInspection(main, "Pile", "Fungus 3");
 				Key(main, Godot.Key.Period);
-				ExpectHover(main, "");
+				ExpectInspection(main, "Solid dirt", "");
 			});
 
-			// The real game: the starting Grub and Grog are hauled to a Pile painted with the Pile Tool, and the hover line reads it.
+			// The Inspector says what any other tile is and what is marked on it.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				sim.Apply(new Designate(DesignationKind.DigStairs, 0, 3, 3, 3, 3));
+				sim.Apply(new PaintRoom(RoomKind.Brewery, 0, 4, 3, 4, 3));
+				Move(main, view, 3, 3);
+				ExpectInspection(main, "Floor", "");
+				Require(main.Inspection.Doing == "Marked for stairs", $"A stairs Designation reads \"{main.Inspection.Doing}\".");
+				Move(main, view, 4, 3);
+				ExpectInspection(main, "Brewery", "");
+				Key(main, Godot.Key.Period);
+				sim.Apply(new Designate(DesignationKind.Dig, 1, 3, 3, 3, 3));
+				Move(main, view, 3, 3);
+				ExpectInspection(main, "Solid dirt", "");
+				Require(main.Inspection.Doing == "Marked for digging", $"A dig Designation reads \"{main.Inspection.Doing}\".");
+				Require(main.Inspection.Note == "No goblin can reach it yet.", $"An unreachable dig says \"{main.Inspection.Note}\".");
+			});
+
+			// The real game: the starting Grub and Grog are hauled to a Pile painted with the Pile Tool, and the Inspector reads it.
 			WithMain((main, view, sim) =>
 			{
 				var s = sim.State;
@@ -491,10 +518,11 @@ public partial class SelectionInputChecks : Node
 					.First(p => s.StoredCount(s.TileIndex(p.Item1, p.Item2, 0), Goblins.Sim.Material.Grub) > 0
 						&& GoblinHover.GoblinAt(s, s.TileIndex(p.Item1, p.Item2, 0)) < 0);
 				Move(main, view, stockedX, stockedY);
-				Require(main.HoverText.StartsWith("A Pile, counted solemnly:"), $"The hover line over the stocked Pile was \"{main.HoverText}\".");
+				Require(main.Inspection.Title == "Pile" && main.Inspection.Stock.Any(line => line.Material == Goblins.Sim.Material.Grub),
+					$"The Inspector over the stocked Pile shows {main.Inspection.Title}: {StockText(main.Inspection)}.");
 			});
 
-			// The hover line names the Grub, Grog and Sleep meters of the goblin under the cursor, ahead of any Pile under it.
+			// The Inspector shows the Grub, Grog and Sleep meters of the goblin under the cursor, ahead of any Pile under it.
 			WithMain((main, view, sim) =>
 			{
 				var s = sim.State;
@@ -505,30 +533,32 @@ public partial class SelectionInputChecks : Node
 				(s.GoblinGrub[5], s.GoblinGrog[5], s.GoblinSleep[5]) = (100, 100, 40);
 				GoblinTasks.BeginSleep(s, 5, dropTile: -1, asleep: true);
 				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
-				ExpectHover(main, "A Grunt. Grub 74/100, Grog 91/100, Sleep 85/100. At peace with the world, and with lunch.");
+				ExpectGoblin(main, 74, 91, 85, "At peace with the world, and with lunch.");
+				Require(main.Inspection.Doing == "Standing about, between jobs", $"An idle Grunt is \"{main.Inspection.Doing}\".");
 				Move(main, view, s.GoblinX[1], s.GoblinY[1]);
-				ExpectHover(main, "A Grunt. Grub 12/100, Grog 80/100, Sleep 60/100. Thinking about nothing but Grub.");
+				ExpectGoblin(main, 12, 80, 60, "Thinking about nothing but Grub.");
 				Move(main, view, s.GoblinX[2], s.GoblinY[2]);
-				ExpectHover(main, "A Grunt. Grub 0/100, Grog 100/100, Sleep 100/100. Starving, and bearing it at half speed with great dignity.");
+				ExpectGoblin(main, 0, 100, 100, "Starving, and bearing it at half speed with great dignity.");
 				Move(main, view, s.GoblinX[3], s.GoblinY[3]);
-				ExpectHover(main, "A Grunt. Grub 90/100, Grog 8/100, Sleep 45/100. Thinking about nothing but Grog.");
+				ExpectGoblin(main, 90, 8, 45, "Thinking about nothing but Grog.");
 				Move(main, view, s.GoblinX[4], s.GoblinY[4]);
-				ExpectHover(main, "A Grunt. Grub 100/100, Grog 100/100, Sleep 12/100. Thinking about nothing but a lie-down, on anything flat.");
+				ExpectGoblin(main, 100, 100, 12, "Thinking about nothing but a lie-down, on anything flat.");
 				Move(main, view, s.GoblinX[5], s.GoblinY[5]);
-				ExpectHover(main, "A Grunt. Grub 100/100, Grog 100/100, Sleep 40/100. Fast asleep. Hunger and thirst may take a number.");
+				ExpectGoblin(main, 100, 100, 40, "Fast asleep. Hunger and thirst may take a number.");
+				Require(main.Inspection.Doing == "Asleep on the bare floor", $"A Grunt asleep on the floor is \"{main.Inspection.Doing}\".");
 				sim.Apply(new PaintPile(0, s.GoblinX[0], s.GoblinY[0], s.GoblinX[0], s.GoblinY[0]));
 				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
-				Require(main.HoverText.StartsWith("A Grunt. Grub 74/100, Grog 91/100, Sleep 85/100."), $"A Pile hid the goblin on it: \"{main.HoverText}\".");
-				// The line follows the meters as the sim drains them, and a goblin on another level is not under the cursor.
+				Require(main.Inspection.Title == "Grunt", $"A Pile hid the goblin on it: the Inspector shows {main.Inspection.Title}.");
+				// The meters follow the sim as it drains them, and a goblin on another level is not under the cursor.
 				s.GoblinGrub[0] = 74;
 				s.GoblinGrog[0] = 91;
 				s.Tick = 34;
 				sim.Apply(new SetPaused(false));
 				main._Process(0.1);
 				sim.Apply(new SetPaused(true));
-				ExpectHover(main, "A Grunt. Grub 74/100, Grog 90/100, Sleep 85/100. At peace with the world, and with lunch.");
+				ExpectGoblin(main, 74, 90, 85, "At peace with the world, and with lunch.");
 				Key(main, Godot.Key.Period);
-				ExpectHover(main, "");
+				ExpectInspection(main, "Solid dirt", "");
 			});
 
 			// The real game: hungry Grunts leave a dig for the starting Grub, which is eaten where it lies, and the dig carries on.
@@ -545,6 +575,9 @@ public partial class SelectionInputChecks : Node
 					main._Process(0.1);
 				Require(frames < 200, "No Grunt started digging.");
 				var digger = Enumerable.Range(0, s.GoblinCount).First(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Digging);
+				Move(main, view, s.GoblinX[digger], s.GoblinY[digger]);
+				Require(GoblinHover.GoblinAt(s, s.TileIndex(s.GoblinX[digger], s.GoblinY[digger], 0)) != digger
+					|| main.Inspection.Doing == "Digging", $"A digging Grunt is \"{main.Inspection.Doing}\".");
 				// Hunger strikes mid-dig.
 				Array.Fill(s.GoblinGrub, (byte)29, 0, s.GoblinCount);
 				main._Process(0.1);
@@ -616,6 +649,157 @@ public partial class SelectionInputChecks : Node
 				Require(GoblinTasks.FindViolation(s) is null, "A Task rule broke at the end of the drink.");
 			});
 
+			// The top bar's buttons apply the same Commands as the keys, and every button shows what the keys did too.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				// The pause was applied straight to the sim, so the HUD hears of it next frame.
+				main._Process(0);
+				Require(ButtonNamed(main, "Pause").ButtonPressed, "The Pause button does not show the paused warren.");
+				Press(main, "Pause");
+				Require(!s.Paused && !ButtonNamed(main, "Pause").ButtonPressed, "The Pause button did not unpause the warren.");
+				Key(main, Godot.Key.Space);
+				Require(s.Paused && ButtonNamed(main, "Pause").ButtonPressed, "Space paused the warren but the button did not show it.");
+
+				Press(main, "Speed4");
+				ExpectSpeed(main, s, 4);
+				Key(main, Godot.Key.Key2);
+				ExpectSpeed(main, s, 2);
+				// A click on the speed already chosen keeps it chosen.
+				Press(main, "Speed2");
+				ExpectSpeed(main, s, 2);
+
+				Require(ButtonNamed(main, "DepthUp").Disabled && !ButtonNamed(main, "DepthDown").Disabled, "At the Surface, only Down should work.");
+				Require(main.DepthText == "Depth 0 · Surface", $"The depth reads \"{main.DepthText}\".");
+				Press(main, "DepthDown");
+				Require(view.ViewZ == 1 && main.DepthText == "Depth 1 · Dirt", $"Down showed z{view.ViewZ}, \"{main.DepthText}\".");
+				Press(main, "DepthDown");
+				Require(view.ViewZ == 2 && ButtonNamed(main, "DepthDown").Disabled, "At the bottom level, Down should not work.");
+				Key(main, Godot.Key.Comma);
+				Require(view.ViewZ == 1 && !ButtonNamed(main, "DepthDown").Disabled && !ButtonNamed(main, "DepthUp").Disabled,
+					"The comma key went up a level but the buttons did not follow.");
+
+				s.Tick = 1234;
+				Press(main, "Speed1");
+				Press(main, "Pause");
+				main._Process(0.1);
+				Require(main.ClockText == "Tick 1235", $"The clock reads \"{main.ClockText}\" a tick after 1234.");
+			});
+
+			// The Tool buttons pick Tools as the keys do, and show the Tool picked whichever way it was picked.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				ExpectTool(main, null);
+				var idleHint = main.ToolHint;
+				Press(main, "ToolDigStairs");
+				ExpectTool(main, "ToolDigStairs");
+				Drag(main, view, MouseButton.Left, 4, 4, 5, 5);
+				ExpectRectangle(s, 0, DesignationKind.DigStairs, 4, 4, 5, 5);
+				Key(main, Godot.Key.P);
+				ExpectTool(main, "ToolPile");
+				Require(main.ToolHint != idleHint, "The hint did not change when the Pile Tool was picked.");
+				// A click on the picked Tool puts it away, as its key does.
+				Press(main, "ToolPile");
+				ExpectTool(main, null);
+				Require(main.ToolHint == idleHint, "The hint still describes a Tool that was put away.");
+				Key(main, Godot.Key.H);
+				ExpectTool(main, "ToolHeap");
+				Key(main, Godot.Key.Escape);
+				ExpectTool(main, null);
+				Drag(main, view, MouseButton.Left, 8, 8, 9, 9);
+				ExpectRectangle(s, 0, DesignationKind.None, 8, 8, 9, 9);
+				Require(CountRooms(s, RoomKind.SleepingHeap) == 0, "A put-away Tool still painted.");
+			});
+
+			// The Warren summary totals every material, stored and loose, and counts each goblin once by state.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				var (dirt, stone, grub, grog) = (Goblins.Sim.Material.Dirt, Goblins.Sim.Material.Stone, Goblins.Sim.Material.Grub, Goblins.Sim.Material.Grog);
+				Array.Clear(s.TileItems);
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinGrog, (byte)NeedRules.MeterMax);
+				Array.Fill(s.GoblinSleep, (byte)NeedRules.MeterMax);
+				sim.Apply(new PaintPile(0, 4, 4, 5, 4));
+				s.AddItems(s.TileIndex(4, 4, 0), grub, 14);
+				s.AddItems(s.TileIndex(5, 4, 0), grub, 3);
+				s.AddItems(s.TileIndex(5, 4, 0), stone, SimState.PileCapacity);
+				s.AddItems(s.TileIndex(8, 8, 0), grub, 2);
+				s.AddItems(s.TileIndex(8, 8, 0), dirt, 5);
+				s.GoblinSleep[0] = 20;
+				GoblinTasks.BeginSleep(s, 0, dropTile: -1, asleep: true);
+				s.GoblinGrub[1] = 10;
+				s.GoblinGrub[2] = 0;
+				main._Process(0);
+				var tally = main.Summary;
+				Require(tally.Stored(grub) == 17 && tally.Loose(grub) == 2, $"Grub reads {tally.Stored(grub)} stored, {tally.Loose(grub)} loose, not 17 and 2.");
+				Require(tally.Stored(stone) == 30 && tally.Loose(stone) == 0, $"Stone reads {tally.Stored(stone)} stored, {tally.Loose(stone)} loose, not 30 and 0.");
+				Require(tally.Stored(dirt) == 0 && tally.Loose(dirt) == 5, $"Dirt reads {tally.Stored(dirt)} stored, {tally.Loose(dirt)} loose, not 0 and 5.");
+				Require(tally.Stored(grog) == 0 && tally.Loose(grog) == 0, "Grog was counted where there is none.");
+				// The sleeper craves Sleep but counts as asleep; the Starving goblin counts as craving, and as Starving too.
+				Require((tally.Goblins, tally.Asleep, tally.Craving, tally.Idle, tally.Working, tally.Starving) == (7, 1, 2, 4, 0, 1),
+					$"Goblins read {tally.Goblins}: {tally.Asleep} asleep, {tally.Craving} craving, {tally.Idle} idle, {tally.Working} working, {tally.Starving} Starving.");
+
+				// A unit in a goblin's hands is loose: hauled to the Pile, the dirt moves from loose to stored and is never lost on the way.
+				Array.Fill(s.GoblinGrub, (byte)NeedRules.MeterMax);
+				sim.RecheckReachability();
+				sim.Apply(new SetPaused(false));
+				var carried = false;
+				for (var frame = 0; frame < 400 && tally.Stored(dirt) < 5; frame++)
+				{
+					main._Process(0.1);
+					tally = main.Summary;
+					Require(tally.Stored(dirt) + tally.Loose(dirt) == 5, $"Dirt reads {tally.Stored(dirt)} stored and {tally.Loose(dirt)} loose mid-haul, not 5 in all.");
+					// Each carrier is itself counted as working, not merely some goblin somewhere.
+					foreach (var carrier in Enumerable.Range(0, s.GoblinCount).Where(g => s.GoblinCarry[g] == (byte)dirt))
+					{
+						Require(WarrenSummary.StateOf(s, carrier) == WarrenSummary.GoblinState.Working,
+							$"Goblin {carrier}, hauling dirt as {(GoblinTask)s.GoblinTask[carrier]}, counts as {WarrenSummary.StateOf(s, carrier)}.");
+						carried = true;
+					}
+					Require(tally.Asleep + tally.Craving + tally.Idle + tally.Working == tally.Goblins, "A goblin was counted twice or not at all.");
+				}
+				Require(carried && tally.Stored(dirt) == 5, $"The dirt was not all hauled: {tally.Stored(dirt)} stored.");
+			});
+
+			// When the map moves under a still pointer (the window resized, a panel grown), the Inspector and the outline follow
+			// the pointer to the cell now under it, paused or not.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
+				Require(main.Inspection.Title == "Grunt", $"The Inspector over a Grunt shows {main.Inspection.Title}.");
+				view.Position += new Vector2(9 * WarrenView.CellSize, 0);
+				main._Process(0);
+				var under = new Vector2I(s.GoblinX[0] - 9, s.GoblinY[0]);
+				Require(view.Hover == under, $"The map outlines {view.Hover} after moving; the pointer is over {under}.");
+				var expected = Inspector.Inspect(s, s.TileIndex(under.X, under.Y, 0));
+				ExpectInspection(main, expected.Title, StockText(expected), expected.Note);
+			});
+
+			// The drag box wears the colour of what it will make, red when it unmakes; the hovered cell is outlined on the map.
+			WithMain((main, view, sim) =>
+			{
+				Move(main, view, 6, 7);
+				Require(view.Hover == new Vector2I(6, 7), $"The map outlines {view.Hover} under the cursor at (6, 7).");
+				Move(main, view, -3, 7);
+				Require(view.Hover is null, "The map outlines a cell with the cursor off the map.");
+
+				Key(main, Godot.Key.G);
+				Button(main, view, MouseButton.Left, true, 4, 4);
+				Require(view.SelectionColor == ToolInfo.Swatch(Tool.GrubPit), "A Grub Pit drag is not drawn in the Grub Pit's colour.");
+				Button(main, view, MouseButton.Left, false, 4, 4);
+				Button(main, view, MouseButton.Right, true, 4, 4);
+				Require(view.SelectionColor == WarrenView.RemovalColor, "A right-drag is not drawn in the removal colour.");
+				Button(main, view, MouseButton.Right, false, 4, 4);
+				Key(main, Godot.Key.D);
+				Button(main, view, MouseButton.Left, true, 4, 4);
+				Require(view.SelectionColor == ToolInfo.Swatch(Tool.Dig), "A dig drag is not drawn in the Designation colour.");
+				Button(main, view, MouseButton.Left, false, 4, 4);
+			});
+
+			await RealMouseCheck();
 			CountLabelChecks();
 			PileCountChecks();
 
@@ -648,8 +832,54 @@ public partial class SelectionInputChecks : Node
 		}
 	}
 
-	static void ExpectHover(Main main, string expected) =>
-		Require(main.HoverText == expected, $"The hover line was \"{main.HoverText}\", expected \"{expected}\".");
+	static Godot.Button ButtonNamed(Main main, string name) =>
+		main.FindChild(name, recursive: true, owned: false) as Godot.Button ?? throw new InvalidOperationException($"No button named {name}.");
+
+	// What a click does: a toggle button flips, then every button emits pressed.
+	static void Press(Main main, string name)
+	{
+		var button = ButtonNamed(main, name);
+		Require(!button.Disabled, $"The {name} button was clicked while disabled.");
+		if (button.ToggleMode)
+			button.SetPressedNoSignal(!button.ButtonPressed);
+		button.EmitSignal(BaseButton.SignalName.Pressed);
+	}
+
+	static readonly string[] ToolButtons = ["ToolDig", "ToolDigStairs", "ToolPile", "ToolGrubPit", "ToolFungusFarm", "ToolBrewery", "ToolHeap"];
+
+	// Exactly the named Tool button is down, or none for null.
+	static void ExpectTool(Main main, string? picked)
+	{
+		foreach (var name in ToolButtons)
+			Require(ButtonNamed(main, name).ButtonPressed == (name == picked), $"The {name} button is wrong with {picked ?? "no Tool"} picked.");
+	}
+
+	static void ExpectSpeed(Main main, SimState s, int speed)
+	{
+		Require(s.Speed == speed, $"The warren runs at {s.Speed}×, not {speed}×.");
+		foreach (var each in new[] { 1, 2, 4 })
+			Require(ButtonNamed(main, $"Speed{each}").ButtonPressed == (each == speed), $"The {each}× button is wrong at {speed}×.");
+	}
+
+	// Every stock line as "Material count", with "full" and "waiting" marked, in the order shown.
+	static string StockText(Inspection inspection) =>
+		string.Join(", ", inspection.Stock.Select(line => $"{line.Material} {line.Count}{(line.Full ? " full" : "")}{(line.Waiting ? " waiting" : "")}"));
+
+	static void ExpectInspection(Main main, string title, string stock, string? note = null)
+	{
+		var inspection = main.Inspection;
+		Require(inspection.Title == title && StockText(inspection) == stock && (note is null || inspection.Note == note),
+			$"The Inspector shows \"{inspection.Title}\" [{StockText(inspection)}] \"{inspection.Note}\", expected \"{title}\" [{stock}] \"{note}\".");
+	}
+
+	static void ExpectGoblin(Main main, int grub, int grog, int sleep, string note)
+	{
+		var inspection = main.Inspection;
+		var meters = string.Join(" ", inspection.Meters.Select(meter => $"{meter.Need} {meter.Value}"));
+		var expected = $"Grub {grub} Grog {grog} Sleep {sleep}";
+		Require(inspection.Title == "Grunt" && meters == expected && inspection.Note == note,
+			$"The Inspector shows \"{inspection.Title}\" [{meters}] \"{inspection.Note}\", expected a Grunt [{expected}] \"{note}\".");
+	}
 
 	// A Pile tile draws two counts: full materials first, then the larger count, and Material order on a tie. Counts are
 	// given in Material order: Dirt, Stone, Grub, Fungus, Grog.
@@ -686,6 +916,56 @@ public partial class SelectionInputChecks : Node
 		}
 	}
 
+	// Real mouse events through the viewport and the GUI, after a layout pass: a click on a Tool button picks the Tool and
+	// stops there, a press on the map starts a drag the panels let through, and the drag ends where it is released, even
+	// over a panel, clamped to the map.
+	async Task RealMouseCheck()
+	{
+		_scenarios++;
+		var main = new Main();
+		AddChild(main);
+		try
+		{
+			for (var frame = 0; frame < 3; frame++)
+				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+			var view = main.View;
+			var sim = view.Sim!;
+			var s = sim.State;
+			sim.Apply(new SetPaused(true));
+
+			var stairs = ButtonNamed(main, "ToolDigStairs").GetGlobalRect().GetCenter();
+			Push(new InputEventMouseMotion { Position = stairs, GlobalPosition = stairs });
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = stairs, GlobalPosition = stairs });
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = stairs, GlobalPosition = stairs });
+			ExpectTool(main, "ToolDigStairs");
+			Require(Enumerable.Range(0, s.Designations.Length).All(t => s.Designations[t] == 0), "A click on a Tool button reached the map.");
+
+			var from = Position(view, 4, 4);
+			// Over the right panel, level with row 6.
+			var panel = ButtonNamed(main, "ToolDigStairs").GetGlobalRect().Position.X < from.X
+				? new Vector2(GetViewport().GetVisibleRect().Size.X - 20, Position(view, 0, 6).Y)
+				: throw new InvalidOperationException("The map is not right of the Tool palette.");
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = from, GlobalPosition = from });
+			Push(new InputEventMouseMotion { Position = panel, GlobalPosition = panel, ButtonMask = MouseButtonMask.Left });
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = panel, GlobalPosition = panel });
+			Require(view.Selection is null, "A drag released over a panel never ended.");
+			ExpectRectangle(s, 0, DesignationKind.DigStairs, 4, 4, s.Width - 1, 6);
+		}
+		finally
+		{
+			RemoveChild(main);
+			main.Free();
+		}
+	}
+
+	// Positions are in the viewport's own coordinates, as the map and the buttons are: under --headless the window is
+	// 64 px square, and stretch would rescale anything given in window coordinates.
+	void Push(InputEvent input)
+	{
+		GetViewport().PushInput(input, inLocalCoords: true);
+		input.Dispose();
+	}
+
 	// Every scenario goes through here, so the passing line reports how many actually ran.
 	int _scenarios;
 
@@ -696,7 +976,7 @@ public partial class SelectionInputChecks : Node
 		AddChild(main);
 		try
 		{
-			var view = main.GetChildren().OfType<WarrenView>().Single();
+			var view = main.View;
 			var sim = view.Sim!;
 			sim.Apply(new SetPaused(true));
 			check(main, view, sim);
@@ -709,7 +989,7 @@ public partial class SelectionInputChecks : Node
 	}
 
 	static Vector2 Position(WarrenView view, int x, int y) =>
-		view.Position + new Vector2((x + 0.5f) * WarrenView.CellSize, (y + 0.5f) * WarrenView.CellSize);
+		view.GlobalPosition + new Vector2((x + 0.5f) * WarrenView.CellSize, (y + 0.5f) * WarrenView.CellSize);
 
 	static void Button(Main main, WarrenView view, MouseButton button, bool pressed, int x, int y)
 	{

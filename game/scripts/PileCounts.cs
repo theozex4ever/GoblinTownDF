@@ -1,10 +1,9 @@
-using System.Text;
 using Goblins.Sim;
 
 namespace AThousandGoblinsDeep;
 
 /// <summary>
-/// What a Pile tile says about its stock. A tile is 18 px, so it draws only <see cref="Shown"/> counts; the hover line
+/// What a Pile tile says about its stock. A tile is 18 px, so it draws only <see cref="Shown"/> counts; the Inspector
 /// is where every count is read. Reads sim state; never writes it.
 /// </summary>
 public static class PileCounts
@@ -43,33 +42,5 @@ public static class PileCounts
 		var full = count >= SimState.PileCapacity;
 		var otherFull = other >= SimState.PileCapacity;
 		return full != otherFull ? full : count > other;
-	}
-
-	public static string Name(Material material) => material.ToString();
-
-	/// <summary>
-	/// The hover line for the tile under the cursor: every count on a Pile tile, in Material order, with full ones
-	/// marked, or an empty string for a tile that is not a Pile.
-	/// </summary>
-	public static string HoverLine(SimState s, int tile)
-	{
-		if (!s.IsPile(tile))
-			return "";
-
-		var counts = new StringBuilder();
-		for (var material = Material.Dirt; (int)material <= SimState.CountedMaterials; material++)
-		{
-			var count = s.StoredCount(tile, material);
-			if (count <= 0)
-				continue;
-			if (counts.Length > 0)
-				counts.Append(", ");
-			counts.Append(Name(material)).Append(' ').Append(count);
-			if (count >= SimState.PileCapacity)
-				counts.Append(" (full)");
-		}
-		return counts.Length == 0
-			? "An empty Pile, waiting with great dignity."
-			: $"A Pile, counted solemnly: {counts}.";
 	}
 }
