@@ -22,7 +22,8 @@ public partial class Main : Node
 
 	Simulation _sim = null!;
 	WarrenView _view = null!;
-	Label _depthLabel = null!;
+	TopBar _topBar = null!;
+	Label _toolLabel = null!;
 	Label _hoverLabel = null!;
 	// The map cell under the cursor, from the last mouse motion; kept so the hover line follows the counts as the sim changes them.
 	Vector2I _hoverCell = new(-1, -1);
@@ -79,8 +80,11 @@ public partial class Main : Node
 
 		var topBar = new PanelContainer();
 		column.AddChild(topBar);
-		_depthLabel = new Label();
-		topBar.AddChild(_depthLabel);
+		_topBar = new TopBar();
+		_topBar.PauseClicked += () => Apply(new SetPaused(!_sim.State.Paused));
+		_topBar.SpeedClicked += speed => Apply(new SetSpeed(speed));
+		_topBar.LevelClicked += ChangeLevel;
+		topBar.AddChild(_topBar);
 
 		var body = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
 		body.AddThemeConstantOverride("separation", 8);
@@ -88,7 +92,11 @@ public partial class Main : Node
 
 		var left = new PanelContainer { CustomMinimumSize = new Vector2(LeftPanelWidth, 0) };
 		body.AddChild(left);
-		left.AddChild(UiTheme.Text(KeyHint, UiTheme.MutedLabel, wrap: true));
+		var leftColumn = new VBoxContainer();
+		left.AddChild(leftColumn);
+		_toolLabel = new Label();
+		leftColumn.AddChild(_toolLabel);
+		leftColumn.AddChild(UiTheme.Text(KeyHint, UiTheme.MutedLabel, wrap: true));
 
 		var mapArea = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
 		body.AddChild(mapArea);
@@ -111,10 +119,17 @@ public partial class Main : Node
 		{
 			_view.QueueRedraw();
 			UpdateHover();
+			_topBar.SyncClock(_sim.State);
 		}
 		if (_sim.DrainEvents().Count > 0)
-			UpdateDepthLabel();
+			SyncHud();
 	}
+
+	/// <summary>The depth readout in the top bar: the viewed level and its Band.</summary>
+	public string DepthText => _topBar.DepthText;
+
+	/// <summary>The clock in the top bar.</summary>
+	public string ClockText => _topBar.ClockText;
 
 	/// <summary>The hover line: the Grub, Grog and Sleep meters of the goblin under the cursor, else every count on the Pile tile under it, else empty.</summary>
 	public string HoverText => _hoverLabel.Text;
@@ -227,7 +242,7 @@ public partial class Main : Node
 	{
 		CancelSelection();
 		_tool = _tool == tool ? Tool.None : tool;
-		UpdateDepthLabel();
+		SyncHud();
 	}
 
 	public override void _UnhandledKeyInput(InputEvent @event)
@@ -237,10 +252,10 @@ public partial class Main : Node
 
 		switch (key.Keycode)
 		{
-			case Key.Space: _sim.Apply(new SetPaused(!_sim.State.Paused)); break;
-			case Key.Key1 or Key.Kp1: _sim.Apply(new SetSpeed(1)); break;
-			case Key.Key2 or Key.Kp2: _sim.Apply(new SetSpeed(2)); break;
-			case Key.Key4 or Key.Kp4: _sim.Apply(new SetSpeed(4)); break;
+			case Key.Space: Apply(new SetPaused(!_sim.State.Paused)); break;
+			case Key.Key1 or Key.Kp1: Apply(new SetSpeed(1)); break;
+			case Key.Key2 or Key.Kp2: Apply(new SetSpeed(2)); break;
+			case Key.Key4 or Key.Kp4: Apply(new SetSpeed(4)); break;
 			case Key.D: PickTool(Tool.Dig); break;
 			case Key.S: PickTool(Tool.DigStairs); break;
 			case Key.P: PickTool(Tool.Pile); break;
@@ -248,7 +263,7 @@ public partial class Main : Node
 			case Key.F: PickTool(Tool.FungusFarm); break;
 			case Key.B: PickTool(Tool.Brewery); break;
 			case Key.H: PickTool(Tool.Heap); break;
-			case Key.Escape: CancelSelection(); _tool = Tool.None; UpdateDepthLabel(); break;
+			case Key.Escape: CancelSelection(); _tool = Tool.None; SyncHud(); break;
 			case Key.Comma: ChangeLevel(-1); break;
 			case Key.Period: ChangeLevel(1); break;
 			default: return;
@@ -268,35 +283,31 @@ public partial class Main : Node
 	{
 		_view.ViewZ = _viewZ;
 		_view.QueueRedraw();
-		UpdateDepthLabel();
+		SyncHud();
 		UpdateHover();
 	}
 
-	void UpdateDepthLabel()
+	// A player's Command, from a key or a button: the HUD shows its effect at once rather than next frame.
+	void Apply(Command command)
 	{
-		var s = _sim.State;
-		var pace = s.Paused ? "paused" : $"{s.Speed}×";
-		var tool = _tool switch
-		{
-			Tool.Dig => " · dig",
-			Tool.DigStairs => " · stairs",
-			Tool.Pile => " · pile",
-			Tool.GrubPit => " · grub pit",
-			Tool.FungusFarm => " · fungus farm",
-			Tool.Brewery => " · brewery",
-			Tool.Heap => " · sleeping heap",
-			_ => "",
-		};
-		_depthLabel.Text = $"Depth {_viewZ} · {BandName(_viewZ)} · {pace}{tool}";
+		_sim.Apply(command);
+		SyncHud();
 	}
 
-	// The bands from the GDD's World and z-levels table.
-	static string BandName(int z) => z switch
+	// Every button and readout shows the sim and view as they are now, however they got that way.
+	void SyncHud()
 	{
-		0 => "Surface",
-		<= 3 => "Dirt",
-		<= 9 => "Stone",
-		<= 13 => "Ore",
-		_ => "The Deep",
-	};
+		_topBar.Sync(_sim.State, _viewZ);
+		_toolLabel.Text = _tool switch
+		{
+			Tool.Dig => "Tool: dig",
+			Tool.DigStairs => "Tool: stairs",
+			Tool.Pile => "Tool: pile",
+			Tool.GrubPit => "Tool: grub pit",
+			Tool.FungusFarm => "Tool: fungus farm",
+			Tool.Brewery => "Tool: brewery",
+			Tool.Heap => "Tool: sleeping heap",
+			_ => "No tool",
+		};
+	}
 }

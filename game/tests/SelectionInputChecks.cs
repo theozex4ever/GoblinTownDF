@@ -616,6 +616,43 @@ public partial class SelectionInputChecks : Node
 				Require(GoblinTasks.FindViolation(s) is null, "A Task rule broke at the end of the drink.");
 			});
 
+			// The top bar's buttons apply the same Commands as the keys, and every button shows what the keys did too.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				// The pause was applied straight to the sim, so the HUD hears of it next frame.
+				main._Process(0);
+				Require(ButtonNamed(main, "Pause").ButtonPressed, "The Pause button does not show the paused warren.");
+				Press(main, "Pause");
+				Require(!s.Paused && !ButtonNamed(main, "Pause").ButtonPressed, "The Pause button did not unpause the warren.");
+				Key(main, Godot.Key.Space);
+				Require(s.Paused && ButtonNamed(main, "Pause").ButtonPressed, "Space paused the warren but the button did not show it.");
+
+				Press(main, "Speed4");
+				ExpectSpeed(main, s, 4);
+				Key(main, Godot.Key.Key2);
+				ExpectSpeed(main, s, 2);
+				// A click on the speed already chosen keeps it chosen.
+				Press(main, "Speed2");
+				ExpectSpeed(main, s, 2);
+
+				Require(ButtonNamed(main, "DepthUp").Disabled && !ButtonNamed(main, "DepthDown").Disabled, "At the Surface, only Down should work.");
+				Require(main.DepthText == "Depth 0 · Surface", $"The depth reads \"{main.DepthText}\".");
+				Press(main, "DepthDown");
+				Require(view.ViewZ == 1 && main.DepthText == "Depth 1 · Dirt", $"Down showed z{view.ViewZ}, \"{main.DepthText}\".");
+				Press(main, "DepthDown");
+				Require(view.ViewZ == 2 && ButtonNamed(main, "DepthDown").Disabled, "At the bottom level, Down should not work.");
+				Key(main, Godot.Key.Comma);
+				Require(view.ViewZ == 1 && !ButtonNamed(main, "DepthDown").Disabled && !ButtonNamed(main, "DepthUp").Disabled,
+					"The comma key went up a level but the buttons did not follow.");
+
+				s.Tick = 1234;
+				Press(main, "Speed1");
+				Press(main, "Pause");
+				main._Process(0.1);
+				Require(main.ClockText == "Tick 1235", $"The clock reads \"{main.ClockText}\" a tick after 1234.");
+			});
+
 			CountLabelChecks();
 			PileCountChecks();
 
@@ -646,6 +683,26 @@ public partial class SelectionInputChecks : Node
 			var width = font.GetStringSize(actual, HorizontalAlignment.Left, -1, WarrenView.CountFontSize).X;
 			Require(width + 2 <= WarrenView.CellSize, $"Count {count} (\"{actual}\") is {width} px wide and overflows its cell.");
 		}
+	}
+
+	static Godot.Button ButtonNamed(Main main, string name) =>
+		main.FindChild(name, recursive: true, owned: false) as Godot.Button ?? throw new InvalidOperationException($"No button named {name}.");
+
+	// What a click does: a toggle button flips, then every button emits pressed.
+	static void Press(Main main, string name)
+	{
+		var button = ButtonNamed(main, name);
+		Require(!button.Disabled, $"The {name} button was clicked while disabled.");
+		if (button.ToggleMode)
+			button.SetPressedNoSignal(!button.ButtonPressed);
+		button.EmitSignal(BaseButton.SignalName.Pressed);
+	}
+
+	static void ExpectSpeed(Main main, SimState s, int speed)
+	{
+		Require(s.Speed == speed, $"The warren runs at {s.Speed}×, not {speed}×.");
+		foreach (var each in new[] { 1, 2, 4 })
+			Require(ButtonNamed(main, $"Speed{each}").ButtonPressed == (each == speed), $"The {each}× button is wrong at {speed}×.");
 	}
 
 	static void ExpectHover(Main main, string expected) =>
