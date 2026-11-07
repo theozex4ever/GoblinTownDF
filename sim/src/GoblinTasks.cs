@@ -276,6 +276,100 @@ public static class GoblinTasks
 	}
 
 	/// <summary>
+	/// Any Task but a seeking, consuming, sleeping or acting-out one → Sneaking to the Pile tile <paramref name="source"/> for a unit of <paramref name="supply"/> (Grub or Grog),
+	/// or Pilfering it at once when <paramref name="atSource"/> (the goblin already stands there). The goblin has chosen <paramref name="destination"/>, the non-Pile tile it will
+	/// consume the unit on, and never replaces it. Abandons any Job and drops any wander and puts a carried unit down on <paramref name="dropTile"/> first, exactly as
+	/// <see cref="BeginShirk"/> does. Nothing is reserved: the unit stays communal stock until it is picked up.
+	/// </summary>
+	public static void BeginTheft(SimState s, int g, int source, Material supply, int destination, int dropTile, bool atSource)
+	{
+		var task = (GoblinTask)s.GoblinTask[g];
+		if (IsSatisfyingTask(task) || IsActingOutTask(task))
+			throw new InvalidOperationException($"Goblin {g} is {task} and cannot begin to steal.");
+		if (supply is not (Material.Grub or Material.Grog))
+			throw new ArgumentOutOfRangeException(nameof(supply), supply, "A thief takes Grub or Grog.");
+		BeginNeedTask(s, g, dropTile, atSource ? GoblinTask.Pilfering : GoblinTask.Sneaking);
+		s.GoblinJobTile[g] = source;
+		s.GoblinTheftSupply[g] = (byte)supply;
+		s.GoblinTheftDestination[g] = destination;
+	}
+
+	/// <summary>Sneaking → Pilfering, on arrival at the Pile tile.</summary>
+	public static void StartPilfering(SimState s, int g)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.Pilfering;
+	}
+
+	/// <summary>
+	/// Pilfering → MakingOff with the unit of the goblin's chosen supply, which has just left its Pile. The goblin walks it to the destination it chose when it set out.
+	/// </summary>
+	public static void FinishPilfer(SimState s, int g)
+	{
+		s.GoblinCarry[g] = s.GoblinTheftSupply[g];
+		s.GoblinJobTile[g] = -1;
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.MakingOff;
+	}
+
+	/// <summary>MakingOff → Scoffing, on arrival at the destination.</summary>
+	public static void StartScoffing(SimState s, int g)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.Scoffing;
+	}
+
+	/// <summary>Counts one tick of private consumption. True on the tick the <see cref="NeedRules.EatTicks"/>th tick is counted, when the caller must end it with <see cref="FinishScoff"/>.</summary>
+	public static bool ScoffTick(SimState s, int g) => ++s.GoblinWorkTicks[g] >= NeedRules.EatTicks;
+
+	/// <summary>
+	/// Scoffing → Idle: the goblin consumes the unit in its hands exactly once. Its meter for that supply rises by <see cref="NeedRules.EatRestore"/>, held at <see cref="NeedRules.MeterMax"/>,
+	/// it loses <see cref="ChaosRules.ActRelief"/> Chaos and its cooldown starts. The unit was taken from the Pile when it was picked up, so nothing else is removed.
+	/// </summary>
+	public static void FinishScoff(SimState s, int g)
+	{
+		var supply = (Material)s.GoblinCarry[g];
+		if ((GoblinTask)s.GoblinTask[g] != GoblinTask.Scoffing || supply is not (Material.Grub or Material.Grog))
+			throw new InvalidOperationException($"Goblin {g} has no stolen Grub or Grog in hand to consume.");
+		var meter = supply == Material.Grub ? s.GoblinGrub : s.GoblinGrog;
+		meter[g] = NeedRules.Restore(meter[g]);
+		s.GoblinCarry[g] = (byte)Material.None;
+		Release(s, g);
+		s.GoblinActCooldown[g] = ChaosRules.CooldownTicks;
+		ChaosSystem.Add(s, g, -ChaosRules.ActRelief);
+	}
+
+	/// <summary>
+	/// MakingOff or Scoffing → Stalled: the theft has failed or been interrupted but the goblin has no legal place to put its unit down (every tile it can reach is a Pile full of
+	/// that supply), so it keeps the unit, consumes nothing and waits, its cooldown not yet begun. <see cref="EndTheft"/> ends it once a place opens.
+	/// </summary>
+	public static void StallTheft(SimState s, int g)
+	{
+		var task = (GoblinTask)s.GoblinTask[g];
+		if (task is not (GoblinTask.MakingOff or GoblinTask.Scoffing) || (Material)s.GoblinCarry[g] == Material.None)
+			throw new InvalidOperationException($"Goblin {g} is {task} and has no stolen unit to hold on to.");
+		s.GoblinJobTile[g] = -1;
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinWorkTicks[g] = 0;
+		s.GoblinTheftDestination[g] = -1;
+		s.GoblinTask[g] = (byte)GoblinTask.Stalled;
+	}
+
+	/// <summary>
+	/// Any theft Task → Idle, the theft having failed or been given up, for no relief: a unit in hand goes down on <paramref name="dropTile"/>, which the caller has chosen as a
+	/// walkable tile that can legally take it, and the cooldown starts. Nothing before the pickup has moved, so nothing is put back.
+	/// </summary>
+	public static void EndTheft(SimState s, int g, int dropTile)
+	{
+		if (!IsTheftTask((GoblinTask)s.GoblinTask[g]))
+			throw new InvalidOperationException($"Goblin {g} is not stealing.");
+		BeginNeedTask(s, g, dropTile, GoblinTask.Idle);
+	}
+
+	/// <summary>
 	/// Any Task but a seeking, consuming, sleeping or acting-out one → Pursuing goblin <paramref name="target"/>, for at most <see cref="ChaosRules.PursuitTicks"/> ticks.
 	/// Drops any wander and abandons any Job, and puts a carried unit down on <paramref name="dropTile"/> first, exactly as <see cref="BeginShirk"/> does. The target is told nothing.
 	/// </summary>
@@ -351,6 +445,13 @@ public static class GoblinTasks
 		s.GoblinFightTicks = new ushort[SimState.MaxGoblins];
 	}
 
+	/// <summary>Gives a new world its theft arrays: no goblin stealing, nothing chosen.</summary>
+	public static void StartThefts(SimState s)
+	{
+		s.GoblinTheftDestination = SimState.NoJobs();
+		s.GoblinTheftSupply = new byte[SimState.MaxGoblins];
+	}
+
 	/// <summary>Recovering → Idle: the goblin has rested its full time. Its cooldown, started with the scuffle, runs on.</summary>
 	public static void FinishRecovery(SimState s, int g) => Release(s, g);
 
@@ -423,8 +524,10 @@ public static class GoblinTasks
 		s.GoblinWanderTicks[g] = 0;
 		s.GoblinFightPartner[g] = -1;
 		s.GoblinFightTicks[g] = 0;
+		s.GoblinTheftDestination[g] = -1;
+		s.GoblinTheftSupply[g] = (byte)Material.None;
 		s.GoblinTask[g] = (byte)task;
-		if (before is GoblinTask.Shirking or GoblinTask.Pursuing or GoblinTask.Scuffling or GoblinTask.Scuffled)
+		if (before is GoblinTask.Shirking or GoblinTask.Pursuing or GoblinTask.Scuffling or GoblinTask.Scuffled || IsTheftTask(before))
 			s.GoblinActCooldown[g] = ChaosRules.CooldownTicks;
 	}
 
@@ -505,8 +608,11 @@ public static class GoblinTasks
 	/// <summary>True for Pursuing, Scuffling, Scuffled and Recovering: the stages of a fight.</summary>
 	public static bool IsFightTask(GoblinTask task) => task is GoblinTask.Pursuing or GoblinTask.Scuffling or GoblinTask.Scuffled or GoblinTask.Recovering;
 
-	/// <summary>True for Shirking and every stage of a fight: a goblin in one is acting out and starts no other act, nor is it set upon.</summary>
-	public static bool IsActingOutTask(GoblinTask task) => task == GoblinTask.Shirking || IsFightTask(task);
+	/// <summary>True for Sneaking, Pilfering, MakingOff, Scoffing and Stalled: the stages of a theft.</summary>
+	public static bool IsTheftTask(GoblinTask task) => task is GoblinTask.Sneaking or GoblinTask.Pilfering or GoblinTask.MakingOff or GoblinTask.Scoffing or GoblinTask.Stalled;
+
+	/// <summary>True for Shirking, every stage of a fight and every stage of a theft: a goblin in one is acting out and starts no other act, nor is it set upon.</summary>
+	public static bool IsActingOutTask(GoblinTask task) => task == GoblinTask.Shirking || IsFightTask(task) || IsTheftTask(task);
 
 	/// <summary>The Need a Need-satisfying Task serves, or None for any other Task.</summary>
 	public static Need NeedOf(GoblinTask task) => task switch
@@ -542,6 +648,8 @@ public static class GoblinTasks
 		s.GoblinWanderTicks[g] = 0;
 		s.GoblinFightPartner[g] = -1;
 		s.GoblinFightTicks[g] = 0;
+		s.GoblinTheftDestination[g] = -1;
+		s.GoblinTheftSupply[g] = (byte)Material.None;
 	}
 
 	/// <summary>
@@ -680,18 +788,20 @@ public static class GoblinTasks
 			var carry = (Material)s.GoblinCarry[g];
 			if (!Enum.IsDefined(carry))
 				return $"Goblin {g} carries unknown material {s.GoblinCarry[g]}.";
-			var carrying = task is GoblinTask.Carrying or GoblinTask.Dropping || IsBreweryTask(task);
+			var carrying = task is GoblinTask.Carrying or GoblinTask.Dropping or GoblinTask.MakingOff or GoblinTask.Scoffing or GoblinTask.Stalled || IsBreweryTask(task);
 			if (carrying && carry == Material.None)
 				return $"Goblin {g} is {task} with nothing to carry.";
 			if (!carrying && carry != Material.None)
 				return $"Goblin {g} is {task} but carries {carry}.";
-			if (s.GoblinWorkTicks[g] >= (IsConsumingTask(task) ? NeedRules.EatTicks : task == GoblinTask.Tending ? ProductionRules.TendTicks : task == GoblinTask.Sleeping ? NeedRules.FloorRecoveryTicks : task == GoblinTask.Brewing ? ProductionRules.BrewTicks : task == GoblinTask.Shirking ? ChaosRules.ShirkTicks : HaulActionTicks))
+			if (s.GoblinWorkTicks[g] >= (IsConsumingTask(task) || task == GoblinTask.Scoffing ? NeedRules.EatTicks : task == GoblinTask.Tending ? ProductionRules.TendTicks : task == GoblinTask.Sleeping ? NeedRules.FloorRecoveryTicks : task == GoblinTask.Brewing ? ProductionRules.BrewTicks : task == GoblinTask.Shirking ? ChaosRules.ShirkTicks : HaulActionTicks))
 				return $"Goblin {g} has work ticks {s.GoblinWorkTicks[g]}.";
-			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Tending or GoblinTask.Sleeping or GoblinTask.Taking or GoblinTask.Brewing or GoblinTask.Shirking))
+			if (s.GoblinWorkTicks[g] != 0 && task is not (GoblinTask.PickingUp or GoblinTask.Dropping or GoblinTask.Eating or GoblinTask.Drinking or GoblinTask.Tending or GoblinTask.Sleeping or GoblinTask.Taking or GoblinTask.Brewing or GoblinTask.Shirking or GoblinTask.Pilfering or GoblinTask.Scoffing))
 				return $"Goblin {g} is {task} but has work ticks {s.GoblinWorkTicks[g]}.";
 
 			if (FindFightViolation(s, g, task) is { } fightViolation)
 				return fightViolation;
+			if (FindTheftViolation(s, g, task) is { } theftViolation)
+				return theftViolation;
 
 			var job = s.GoblinJobTile[g];
 			var wanderTile = s.GoblinWanderTile[g];
@@ -828,6 +938,56 @@ public static class GoblinTasks
 					break;
 			}
 		}
+		return null;
+	}
+
+	// The first broken rule of a goblin's theft fields, or null. A goblin that is not stealing has no destination and no supply. One that is has a supply of Grub or Grog and no
+	// cooldown (it starts when the theft ends); before the pickup it claims its source Pile tile, no unit in hand, and a Pilfering one stands on that tile; after it, it holds no
+	// claim and carries exactly its supply, a MakingOff or Scoffing one has a destination (a Scoffing one stands on it), and a Stalled one, which has given its plan up, has none.
+	static string? FindTheftViolation(SimState s, int g, GoblinTask task)
+	{
+		var supply = (Material)s.GoblinTheftSupply[g];
+		var destination = s.GoblinTheftDestination[g];
+		if (!IsTheftTask(task))
+		{
+			if (supply != Material.None)
+				return $"Goblin {g} is {task} but has a theft supply of {supply}.";
+			if (destination != -1)
+				return $"Goblin {g} is {task} but has theft destination {destination}.";
+			return null;
+		}
+
+		var tiles = s.TileKinds.Length;
+		var job = s.GoblinJobTile[g];
+		var here = s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]);
+		if (supply is not (Material.Grub or Material.Grog))
+			return $"Goblin {g} is {task} with {supply} to steal, not Grub or Grog.";
+		if (s.GoblinActCooldown[g] != 0)
+			return $"Goblin {g} is {task} with a cooldown of {s.GoblinActCooldown[g]}, which only starts when the act ends.";
+		if (s.GoblinWanderTile[g] != -1 || s.GoblinWanderTicks[g] != 0)
+			return $"Goblin {g} is {task} but wanders.";
+		var before = task is GoblinTask.Sneaking or GoblinTask.Pilfering;
+		if (before)
+		{
+			if (!(job >= 0 && job < tiles))
+				return $"Goblin {g} is {task} for tile {job}, which is off the map.";
+			if (task == GoblinTask.Pilfering && job != here)
+				return $"Goblin {g} is pilfering tile {job} from tile {here}.";
+		}
+		else
+		{
+			if (job != -1)
+				return $"Goblin {g} is {task} but holds job tile {job}.";
+			if ((Material)s.GoblinCarry[g] != supply)
+				return $"Goblin {g} is {task} with {(Material)s.GoblinCarry[g]} in hand, not the {supply} it stole.";
+		}
+
+		if (task == GoblinTask.Stalled)
+			return destination == -1 ? null : $"Goblin {g} is Stalled but still has theft destination {destination}.";
+		if (!(destination >= 0 && destination < tiles))
+			return $"Goblin {g} is {task} for destination {destination}, which is off the map.";
+		if (task == GoblinTask.Scoffing && destination != here)
+			return $"Goblin {g} is scoffing at destination {destination} from tile {here}.";
 		return null;
 	}
 

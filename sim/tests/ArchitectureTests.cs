@@ -19,8 +19,8 @@ public partial class ArchitectureTests
 		Assert.Empty(godotRefs);
 	}
 
-	// The nine goblin Task arrays (the seven Task fields and the two of a fight): only GoblinTasks changes them (see the sim-architecture skill).
-	const string TaskFields = "GoblinTask|GoblinJobTile|GoblinWanderTile|GoblinWanderTicks|GoblinStepTicks|GoblinCarry|GoblinWorkTicks|GoblinFightPartner|GoblinFightTicks";
+	// The eleven goblin Task arrays (the seven Task fields, the two of a fight and the two of a theft): only GoblinTasks changes them (see the sim-architecture skill).
+	const string TaskFields = "GoblinTask|GoblinJobTile|GoblinWanderTile|GoblinWanderTicks|GoblinStepTicks|GoblinCarry|GoblinWorkTicks|GoblinFightPartner|GoblinFightTicks|GoblinTheftDestination|GoblinTheftSupply";
 
 	// `x.Field[i] = v`, `+=`, `++`, `--` on an element, and Array.Fill/Clear/Copy or `x.Field = ...` on a whole array.
 	// `==` is a comparison and `=>` a lambda, not assignments.
@@ -94,6 +94,9 @@ public partial class ArchitectureTests
 	[InlineData("s.GoblinFightPartner[g] = -1;")]
 	[InlineData("s.GoblinFightTicks[g]--;")]
 	[InlineData("if (--s.GoblinFightTicks[g] == 0) End();")]
+	[InlineData("s.GoblinTheftDestination[g] = -1;")]
+	[InlineData("s.GoblinTheftSupply[g] = (byte)Material.Grub;")]
+	[InlineData("s.GoblinTheftSupply = new byte[30];")]
 	public void The_scan_flags_a_stray_write_outside_GoblinTasks(string line)
 	{
 		Assert.Single(StrayTaskWrites("SomeSystem.cs", line));
