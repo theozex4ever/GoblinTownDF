@@ -533,22 +533,22 @@ public partial class SelectionInputChecks : Node
 				(s.GoblinGrub[5], s.GoblinGrog[5], s.GoblinSleep[5]) = (100, 100, 40);
 				GoblinTasks.BeginSleep(s, 5, dropTile: -1, asleep: true);
 				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
-				ExpectGoblin(main, 74, 91, 85, "At peace with the world, and with lunch.");
+				ExpectGoblin(main, 0, 74, 91, 85, "At peace with the world, and with lunch.");
 				Require(main.Inspection.Doing == "Standing about, between jobs", $"An idle Grunt is \"{main.Inspection.Doing}\".");
 				Move(main, view, s.GoblinX[1], s.GoblinY[1]);
-				ExpectGoblin(main, 12, 80, 60, "Thinking about nothing but Grub.");
+				ExpectGoblin(main, 1, 12, 80, 60, "Thinking about nothing but Grub.");
 				Move(main, view, s.GoblinX[2], s.GoblinY[2]);
-				ExpectGoblin(main, 0, 100, 100, "Starving, and bearing it at half speed with great dignity.");
+				ExpectGoblin(main, 2, 0, 100, 100, "Starving, and bearing it at half speed with great dignity.");
 				Move(main, view, s.GoblinX[3], s.GoblinY[3]);
-				ExpectGoblin(main, 90, 8, 45, "Thinking about nothing but Grog.");
+				ExpectGoblin(main, 3, 90, 8, 45, "Thinking about nothing but Grog.");
 				Move(main, view, s.GoblinX[4], s.GoblinY[4]);
-				ExpectGoblin(main, 100, 100, 12, "Thinking about nothing but a lie-down, on anything flat.");
+				ExpectGoblin(main, 4, 100, 100, 12, "Thinking about nothing but a lie-down, on anything flat.");
 				Move(main, view, s.GoblinX[5], s.GoblinY[5]);
-				ExpectGoblin(main, 100, 100, 40, "Fast asleep. Hunger and thirst may take a number.");
+				ExpectGoblin(main, 5, 100, 100, 40, "Fast asleep. Hunger and thirst may take a number.");
 				Require(main.Inspection.Doing == "Asleep on the bare floor", $"A Grunt asleep on the floor is \"{main.Inspection.Doing}\".");
 				sim.Apply(new PaintPile(0, s.GoblinX[0], s.GoblinY[0], s.GoblinX[0], s.GoblinY[0]));
 				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
-				Require(main.Inspection.Title == "Grunt", $"A Pile hid the goblin on it: the Inspector shows {main.Inspection.Title}.");
+				Require(main.Inspection.Title == "Snaggle Wartnose, Grunt", $"A Pile hid the goblin on it: the Inspector shows {main.Inspection.Title}.");
 				// The meters follow the sim as it drains them, and a goblin on another level is not under the cursor.
 				s.GoblinGrub[0] = 74;
 				s.GoblinGrog[0] = 91;
@@ -556,10 +556,52 @@ public partial class SelectionInputChecks : Node
 				sim.Apply(new SetPaused(false));
 				main._Process(0.1);
 				sim.Apply(new SetPaused(true));
-				ExpectGoblin(main, 74, 90, 85, "At peace with the world, and with lunch.");
+				ExpectGoblin(main, 0, 74, 90, 85, "At peace with the world, and with lunch.");
 				Key(main, Godot.Key.Period);
 				ExpectInspection(main, "Solid dirt", "");
 			});
+
+			// Each of the seven starting goblins has its own authored name, shown with its Role, and the name follows the goblin
+			// as it moves; goblins sharing a tile show the lowest-numbered one's name.
+			WithMain((main, view, sim) =>
+			{
+				var s = sim.State;
+				Require(s.GoblinCount == GoblinNames.Starting.Length, $"{s.GoblinCount} starting goblins, {GoblinNames.Starting.Length} names.");
+				Require(GoblinNames.Starting.All(name => !string.IsNullOrWhiteSpace(name)) && GoblinNames.Starting.Distinct().Count() == GoblinNames.Starting.Length,
+					"The starting names are not seven distinct, nonempty names.");
+				for (var g = 0; g < s.GoblinCount; g++)
+				{
+					Move(main, view, s.GoblinX[g], s.GoblinY[g]);
+					Require(main.Inspection.Title == $"{GoblinNames.Starting[g]}, Grunt", $"Goblin {g} shows \"{main.Inspection.Title}\".");
+				}
+
+				// Moving a goblin moves its name with it.
+				s.GoblinX[3] += 5;
+				Move(main, view, s.GoblinX[3], s.GoblinY[3]);
+				Require(main.Inspection.Title == $"{GoblinNames.Starting[3]}, Grunt", $"Goblin 3 shows \"{main.Inspection.Title}\" after moving.");
+
+				// Two goblins on one tile: the lowest-numbered gives its name, and the other is shown once it is alone.
+				(s.GoblinX[6], s.GoblinY[6]) = (s.GoblinX[2], s.GoblinY[2]);
+				Move(main, view, s.GoblinX[2], s.GoblinY[2]);
+				Require(main.Inspection.Title == $"{GoblinNames.Starting[2]}, Grunt", $"A shared tile shows \"{main.Inspection.Title}\", not goblin 2's name.");
+				var shared = (X: s.GoblinX[2], Y: s.GoblinY[2]);
+				s.GoblinX[2] += 3;
+				Move(main, view, shared.X, shared.Y);
+				Require(main.Inspection.Title == $"{GoblinNames.Starting[6]}, Grunt", $"The goblin left alone shows \"{main.Inspection.Title}\".");
+
+				// A tile with no goblin still shows the tile.
+				Move(main, view, 5, 5);
+				ExpectInspection(main, "Floor", "");
+			});
+
+			// A name belongs to the goblin index, not to the seed.
+			foreach (var seed in new[] { 1, 2, 12345 })
+			{
+				var s = Simulation.NewWorld(seed).State;
+				for (var g = 0; g < s.GoblinCount; g++)
+					Require(Inspector.Inspect(s, s.TileIndex(s.GoblinX[g], s.GoblinY[g], 0)).Title == $"{GoblinNames.Starting[g]}, Grunt",
+						$"Seed {seed}, goblin {g} reads \"{Inspector.Inspect(s, s.TileIndex(s.GoblinX[g], s.GoblinY[g], 0)).Title}\".");
+			}
 
 			// The real game: hungry Grunts leave a dig for the starting Grub, which is eaten where it lies, and the dig carries on.
 			WithMain((main, view, sim) =>
@@ -769,7 +811,7 @@ public partial class SelectionInputChecks : Node
 			{
 				var s = sim.State;
 				Move(main, view, s.GoblinX[0], s.GoblinY[0]);
-				Require(main.Inspection.Title == "Grunt", $"The Inspector over a Grunt shows {main.Inspection.Title}.");
+				Require(main.Inspection.Title == "Snaggle Wartnose, Grunt", $"The Inspector over the first Grunt shows {main.Inspection.Title}.");
 				view.Position += new Vector2(9 * WarrenView.CellSize, 0);
 				main._Process(0);
 				var under = new Vector2I(s.GoblinX[0] - 9, s.GoblinY[0]);
@@ -872,13 +914,14 @@ public partial class SelectionInputChecks : Node
 			$"The Inspector shows \"{inspection.Title}\" [{StockText(inspection)}] \"{inspection.Note}\", expected \"{title}\" [{stock}] \"{note}\".");
 	}
 
-	static void ExpectGoblin(Main main, int grub, int grog, int sleep, string note)
+	static void ExpectGoblin(Main main, int goblin, int grub, int grog, int sleep, string note)
 	{
 		var inspection = main.Inspection;
 		var meters = string.Join(" ", inspection.Meters.Select(meter => $"{meter.Need} {meter.Value}"));
 		var expected = $"Grub {grub} Grog {grog} Sleep {sleep}";
-		Require(inspection.Title == "Grunt" && meters == expected && inspection.Note == note,
-			$"The Inspector shows \"{inspection.Title}\" [{meters}] \"{inspection.Note}\", expected a Grunt [{expected}] \"{note}\".");
+		var title = $"{GoblinNames.Starting[goblin]}, Grunt";
+		Require(inspection.Title == title && meters == expected && inspection.Note == note,
+			$"The Inspector shows \"{inspection.Title}\" [{meters}] \"{inspection.Note}\", expected \"{title}\" [{expected}] \"{note}\".");
 	}
 
 	// A Pile tile draws two counts: full materials first, then the larger count, and Material order on a tie. Counts are
