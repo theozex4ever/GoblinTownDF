@@ -443,6 +443,53 @@ public class SleepSpaceTests
 	}
 
 	[Fact]
+	public void A_legacy_save_with_sleepers_stacked_on_one_tile_loads_runs_on_and_new_sleepers_avoid_the_occupied_tile()
+	{
+		var sim = Crew(100, (16, 16), (16, 16), (16, 16));
+		var s = sim.State;
+		// What a pre-#58 save holds: two goblins asleep on one tile.
+		LieDown(s, 0, 40);
+		LieDown(s, 1, 40);
+		Assert.Equal(TileOf(s, 0), TileOf(s, 1));
+		var restored = SimJson.Deserialize(SimJson.Serialize(sim));
+		var r = restored.State;
+		Assert.Null(GoblinTasks.FindViolation(r));
+		Assert.Equal((GoblinTask.Sleeping, GoblinTask.Sleeping), (TaskOf(r, 0), TaskOf(r, 1)));
+
+		// Goblin 2 tires on the same tile; the stack keeps sleeping and goblin 2 takes a different tile.
+		r.GoblinSleep[2] = 20;
+		RunTicks(restored, 30);
+
+		Assert.Equal((GoblinTask.Sleeping, GoblinTask.Sleeping), (TaskOf(r, 0), TaskOf(r, 1)));
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(r, 2));
+		Assert.NotEqual(TileOf(r, 0), TileOf(r, 2));
+		Assert.Equal(TileOf(r, 0), TileOf(r, 1));
+		Assert.Null(GoblinTasks.FindViolation(r));
+	}
+
+	[Fact]
+	public void A_save_taken_while_a_goblin_is_AwaitingBed_continues_exactly_like_the_uninterrupted_run()
+	{
+		var sim = Crew(20, (16, 16), (16, 16));
+		Pocket(sim, (16, 16));
+		var s = sim.State;
+		LieDown(s, 0, 98);
+		RunAssertingOneSleeperPerTile(sim, 3);
+		Assert.Equal(GoblinTask.AwaitingBed, TaskOf(s, 1));
+
+		var restored = SimJson.Deserialize(SimJson.Serialize(sim));
+		Assert.Equal(GoblinTask.AwaitingBed, TaskOf(restored.State, 1));
+		Assert.Null(GoblinTasks.FindViolation(restored.State));
+
+		RunTicks(sim, 80);
+		RunTicks(restored, 80);
+
+		// The sleeper woke during the run, so the waiter lay down in both.
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 1));
+		Assert.Equal(SimJson.Serialize(sim), SimJson.Serialize(restored));
+	}
+
+	[Fact]
 	public void Awake_goblins_walk_through_sleepers()
 	{
 		var sim = Crew(100, (16, 16), (18, 16));
