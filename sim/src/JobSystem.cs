@@ -184,6 +184,7 @@ public sealed partial class JobSystem
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			// A Craving comes before any Job, and before a Starving goblin sits a tick out. Eating, drinking, sleeping and shirking are not slowed.
+			_bedMemo = null;
 			TryCraving(s, g);
 			TryActOut(s, g, events);
 			var task = (GoblinTask)s.GoblinTask[g];
@@ -378,7 +379,11 @@ public sealed partial class JobSystem
 			// A goblin already on its way to bed, or waiting for one, keeps doing so: its goal is found afresh each step.
 			if (bed == Bed.None && task == GoblinTask.AwaitingBed
 				|| bed == Bed.Elsewhere && task == GoblinTask.SeekingHeap)
+			{
+				// Nothing has changed by the time SeekHeap runs this same turn, so it takes this scan's answer instead of making its own.
+				_bedMemo = new BedMemo(goblin, collapse, bed, bed == Bed.Elsewhere ? _path[0] : -1, bed == Bed.Elsewhere ? _path.Count : 0);
 				return true;
+			}
 		}
 
 		var carried = (Material)s.GoblinCarry[goblin];
@@ -480,6 +485,12 @@ public sealed partial class JobSystem
 		}
 	}
 
+	// One goblin's FindBed answer for its own turn: the goblin, whether it was a collapse, the bed, and the first step and length of the path to it.
+	// Set by TryMeet and consumed by SeekHeap in the same turn, then dropped at the start of the next goblin's turn; it never outlives a turn or enters a save.
+	record BedMemo(int Goblin, bool Collapse, Bed Bed, int Next, int PathLength);
+
+	BedMemo? _bedMemo;
+
 	byte[] _sleeperTiles = [];
 
 	// Marks the tile of every sleeping goblin but this one, so FindBed reads "has a sleeper" in one lookup.
@@ -508,7 +519,10 @@ public sealed partial class JobSystem
 		if (task == GoblinTask.SeekingHeap && !StepDue(s, goblin))
 			return;
 
-		switch (FindBed(s, goblin, collapse: s.GoblinSleep[goblin] == 0))
+		var collapse = s.GoblinSleep[goblin] == 0;
+		var memo = _bedMemo is { } m && m.Goblin == goblin && m.Collapse == collapse ? m : null;
+		_bedMemo = null;
+		switch (memo?.Bed ?? FindBed(s, goblin, collapse))
 		{
 			case Bed.Here:
 				GoblinTasks.StartSleeping(s, goblin);
@@ -518,16 +532,15 @@ public sealed partial class JobSystem
 				break;
 			default:
 				GoblinTasks.WalkToBed(s, goblin);
-				// The goals FindBed left are the bed's; step toward the nearest.
-				switch (MoveToward(s, goblin))
-				{
-					case Move.NoPath:
-						GoblinTasks.WaitForBed(s, goblin);
-						break;
-					case Move.Arrived:
-						GoblinTasks.StartSleeping(s, goblin);
-						break;
-				}
+				// FindBed has just found the way to the nearest bed (_path), or the memo has its first step: take it rather than search again.
+				var next = memo?.Next ?? _path[0];
+				var pathLength = memo?.PathLength ?? _path.Count;
+				var layer = s.Width * s.Height;
+				s.GoblinX[goblin] = next % s.Width;
+				s.GoblinY[goblin] = next / s.Width % s.Height;
+				s.GoblinZ[goblin] = next / layer;
+				if (pathLength == 1)
+					GoblinTasks.StartSleeping(s, goblin);
 				break;
 		}
 	}
