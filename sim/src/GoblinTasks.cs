@@ -247,7 +247,7 @@ public static class GoblinTasks
 	{
 		if (supply is not (Material.Grub or Material.Grog))
 			throw new ArgumentOutOfRangeException(nameof(supply), supply, "A Need is met with Grub or Grog.");
-		if (IsSatisfyingTask((GoblinTask)s.GoblinTask[g]))
+		if (IsSatisfyingTask((GoblinTask)s.GoblinTask[g]) && (GoblinTask)s.GoblinTask[g] != GoblinTask.AwaitingBed)
 			throw new InvalidOperationException($"Goblin {g} is already satisfying a Need and finishes it before considering another.");
 		BeginNeedTask(s, g, dropTile, supply == Material.Grub
 			? eating ? GoblinTask.Eating : GoblinTask.Seeking
@@ -255,16 +255,33 @@ public static class GoblinTasks
 	}
 
 	/// <summary>
-	/// Any Task but a seeking, consuming or sleeping one → SeekingHeap, walking to the nearest Sleeping Heap tile, or Sleeping at once
-	/// when <paramref name="asleep"/> (the goblin already stands on a Heap, or no Heap is in reach and it sleeps where it stands).
+	/// Any Task but a seeking, consuming or sleeping one (a waiting one may start again) → <paramref name="start"/>: SeekingHeap, walking to the nearest tile with no
+	/// sleeper (a Heap if any), Sleeping at once (the goblin's own tile is the bed), or AwaitingBed (no bed is in reach).
 	/// Drops any wander and abandons any Job, as <see cref="BeginSeek"/> does, and puts a carried unit down on <paramref name="dropTile"/> first.
 	/// </summary>
-	public static void BeginSleep(SimState s, int g, int dropTile, bool asleep)
+	public static void BeginSleep(SimState s, int g, int dropTile, bool asleep) =>
+		BeginSleep(s, g, dropTile, asleep ? GoblinTask.Sleeping : GoblinTask.SeekingHeap);
+
+	/// <inheritdoc cref="BeginSleep(SimState, int, int, bool)"/>
+	public static void BeginSleep(SimState s, int g, int dropTile, GoblinTask start)
 	{
-		if (IsSatisfyingTask((GoblinTask)s.GoblinTask[g]))
+		if (start is not (GoblinTask.Sleeping or GoblinTask.SeekingHeap or GoblinTask.AwaitingBed))
+			throw new ArgumentOutOfRangeException(nameof(start), start, "A craving for Sleep starts as Sleeping, SeekingHeap or AwaitingBed.");
+		var before = (GoblinTask)s.GoblinTask[g];
+		if (IsSatisfyingTask(before) && before != GoblinTask.AwaitingBed)
 			throw new InvalidOperationException($"Goblin {g} is already satisfying a Need and finishes it before considering another.");
-		BeginNeedTask(s, g, dropTile, asleep ? GoblinTask.Sleeping : GoblinTask.SeekingHeap);
+		BeginNeedTask(s, g, dropTile, start);
 	}
+
+	/// <summary>SeekingHeap → AwaitingBed: no tile with no sleeper is in reach, so the goblin waits where it stands, restoring no Sleep.</summary>
+	public static void WaitForBed(SimState s, int g)
+	{
+		s.GoblinStepTicks[g] = 0;
+		s.GoblinTask[g] = (byte)GoblinTask.AwaitingBed;
+	}
+
+	/// <summary>AwaitingBed → SeekingHeap: a tile with no sleeper is in reach again.</summary>
+	public static void WalkToBed(SimState s, int g) => s.GoblinTask[g] = (byte)GoblinTask.SeekingHeap;
 
 	/// <summary>
 	/// Any Task but a seeking, consuming, sleeping or shirking one → Shirking where the goblin stands. Drops any wander and abandons any Job, which
@@ -541,7 +558,7 @@ public static class GoblinTasks
 	/// <summary>SeekingGrog → Drinking, on arrival at a tile holding Grog.</summary>
 	public static void StartDrinking(SimState s, int g) => StartConsuming(s, g, GoblinTask.Drinking);
 
-	/// <summary>SeekingHeap → Sleeping, on arrival at a Heap tile, or when no Heap is left in reach and the goblin sleeps where it stands.</summary>
+	/// <summary>SeekingHeap or AwaitingBed → Sleeping, once the goblin's own tile is the bed it wants.</summary>
 	public static void StartSleeping(SimState s, int g)
 	{
 		s.GoblinStepTicks[g] = 0;
@@ -603,8 +620,8 @@ public static class GoblinTasks
 	/// <summary>True for Eating and Drinking: consuming a unit on the spot.</summary>
 	public static bool IsConsumingTask(GoblinTask task) => task is GoblinTask.Eating or GoblinTask.Drinking;
 
-	/// <summary>True for SeekingHeap and Sleeping: the Tasks that satisfy the Sleep Need.</summary>
-	public static bool IsSleepTask(GoblinTask task) => task is GoblinTask.SeekingHeap or GoblinTask.Sleeping;
+	/// <summary>True for SeekingHeap, AwaitingBed and Sleeping: the Tasks of a goblin going to bed. Only Sleeping restores Sleep, and only a waiting goblin may still take a lower Craving.</summary>
+	public static bool IsSleepTask(GoblinTask task) => task is GoblinTask.SeekingHeap or GoblinTask.AwaitingBed or GoblinTask.Sleeping;
 
 	/// <summary>True for every Task that satisfies a Need, which a goblin finishes before it considers another.</summary>
 	public static bool IsSatisfyingTask(GoblinTask task) => IsSeekingTask(task) || IsConsumingTask(task) || IsSleepTask(task);
@@ -623,7 +640,7 @@ public static class GoblinTasks
 	{
 		GoblinTask.Seeking or GoblinTask.Eating => Need.Grub,
 		GoblinTask.SeekingGrog or GoblinTask.Drinking => Need.Grog,
-		GoblinTask.SeekingHeap or GoblinTask.Sleeping => Need.Sleep,
+		GoblinTask.SeekingHeap or GoblinTask.AwaitingBed or GoblinTask.Sleeping => Need.Sleep,
 		_ => Need.None,
 	};
 
@@ -925,6 +942,7 @@ public static class GoblinTasks
 				case GoblinTask.SeekingGrog:
 				case GoblinTask.Drinking:
 				case GoblinTask.SeekingHeap:
+				case GoblinTask.AwaitingBed:
 				case GoblinTask.Sleeping:
 					var need = NeedOf(task);
 					var meter = s.MeterOf(need)[g];

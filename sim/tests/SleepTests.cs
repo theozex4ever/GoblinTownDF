@@ -413,22 +413,23 @@ public class SleepTests
 	}
 
 	[Fact]
-	public void Several_goblins_share_one_Heap_tile()
+	public void Several_goblins_with_one_Heap_tile_take_it_in_turn_and_the_rest_sleep_on_the_floor_one_to_a_tile()
 	{
+		// #58 superseded the shared Heap tile: one sleeper to a tile, the rest on the nearest bare floor.
 		var sim = Crew(count: 4, sleep: 20);
 		Heap(sim, 16, 12);
 		var s = sim.State;
 
-		RunTicks(sim, 40);
+		RunTicks(sim, 60);
 
+		var tiles = new HashSet<(int, int)>();
 		for (var g = 0; g < 4; g++)
 		{
 			Assert.Equal(GoblinTask.Sleeping, TaskOf(s, g));
-			Assert.Equal((16, 12), (s.GoblinX[g], s.GoblinY[g]));
-		}
-		RunTicks(sim, 5);
-		for (var g = 0; g < 4; g++)
+			Assert.True(tiles.Add((s.GoblinX[g], s.GoblinY[g])));
 			Assert.True(s.GoblinSleep[g] > 20);
+		}
+		Assert.Contains((16, 12), tiles);
 	}
 
 	[Fact]
