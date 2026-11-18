@@ -386,10 +386,11 @@ public sealed partial class JobSystem
 		if (carried != Material.None && !TryFindDropTile(s, goblin, carried, out dropTile))
 			return false;
 
-		if (collapse && bed == Bed.Here)
-			GoblinTasks.BeginCollapse(s, goblin, dropTile);
+		var bedTask = bed switch { Bed.Here => GoblinTask.Sleeping, Bed.Elsewhere => GoblinTask.SeekingHeap, _ => GoblinTask.AwaitingBed };
+		if (collapse)
+			GoblinTasks.BeginCollapse(s, goblin, dropTile, bedTask);
 		else if (supply == Material.None)
-			GoblinTasks.BeginSleep(s, goblin, dropTile, bed switch { Bed.Here => GoblinTask.Sleeping, Bed.Elsewhere => GoblinTask.SeekingHeap, _ => GoblinTask.AwaitingBed });
+			GoblinTasks.BeginSleep(s, goblin, dropTile, bedTask);
 		else
 			GoblinTasks.BeginSeek(s, goblin, dropTile, eating: here, supply);
 		// The unit put down is a new loose Haul, or has taken a Pile tile's last slot of its material.

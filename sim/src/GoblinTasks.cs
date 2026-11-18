@@ -506,13 +506,21 @@ public static class GoblinTasks
 	/// off a Task that satisfies a Need as well, a meal or a walk to a Heap included; the unit it was about to eat stays where it is.
 	/// A carried unit is put down on <paramref name="dropTile"/> first, as in <see cref="BeginSleep"/>.
 	/// </summary>
-	public static void BeginCollapse(SimState s, int g, int dropTile)
+	public static void BeginCollapse(SimState s, int g, int dropTile) => BeginCollapse(s, g, dropTile, GoblinTask.Sleeping);
+
+	/// <summary>
+	/// As above, but the goblin starts as <paramref name="start"/>: Sleeping (its own tile has no sleeper), SeekingHeap (walking to the nearest free tile)
+	/// or AwaitingBed (no free tile is in reach).
+	/// </summary>
+	public static void BeginCollapse(SimState s, int g, int dropTile, GoblinTask start)
 	{
+		if (start is not (GoblinTask.Sleeping or GoblinTask.SeekingHeap or GoblinTask.AwaitingBed))
+			throw new ArgumentOutOfRangeException(nameof(start), start, "A Collapse starts as Sleeping, SeekingHeap or AwaitingBed.");
 		if (s.GoblinSleep[g] != 0)
 			throw new InvalidOperationException($"Goblin {g} has Sleep {s.GoblinSleep[g]}, not 0, so it does not Collapse.");
 		if ((GoblinTask)s.GoblinTask[g] == GoblinTask.Sleeping)
 			throw new InvalidOperationException($"Goblin {g} is already asleep.");
-		BeginNeedTask(s, g, dropTile, GoblinTask.Sleeping);
+		BeginNeedTask(s, g, dropTile, start);
 	}
 
 	// The common start of a Task that takes a goblin off its work, to satisfy a Need, to shirk or to fight: any carried unit goes down on dropTile,

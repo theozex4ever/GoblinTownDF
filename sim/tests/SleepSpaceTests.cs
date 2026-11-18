@@ -273,6 +273,71 @@ public class SleepSpaceTests
 		Assert.Equal(dirt, total);
 	}
 
+	// Goblin 1 shares goblin 0's tile and is part-way through `task`, then its Sleep reaches 0.
+	static Simulation CollapseDuringTask(GoblinTask task, bool freeTileElsewhere)
+	{
+		var sim = Crew(60, (16, 16), (16, 16));
+		var s = sim.State;
+		if (freeTileElsewhere)
+			Pocket(sim, (16, 16), (17, 16));
+		else
+			Pocket(sim, (16, 16));
+		LieDown(s, 0, 40);
+		var here = s.TileIndex(16, 16, 0);
+		switch (task)
+		{
+			case GoblinTask.Eating:
+				s.AddItems(here, Material.Grub, 1);
+				s.GoblinGrub[1] = 10;
+				sim.RecheckReachability();
+				GoblinTasks.BeginSeek(s, 1, -1, eating: true);
+				break;
+			case GoblinTask.Drinking:
+				s.AddItems(here, Material.Grog, 1);
+				s.GoblinGrog[1] = 10;
+				sim.RecheckReachability();
+				GoblinTasks.BeginSeek(s, 1, -1, eating: true, Material.Grog);
+				break;
+			case GoblinTask.SeekingHeap:
+				GoblinTasks.BeginSleep(s, 1, -1, asleep: false);
+				break;
+		}
+		Assert.Equal(task, TaskOf(s, 1));
+		s.GoblinSleep[1] = 0;
+		return sim;
+	}
+
+	[Theory]
+	[InlineData(GoblinTask.Eating)]
+	[InlineData(GoblinTask.Drinking)]
+	[InlineData(GoblinTask.SeekingHeap)]
+	public void Collapse_during_a_Need_on_an_occupied_tile_moves_to_the_free_tile_and_sleeps(GoblinTask task)
+	{
+		var sim = CollapseDuringTask(task, freeTileElsewhere: true);
+		var s = sim.State;
+
+		RunAssertingOneSleeperPerTile(sim, 20);
+
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 0));
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 1));
+		Assert.Equal((17, 16), (s.GoblinX[1], s.GoblinY[1]));
+	}
+
+	[Theory]
+	[InlineData(GoblinTask.Eating)]
+	[InlineData(GoblinTask.Drinking)]
+	[InlineData(GoblinTask.SeekingHeap)]
+	public void Collapse_during_a_Need_on_an_occupied_tile_with_no_free_tile_waits(GoblinTask task)
+	{
+		var sim = CollapseDuringTask(task, freeTileElsewhere: false);
+		var s = sim.State;
+
+		RunAssertingOneSleeperPerTile(sim, 20);
+
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 0));
+		Assert.Equal(GoblinTask.AwaitingBed, TaskOf(s, 1));
+	}
+
 	[Fact]
 	public void Awake_goblins_walk_through_sleepers()
 	{
