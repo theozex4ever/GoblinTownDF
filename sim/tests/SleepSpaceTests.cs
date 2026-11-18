@@ -177,28 +177,60 @@ public class SleepSpaceTests
 		Assert.True(s.GoblinGrub[1] < grub);
 	}
 
-	[Fact]
-	public void A_waiting_goblin_with_a_lower_Grub_Craving_goes_and_eats_first()
+	// Goblin 0 sleeps on (16, 16), goblin 2 sleeps on (17, 16) with one unit of `supply` beside it; goblin 1 waits with Sleep 25.
+	static Simulation WaiterWithSupply(Material supply)
 	{
 		var sim = Crew(25, (16, 16), (16, 16));
 		Pocket(sim, (16, 16), (17, 16));
 		var s = sim.State;
-		// Goblin 0 sleeps on (16, 16); goblin 2 sleeps on (17, 16); goblin 1 waits.
-		sim.State.GoblinCount = 3;
+		s.GoblinCount = 3;
 		(s.GoblinX[2], s.GoblinY[2], s.GoblinZ[2]) = (17, 16, 0);
 		(s.GoblinGrub[2], s.GoblinGrog[2]) = (100, 100);
 		LieDown(s, 2, 40);
 		LieDown(s, 0, 40);
-		s.AddItems(s.TileIndex(17, 16, 0), Material.Grub, 1);
+		s.AddItems(s.TileIndex(17, 16, 0), supply, 1);
 		sim.RecheckReachability();
 		RunAssertingOneSleeperPerTile(sim, 3);
 		Assert.Equal(GoblinTask.AwaitingBed, TaskOf(s, 1));
+		return sim;
+	}
 
-		s.GoblinGrub[1] = 10;
+	[Theory]
+	[InlineData(Material.Grub)]
+	[InlineData(Material.Grog)]
+	public void A_waiting_goblin_with_a_lower_Grub_or_Grog_Craving_goes_and_consumes_first(Material supply)
+	{
+		var sim = WaiterWithSupply(supply);
+		var s = sim.State;
+
+		if (supply == Material.Grub)
+			s.GoblinGrub[1] = 10;
+		else
+			s.GoblinGrog[1] = 10;
 		RunAssertingOneSleeperPerTile(sim, 40);
 
-		Assert.True(s.GoblinGrub[1] > 10);
-		Assert.Equal(0, s.ItemCount(s.TileIndex(17, 16, 0), Material.Grub));
+		Assert.True((supply == Material.Grub ? s.GoblinGrub[1] : s.GoblinGrog[1]) > 10);
+		Assert.Equal(0, s.ItemCount(s.TileIndex(17, 16, 0), supply));
+	}
+
+	[Theory]
+	[InlineData(Material.Grub)]
+	[InlineData(Material.Grog)]
+	public void A_waiting_goblins_Sleep_reaching_0_with_the_other_Need_already_at_0_collapses_rather_than_eating_or_drinking(Material supply)
+	{
+		var sim = WaiterWithSupply(supply);
+		var s = sim.State;
+
+		// Both meters are 0 and the supply is in reach: the ordinary tie-break would send the goblin for it.
+		if (supply == Material.Grub)
+			s.GoblinGrub[1] = 0;
+		else
+			s.GoblinGrog[1] = 0;
+		s.GoblinSleep[1] = 0;
+		RunAssertingOneSleeperPerTile(sim, 5);
+
+		Assert.Equal(GoblinTask.AwaitingBed, TaskOf(s, 1));
+		Assert.Equal(1, s.ItemCount(s.TileIndex(17, 16, 0), supply));
 	}
 
 	[Fact]
@@ -235,23 +267,28 @@ public class SleepSpaceTests
 		Assert.True(s.GoblinSleep[1] > 0);
 	}
 
-	[Fact]
-	public void Collapse_takes_priority_over_a_lower_Grub_Craving_while_waiting()
+	[Theory]
+	[InlineData(Material.Grub)]
+	[InlineData(Material.Grog)]
+	public void Collapse_takes_priority_over_a_lower_Grub_or_Grog_Craving_while_waiting(Material supply)
 	{
 		var sim = Crew(20, (16, 16), (16, 16));
 		Pocket(sim, (16, 16), (17, 16));
 		var s = sim.State;
-		s.AddItems(s.TileIndex(17, 16, 0), Material.Grub, 1);
+		s.AddItems(s.TileIndex(17, 16, 0), supply, 1);
 		LieDown(s, 0, 40);
 		s.GoblinSleep[1] = 0;
-		s.GoblinGrub[1] = 5;
+		if (supply == Material.Grub)
+			s.GoblinGrub[1] = 5;
+		else
+			s.GoblinGrog[1] = 5;
 		sim.RecheckReachability();
 
 		RunAssertingOneSleeperPerTile(sim, 30);
 
-		// Goblin 1 collapses on the free tile (17, 16) rather than eating the Grub there.
+		// Goblin 1 collapses on the free tile (17, 16) rather than consuming the supply there.
 		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 1));
-		Assert.Equal(1, s.ItemCount(s.TileIndex(17, 16, 0), Material.Grub));
+		Assert.Equal(1, s.ItemCount(s.TileIndex(17, 16, 0), supply));
 	}
 
 	[Fact]
@@ -339,19 +376,95 @@ public class SleepSpaceTests
 	}
 
 	[Fact]
+	public void A_closer_goblin_that_starts_later_takes_the_Heap_and_the_farther_goblin_that_set_out_first_is_redirected()
+	{
+		var sim = Crew(100, (16, 22), (16, 18));
+		Heap(sim, 16, 16);
+		var s = sim.State;
+		var heap = s.TileIndex(16, 16, 0);
+
+		// Goblin 0, far off, sets out for the Heap first; goblin 1, nearer, only then gets tired.
+		s.GoblinSleep[0] = 20;
+		RunAssertingOneSleeperPerTile(sim, 1);
+		Assert.Equal(GoblinTask.SeekingHeap, TaskOf(s, 0));
+		s.GoblinSleep[1] = 20;
+		var redirected = false;
+
+		for (var i = 0; i < 80; i++)
+		{
+			RunAssertingOneSleeperPerTile(sim, 1);
+			if (TaskOf(s, 1) == GoblinTask.Sleeping)
+				redirected |= TaskOf(s, 0) == GoblinTask.SeekingHeap;
+		}
+
+		// No reservation: goblin 1 lay down first and goblin 0, still walking, then found the Heap taken and took the floor.
+		Assert.True(redirected, "Goblin 0 was not still walking when goblin 1 took the Heap.");
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 1));
+		Assert.Equal(heap, TileOf(s, 1));
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 0));
+		Assert.NotEqual(heap, TileOf(s, 0));
+	}
+
+	[Fact]
+	public void A_collapsing_carrier_sharing_a_sleepers_full_Pile_tile_keeps_its_unit_until_a_legal_drop_exists_then_drops_it_on_that_tile_first()
+	{
+		var sim = Crew(20, (16, 16), (16, 16));
+		var s = sim.State;
+		var here = s.TileIndex(16, 16, 0);
+		var next = s.TileIndex(17, 16, 0);
+		Pocket(sim, (16, 16));
+		sim.Apply(new PaintPile(0, 16, 16, 16, 16));
+		s.AddItems(here, Material.Dirt, SimState.PileCapacity);
+		LieDown(s, 0, 40);
+		GoblinTasks.FinishPickUp(s, 1, Material.Dirt);
+		s.GoblinSleep[1] = 0;
+
+		RunAssertingOneSleeperPerTile(sim, 20);
+
+		// The Pile is full and nothing else is walkable: the goblin keeps its unit and does not collapse.
+		Assert.Equal((byte)Material.Dirt, s.GoblinCarry[1]);
+		Assert.Equal(GoblinTask.Carrying, TaskOf(s, 1));
+		Assert.Equal(SimState.PileCapacity, s.ItemCount(here, Material.Dirt));
+
+		s.TileKinds[next] = (byte)TileKind.Floor;
+		sim.RecheckReachability();
+		RunAssertingOneSleeperPerTile(sim, 1);
+
+		// The unit went down on the one legal tile, before the goblin moved or lay down.
+		Assert.Equal((byte)Material.None, s.GoblinCarry[1]);
+		Assert.Equal(1, s.LooseCount(next, Material.Dirt));
+		Assert.Equal(SimState.PileCapacity, s.ItemCount(here, Material.Dirt));
+		Assert.NotEqual(GoblinTask.Sleeping, TaskOf(s, 1));
+
+		RunAssertingOneSleeperPerTile(sim, 10);
+
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 1));
+		Assert.Equal(next, TileOf(s, 1));
+	}
+
+	[Fact]
 	public void Awake_goblins_walk_through_sleepers()
 	{
 		var sim = Crew(100, (16, 16), (18, 16));
 		Pocket(sim, (16, 16), (17, 16), (18, 16), (19, 16), (20, 16));
 		var s = sim.State;
 		// Goblin 1 sleeps in the one-wide corridor at (18, 16); goblin 0 is hungry with the only Grub beyond it.
-		(s.GoblinSleep[1], s.GoblinGrub[1], s.GoblinGrog[1]) = (60, 100, 100);
+		(s.GoblinGrub[1], s.GoblinGrog[1]) = (100, 100);
+		LieDown(s, 1, 60);
 		s.AddItems(s.TileIndex(20, 16, 0), Material.Grub, 1);
 		s.GoblinGrub[0] = 10;
 		sim.RecheckReachability();
+		var crossed = false;
 
-		RunAssertingOneSleeperPerTile(sim, 80);
+		for (var i = 0; i < 80; i++)
+		{
+			RunAssertingOneSleeperPerTile(sim, 1);
+			Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 1));
+			Assert.Equal((18, 16), (s.GoblinX[1], s.GoblinY[1]));
+			crossed |= (s.GoblinX[0], s.GoblinY[0]) == (18, 16);
+		}
 
+		Assert.True(crossed, "Goblin 0 never stood on the sleeper's tile.");
 		Assert.True(s.GoblinGrub[0] > 10);
 		Assert.Equal(0, s.ItemCount(s.TileIndex(20, 16, 0), Material.Grub));
 	}
