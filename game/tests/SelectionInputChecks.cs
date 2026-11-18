@@ -940,7 +940,7 @@ public partial class SelectionInputChecks : Node
 				var s = sim.State;
 				for (var g = 0; g < s.GoblinCount; g++)
 					(s.GoblinX[g], s.GoblinY[g]) = (12, 12);
-				main.Bubbles.Observe([new ShirkStarted(0), new HaulCancelled(1), new TheftPickedUp(2, Goblins.Sim.Material.Grub)], s, 0);
+				main.Bubbles.Observe([new ShirkStarted(0), new HaulCancelled(1), new TheftPickedUp(2, Goblins.Sim.Material.Grub)], s);
 				Require(main.Bubbles.Active.Count == 3, "Three incidents did not put three bubbles up.");
 				var covered = view.LayoutBubbles().Select(l => l.Rect).ToList();
 				Require(covered.Count == 3, "The three bubbles did not lay out.");

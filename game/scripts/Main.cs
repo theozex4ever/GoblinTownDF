@@ -158,10 +158,9 @@ public partial class Main : Node
 		var events = _sim.DrainEvents();
 		if (events.Count > 0)
 		{
-			bubblesChanged |= _bubbles.Observe(events, _sim.State, _viewZ);
+			bubblesChanged |= _bubbles.Observe(events, _sim.State);
 			SyncHud();
 		}
-		bubblesChanged |= _bubbles.KeepLevel(_sim.State, _viewZ);
 		if (bubblesChanged)
 			_view.QueueRedraw();
 		// Counted every frame, so changes made outside a tick (a Pile painted while paused) show at once.
@@ -381,8 +380,6 @@ public partial class Main : Node
 	void Refresh()
 	{
 		_view.ViewZ = _viewZ;
-		// A bubble belongs to the level its goblin is on; leaving the level takes it down.
-		_bubbles.KeepLevel(_sim.State, _viewZ);
 		_view.QueueRedraw();
 		SyncHud();
 		UpdateHover();
