@@ -8,9 +8,11 @@ namespace Goblins.Sim;
 /// the unit; or walks to the Grub Pit tile and tends it (20 ticks), which starts the tile spawning Grub; or walks to the Fungus, takes a unit (5 ticks),
 /// brings it to a free Brewery tile and brews it (20 ticks, which only count while a Pile in reach has room for the Grog) into one Grog, loose on that tile. A goblin with no reachable Job wanders instead.
 /// A goblin with a Craving for Grub or Grog that can reach a unit of it drops everything and goes to eat or drink it, whatever
-/// it was doing. A Craving for Sleep always can be met: the goblin walks to the nearest Sleeping Heap tile and sleeps there, or sleeps
-/// where it stands when none is in reach. With several Cravings the lowest meter wins (Grub, then Grog, then Sleep on a tie),
-/// and a Craving with no unit in reach does not count. A goblin at Sleep 0 collapses and sleeps on the spot, whatever else it was doing.
+/// it was doing. A Craving for Sleep seeks a tile with no sleeper: the nearest reachable Sleeping Heap tile, else its own tile, else the
+/// nearest reachable walkable tile; with none free it waits in AwaitingBed, restoring nothing, and a lower Grub or Grog Craving can
+/// pull it away. With several Cravings the lowest meter wins (Grub, then Grog, then Sleep on a tie), and a Craving with no unit in
+/// reach does not count. A goblin at Sleep 0 collapses whatever else it was doing: it sleeps on its own tile if no goblin sleeps
+/// there, otherwise walks to the nearest tile without a sleeper, or waits in AwaitingBed when there is none.
 /// Loops over the state arrays; the only memory it owns is reused scratch lists.
 /// </summary>
 public sealed partial class JobSystem
