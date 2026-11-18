@@ -25,7 +25,7 @@ Bubbles are a provisional experiment. They appear over a goblin for three second
 - **1× and 4×:** does a bubble last about the same time at both? Can you read it before it goes?
 - **Pause:** pause while one is up. It should hold, and carry on when you unpause.
 - **Overlap:** with several goblins close together, are the bubbles still readable and attached to the right goblin? Never more than three, one per goblin.
-- **Levels:** change level while one is up; it should not appear over the wrong place.
+- **Levels:** change level while one is up, then come back before three seconds are up. It should be hidden while away, back over the same goblin (including after stairs), never over the wrong goblin or level, and gone for good once its time is up. Bubbles on other levels still count toward the three.
 - **After they go:** the name, fight partner, theft material, Need pips and carried squares in the Inspector and on the map are all still there.
 - **Not in the way:** you can still drag, dig and paint under a bubble.
 
