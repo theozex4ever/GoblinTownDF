@@ -29,13 +29,13 @@ Bubbles are a provisional experiment. They appear over a goblin for three second
 - **After they go:** the name, fight partner, theft material, Need pips and carried squares in the Inspector and on the map are all still there.
 - **Not in the way:** you can still drag, dig and paint under a bubble.
 
+**Theo's preference to record (his own words):** keep bubbles as they are, replace them with representative icons, or try something else? Lost-Haul bubbles may be the most frequent in the starting setup, which is worth saying if they feel like noise.
+
 ### Next-build verification (#59), not part of the `cfa4e85` run
 
 Check this on the first build that includes the #59 fix (bubbles survive level changes); it was not part of the run above. Record it as **observed / failed / not seen**.
 
 - **Level round trip:** change level while a bubble is up, then come back before three seconds are up. It should be hidden while away, back over the same goblin (including after stairs), never over the wrong goblin or level, and gone for good once its time is up. Bubbles on other levels still count toward the three.
-
-**Theo's preference to record (his own words):** keep bubbles as they are, replace them with representative icons, or try something else? Lost-Haul bubbles may be the most frequent in the starting setup, which is worth saying if they feel like noise.
 
 ## Then
 
