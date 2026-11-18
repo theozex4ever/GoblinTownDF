@@ -30,7 +30,7 @@ The first prototype asks one question: **is it fun to dig a warren and watch gob
 | ✅ | **P1 — Map and digging** | Designate tunnels and stairs; one goblin digs them out | [Played](docs/playtests/2026-10-30-P1.md) |
 | ✅ | **P2 — Hauling and piles** | Goblins carry dug material to Piles | [Played](docs/playtests/2026-10-31-P2.md) |
 | ✅ | **P3 — Needs** | Food, drink, sleep, Fungus farming and a Brewery | [Played, 5/5 yes](docs/playtests/2026-11-06-P3.md) |
-| 🚧 | **P4 — Chaos** | Unmet needs lead to shirking, fights and theft | Built: Chaos, shirking, fights, theft and provisional chat bubbles; human fun check pending, checklist in [`docs/playtests/P4-CHECKLIST.md`](docs/playtests/P4-CHECKLIST.md) |
+| 🚧 | **P4 — Chaos** | Unmet needs lead to shirking, fights and theft | Built: Chaos, shirking, fights, theft and provisional chat bubbles; human playtest finished, fun-check verdict not yet logged; checklist in [`docs/playtests/P4-CHECKLIST.md`](docs/playtests/P4-CHECKLIST.md) |
 | ⬜ | **P5 — One invasion** | Three heroes, one trap type, and Brutes fighting back | Planned |
 | ⬜ | **P6 — Legends** | A running event log of deaths, invasions and chaos | Planned |
 
