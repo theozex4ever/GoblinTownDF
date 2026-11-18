@@ -85,4 +85,6 @@ public enum GoblinTask : byte
 	MakingOff,
 	Scoffing,
 	Stalled,
+	/// <summary>Craving or Collapsing with no sleeping space in reach: waiting in place, restoring no Sleep, for a tile with no sleeper.</summary>
+	AwaitingBed,
 }

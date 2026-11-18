@@ -775,10 +775,17 @@ public class FightTests
 
 		RunTicks(sim, 1);
 
+		// Both go to bed. Goblin 0 acts first and lies down where it stands; at most one sleeper to a tile (#58), so goblin 1 walks to a free tile.
 		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 0));
-		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 1));
+		Assert.True(GoblinTasks.IsSleepTask(TaskOf(s, 1)));
 		Assert.Equal((ChaosRules.CooldownTicks, ChaosRules.CooldownTicks), (s.GoblinActCooldown[0], s.GoblinActCooldown[1]));
 		Assert.InRange(s.GoblinChaos[instigator], instigatorChaos - 1, 100);
+
+		RunTicks(sim, 20);
+
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 0));
+		Assert.Equal(GoblinTask.Sleeping, TaskOf(s, 1));
+		Assert.NotEqual((s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]), (s.GoblinX[1], s.GoblinY[1], s.GoblinZ[1]));
 	}
 
 	[Theory]

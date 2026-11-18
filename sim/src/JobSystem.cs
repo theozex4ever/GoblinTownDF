@@ -8,9 +8,11 @@ namespace Goblins.Sim;
 /// the unit; or walks to the Grub Pit tile and tends it (20 ticks), which starts the tile spawning Grub; or walks to the Fungus, takes a unit (5 ticks),
 /// brings it to a free Brewery tile and brews it (20 ticks, which only count while a Pile in reach has room for the Grog) into one Grog, loose on that tile. A goblin with no reachable Job wanders instead.
 /// A goblin with a Craving for Grub or Grog that can reach a unit of it drops everything and goes to eat or drink it, whatever
-/// it was doing. A Craving for Sleep always can be met: the goblin walks to the nearest Sleeping Heap tile and sleeps there, or sleeps
-/// where it stands when none is in reach. With several Cravings the lowest meter wins (Grub, then Grog, then Sleep on a tie),
-/// and a Craving with no unit in reach does not count. A goblin at Sleep 0 collapses and sleeps on the spot, whatever else it was doing.
+/// it was doing. A Craving for Sleep seeks a tile with no sleeper: the nearest reachable Sleeping Heap tile, else its own tile, else the
+/// nearest reachable walkable tile; with none free it waits in AwaitingBed, restoring nothing, and a lower Grub or Grog Craving can
+/// pull it away. With several Cravings the lowest meter wins (Grub, then Grog, then Sleep on a tie), and a Craving with no unit in
+/// reach does not count. A goblin at Sleep 0 collapses whatever else it was doing: it sleeps on its own tile if no goblin sleeps
+/// there, otherwise walks to the nearest tile without a sleeper, or waits in AwaitingBed when there is none.
 /// Loops over the state arrays; the only memory it owns is reused scratch lists.
 /// </summary>
 public sealed partial class JobSystem
@@ -184,6 +186,7 @@ public sealed partial class JobSystem
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			// A Craving comes before any Job, and before a Starving goblin sits a tick out. Eating, drinking, sleeping and shirking are not slowed.
+			_bedMemo = null;
 			TryCraving(s, g);
 			TryActOut(s, g, events);
 			var task = (GoblinTask)s.GoblinTask[g];
@@ -276,6 +279,7 @@ public sealed partial class JobSystem
 					Stall(s, g);
 					break;
 				case GoblinTask.SeekingHeap:
+				case GoblinTask.AwaitingBed:
 					SeekHeap(s, g);
 					break;
 				case GoblinTask.Sleeping:
@@ -300,7 +304,7 @@ public sealed partial class JobSystem
 			TryMeet(s, goblin, Need.Sleep, collapse: true);
 			return;
 		}
-		if (GoblinTasks.IsSatisfyingTask(task))
+		if (GoblinTasks.IsSatisfyingTask(task) && task != GoblinTask.AwaitingBed)
 			return;
 
 		var passedOver = 0;
@@ -351,13 +355,16 @@ public sealed partial class JobSystem
 			RecheckReachability(s);
 	}
 
-	// True when the goblin set out to meet the Need: for a unit of Grub or Grog, or for a bed (the nearest Heap, or the floor under it).
+	// True when the goblin set out to meet the Need: for a unit of Grub or Grog, or for a bed (a tile with no sleeper on it: the nearest free Heap,
+	// else the floor under it, else the nearest free tile; with none in reach it waits). A collapse looks for the nearest free tile of any kind.
 	bool TryMeet(SimState s, int goblin, Need need, bool collapse)
 	{
 		var supply = NeedRules.SupplyOf(need);
 		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
-		// Whether the goblin already has what it needs where it stands: a unit underfoot, or a bed (a Heap underfoot, or no Heap at all).
+		var task = (GoblinTask)s.GoblinTask[goblin];
+		// Whether the goblin already has what it needs where it stands: a unit underfoot, or a bed (a tile with no sleeper).
 		bool here;
+		var bed = Bed.Here;
 		if (supply != Material.None)
 		{
 			ClearGoals();
@@ -369,15 +376,15 @@ public sealed partial class JobSystem
 		}
 		else
 		{
-			// With no Heap in reach, or after a collapse, the bed is the floor underfoot.
-			here = true;
-			if (!collapse)
+			bed = FindBed(s, goblin, collapse);
+			here = bed == Bed.Here;
+			// A goblin already on its way to bed, or waiting for one, keeps doing so: its goal is found afresh each step.
+			if (bed == Bed.None && task == GoblinTask.AwaitingBed
+				|| bed == Bed.Elsewhere && task == GoblinTask.SeekingHeap)
 			{
-				ClearGoals();
-				AddHeapGoals(s);
-				if (_goals.Count > 0
-					&& _pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _))
-					here = _path.Count == 0;
+				// Nothing has changed by the time SeekHeap runs this same turn, so it takes this scan's answer instead of making its own.
+				_bedMemo = new BedMemo(goblin, collapse, bed, bed == Bed.Elsewhere ? _path[0] : -1, bed == Bed.Elsewhere ? _path.Count : 0);
+				return true;
 			}
 		}
 
@@ -386,10 +393,11 @@ public sealed partial class JobSystem
 		if (carried != Material.None && !TryFindDropTile(s, goblin, carried, out dropTile))
 			return false;
 
+		var bedTask = bed switch { Bed.Here => GoblinTask.Sleeping, Bed.Elsewhere => GoblinTask.SeekingHeap, _ => GoblinTask.AwaitingBed };
 		if (collapse)
-			GoblinTasks.BeginCollapse(s, goblin, dropTile);
+			GoblinTasks.BeginCollapse(s, goblin, dropTile, bedTask);
 		else if (supply == Material.None)
-			GoblinTasks.BeginSleep(s, goblin, dropTile, asleep: here);
+			GoblinTasks.BeginSleep(s, goblin, dropTile, bedTask);
 		else
 			GoblinTasks.BeginSeek(s, goblin, dropTile, eating: here, supply);
 		// The unit put down is a new loose Haul, or has taken a Pile tile's last slot of its material.
@@ -432,25 +440,111 @@ public sealed partial class JobSystem
 				AddGoal(tile, tile);
 	}
 
-	// Every Sleeping Heap tile as a goal, in tile order, so a tie goes to the lowest tile index.
-	void AddHeapGoals(SimState s)
+	enum Bed
 	{
-		for (var tile = 0; tile < s.Rooms.Length; tile++)
-			if (s.Rooms[tile] == (byte)RoomKind.SleepingHeap)
-				AddGoal(tile, tile);
+		/// <summary>No tile with no sleeper on it is in reach.</summary>
+		None,
+		/// <summary>The goblin's own tile is the bed it wants.</summary>
+		Here,
+		/// <summary>A bed is in reach elsewhere; <c>_goals</c> holds the goals it was found among.</summary>
+		Elsewhere,
 	}
 
-	// Walks toward the nearest Sleeping Heap tile, found afresh at every step so a Heap painted or removed on the way changes the goal.
-	// The goblin lies down once it stands on one, and where it stands if no Heap is left in reach: the floor is always a bed.
+	// Which tile the goblin should lie down on now, by path length, ties to the lowest tile index. A Craving seeks the nearest Heap tile with no
+	// sleeper (its own tile included); with none, its own tile if no one sleeps there; otherwise the nearest walkable tile with no sleeper. A collapse skips
+	// the Heap step. Nothing is reserved: whoever lies down first has the tile, and everyone else looks again.
+	Bed FindBed(SimState s, int goblin, bool collapse)
+	{
+		var start = s.TileIndex(s.GoblinX[goblin], s.GoblinY[goblin], s.GoblinZ[goblin]);
+		MarkSleepers(s, goblin);
+		try
+		{
+			if (!collapse)
+			{
+				ClearGoals();
+				for (var tile = 0; tile < s.Rooms.Length; tile++)
+					if (s.Rooms[tile] == (byte)RoomKind.SleepingHeap && _sleeperTiles[tile] == 0)
+						AddGoal(tile, tile);
+				if (_goals.Count > 0
+					&& _pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _))
+					return _path.Count == 0 ? Bed.Here : Bed.Elsewhere;
+			}
+
+			if (_sleeperTiles[start] == 0)
+				return Bed.Here;
+
+			ClearGoals();
+			for (var tile = 0; tile < s.Rooms.Length; tile++)
+				if (_sleeperTiles[tile] == 0 && TileRules.IsWalkable(s.KindAt(tile)))
+					AddGoal(tile, tile);
+			return _goals.Count > 0
+				&& _pathfinder.TryFindPath(s, start, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_goals), _path, out _)
+				? Bed.Elsewhere : Bed.None;
+		}
+		finally
+		{
+			UnmarkSleepers(s, goblin);
+		}
+	}
+
+	// One goblin's FindBed answer for its own turn: the goblin, whether it was a collapse, the bed, and the first step and length of the path to it.
+	// Set by TryMeet and consumed by SeekHeap in the same turn, then dropped at the start of the next goblin's turn; it never outlives a turn or enters a save.
+	readonly record struct BedMemo(int Goblin, bool Collapse, Bed Bed, int Next, int PathLength);
+
+	BedMemo? _bedMemo;
+
+	byte[] _sleeperTiles = [];
+
+	// Marks the tile of every sleeping goblin but this one, so FindBed reads "has a sleeper" in one lookup.
+	void MarkSleepers(SimState s, int except)
+	{
+		if (_sleeperTiles.Length != s.Rooms.Length)
+			_sleeperTiles = new byte[s.Rooms.Length];
+		for (var g = 0; g < s.GoblinCount; g++)
+			if (g != except && (GoblinTask)s.GoblinTask[g] == GoblinTask.Sleeping)
+				_sleeperTiles[s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g])] = 1;
+	}
+
+	void UnmarkSleepers(SimState s, int except)
+	{
+		for (var g = 0; g < s.GoblinCount; g++)
+			if (g != except && (GoblinTask)s.GoblinTask[g] == GoblinTask.Sleeping)
+				_sleeperTiles[s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g])] = 0;
+	}
+
+	// Walks toward the bed found afresh at every step, so a Heap painted or removed on the way, or a tile taken by a sleeper, changes the goal.
+	// The goblin lies down once its own tile is the bed. With none in reach it waits where it stands (AwaitingBed), restoring no Sleep, and looks
+	// again every tick. A Sleep of 0 is a collapse, which takes the nearest free tile of any kind.
 	void SeekHeap(SimState s, int goblin)
 	{
-		if (!StepDue(s, goblin))
+		var task = (GoblinTask)s.GoblinTask[goblin];
+		if (task == GoblinTask.SeekingHeap && !StepDue(s, goblin))
 			return;
 
-		ClearGoals();
-		AddHeapGoals(s);
-		if (MoveToward(s, goblin) != Move.Moved)
-			GoblinTasks.StartSleeping(s, goblin);
+		var collapse = s.GoblinSleep[goblin] == 0;
+		BedMemo? memo = _bedMemo is { } m && m.Goblin == goblin && m.Collapse == collapse ? m : null;
+		_bedMemo = null;
+		switch (memo?.Bed ?? FindBed(s, goblin, collapse))
+		{
+			case Bed.Here:
+				GoblinTasks.StartSleeping(s, goblin);
+				break;
+			case Bed.None:
+				GoblinTasks.WaitForBed(s, goblin);
+				break;
+			default:
+				GoblinTasks.WalkToBed(s, goblin);
+				// FindBed has just found the way to the nearest bed (_path), or the memo has its first step: take it rather than search again.
+				var next = memo?.Next ?? _path[0];
+				var pathLength = memo?.PathLength ?? _path.Count;
+				var layer = s.Width * s.Height;
+				s.GoblinX[goblin] = next % s.Width;
+				s.GoblinY[goblin] = next / s.Width % s.Height;
+				s.GoblinZ[goblin] = next / layer;
+				if (pathLength == 1)
+					GoblinTasks.StartSleeping(s, goblin);
+				break;
+		}
 	}
 
 	// Walks toward the nearest unit of what the goblin seeks, found afresh at every step so a unit eaten, drunk or hauled off
