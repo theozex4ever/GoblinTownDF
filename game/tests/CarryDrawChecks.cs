@@ -494,7 +494,7 @@ public partial class CarryDrawChecks : Node
 			if (x >= 0)
 				(s.GoblinX[0], s.GoblinY[0]) = (x, y);
 			var board = new BubbleBoard();
-			board.Observe([IncidentFor(kind, 0)], s, 0);
+			board.Observe([IncidentFor(kind, 0)], s);
 			var image = await Render(sim, bubbles: board);
 			var (bubble, rect, anchor) = LayoutOf(sim, board).Single();
 			var where = $"{kind} at ({s.GoblinX[0]},{s.GoblinY[0]})";
@@ -525,7 +525,7 @@ public partial class CarryDrawChecks : Node
 		for (var g = 0; g < 4; g++)
 			(s.GoblinX[g], s.GoblinY[g]) = (s.GoblinX[0], s.GoblinY[0]);
 		var board = new BubbleBoard();
-		board.Observe([new ShirkStarted(0), new HaulCancelled(1), new TheftPickedUp(2, Material.Grub), new ScuffleStarted(3, 0)], s, 0);
+		board.Observe([new ShirkStarted(0), new HaulCancelled(1), new TheftPickedUp(2, Material.Grub), new ScuffleStarted(3, 0)], s);
 		Require(board.Active.Count == 3, "Four incidents on one tile left more than three bubbles.");
 		var image = await Render(sim, bubbles: board);
 		var laid = LayoutOf(sim, board);
@@ -540,9 +540,9 @@ public partial class CarryDrawChecks : Node
 		// The oldest surviving bubble must be just as readable with the others present: their tails may cross its rectangle.
 		// Advance the authoring count once so the solo reference has the exact same name and line as the crowd's first bubble.
 		var solo = new BubbleBoard();
-		solo.Observe([new ShirkStarted(0)], s, 0);
+		solo.Observe([new ShirkStarted(0)], s);
 		solo.Advance(BubbleBoard.LifetimeSeconds);
-		solo.Observe([new HaulCancelled(1)], s, 0);
+		solo.Observe([new HaulCancelled(1)], s);
 		var reference = await Render(sim, bubbles: solo);
 		Require(LayoutOf(sim, solo)[0].Rect == laid[0].Rect, "The solo reference moved the first bubble.");
 		var first = laid[0].Rect;
@@ -572,7 +572,7 @@ public partial class CarryDrawChecks : Node
 		(s.GoblinX[1], s.GoblinY[1]) = (s.GoblinX[0] + 1, s.GoblinY[0]);
 		(s.GoblinGrub[1], s.GoblinGrog[1], s.GoblinSleep[1]) = (100, 10, 100);
 		var board = new BubbleBoard();
-		board.Observe([new HaulCancelled(0), new ShirkStarted(1)], s, 0);
+		board.Observe([new HaulCancelled(0), new ShirkStarted(1)], s);
 
 		Rect2 Marker(int g) => new(s.GoblinX[g] * WarrenView.CellSize + 3, s.GoblinY[g] * WarrenView.CellSize + 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
 		void ExpectCues(Image image, string when)
@@ -601,7 +601,7 @@ public partial class CarryDrawChecks : Node
 		var s = sim.State;
 		s.GoblinZ[0] = 1;
 		var board = new BubbleBoard();
-		board.Observe([new ShirkStarted(0)], s, viewZ: 1);
+		board.Observe([new ShirkStarted(0)], s);
 		Require(board.Active.Count == 1, "The level-1 goblin had no bubble to hide.");
 		Require(LayoutOf(sim, board, viewZ: 0).Count == 0, "A bubble for a level-1 goblin laid out on level 0.");
 		var below = await Render(sim, viewZ: 0, bubbles: board);

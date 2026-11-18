@@ -17,8 +17,9 @@ public sealed class Bubble
 /// <summary>
 /// The chat bubbles on show, provisional presentation of the sim's incident events. A bubble is born from a sim event (<see cref="Observe"/>),
 /// ages by unpaused real time (<see cref="Advance"/>) and is gone after <see cref="LifetimeSeconds"/>; there is at most one per goblin and
-/// <see cref="MaxBubbles"/> overall, the newest replacing the oldest. It holds no history, is not saved, reads the sim but never writes it, and draws
-/// nothing from the sim's RNG. A bubble hangs over its goblin's current tile, and only a goblin on the viewed level has one.
+/// <see cref="MaxBubbles"/> overall, hidden ones included, the newest replacing the oldest. It holds no history, is not saved, reads the sim but
+/// never writes it, and draws nothing from the sim's RNG. A bubble is made whichever level the viewer is on and ages the same off-level; it follows
+/// its goblin's current tile and level, and the view draws it only while that level is viewed.
 /// </summary>
 public sealed class BubbleBoard
 {
@@ -36,20 +37,20 @@ public sealed class BubbleBoard
 	public int Made { get; private set; }
 
 	/// <summary>
-	/// Makes a bubble for each of the four incidents in <paramref name="events"/> whose goblin is on level <paramref name="viewZ"/>, in order, so a
+	/// Makes a bubble for each of the four incidents in <paramref name="events"/> in order, so a
 	/// later fact replaces an earlier one. The scuffle's bubble is the instigator's. Returns whether the bubbles on show changed.
 	/// </summary>
-	public bool Observe(IReadOnlyList<SimEvent> events, SimState s, int viewZ)
+	public bool Observe(IReadOnlyList<SimEvent> events, SimState s)
 	{
 		var changed = false;
 		foreach (var incident in events)
 		{
 			var made = incident switch
 			{
-				ShirkStarted e => Add(s, viewZ, e.Goblin, BubbleKind.Shirk, victim: "", supply: ""),
-				ScuffleStarted e => Add(s, viewZ, e.Instigator, BubbleKind.Scuffle, victim: e.Victim >= 0 && e.Victim < s.GoblinCount ? GoblinNames.For(e.Victim) : "someone", supply: ""),
-				TheftPickedUp e => Add(s, viewZ, e.Goblin, BubbleKind.Theft, victim: "", supply: e.Supply.ToString()),
-				HaulCancelled e => Add(s, viewZ, e.Goblin, BubbleKind.LostHaul, victim: "", supply: ""),
+				ShirkStarted e => Add(s, e.Goblin, BubbleKind.Shirk, victim: "", supply: ""),
+				ScuffleStarted e => Add(s, e.Instigator, BubbleKind.Scuffle, victim: e.Victim >= 0 && e.Victim < s.GoblinCount ? GoblinNames.For(e.Victim) : "someone", supply: ""),
+				TheftPickedUp e => Add(s, e.Goblin, BubbleKind.Theft, victim: "", supply: e.Supply.ToString()),
+				HaulCancelled e => Add(s, e.Goblin, BubbleKind.LostHaul, victim: "", supply: ""),
 				_ => false,
 			};
 			changed |= made;
@@ -57,9 +58,9 @@ public sealed class BubbleBoard
 		return changed;
 	}
 
-	bool Add(SimState s, int viewZ, int goblin, BubbleKind kind, string victim, string supply)
+	bool Add(SimState s, int goblin, BubbleKind kind, string victim, string supply)
 	{
-		if (goblin < 0 || goblin >= s.GoblinCount || s.GoblinZ[goblin] != viewZ)
+		if (goblin < 0 || goblin >= s.GoblinCount)
 			return false;
 
 		_active.RemoveAll(b => b.Goblin == goblin);
@@ -86,7 +87,4 @@ public sealed class BubbleBoard
 			bubble.Remaining -= seconds;
 		return _active.RemoveAll(b => b.Remaining <= Epsilon) > 0;
 	}
-
-	/// <summary>Drops the bubbles whose goblin is not on level <paramref name="viewZ"/>. Returns whether any went.</summary>
-	public bool KeepLevel(SimState s, int viewZ) => _active.RemoveAll(b => s.GoblinZ[b.Goblin] != viewZ) > 0;
 }

@@ -27,10 +27,14 @@ public partial class BubbleChecks : Node
 			LifetimeIsRealTime();
 			OnePerGoblinThreeOverall();
 			OffLevelIncidents();
+			HiddenBubblesCountTowardTheCap();
 			Placement();
 			MainTimingAtOneAndFourTimesAndPaused();
 			PauseInputBetweenFrames();
-			MainDropsOffLevelAndKeepsOnLevelChange();
+			LevelRoundTripKeepsBubbles();
+			ExpiryOffLevel();
+			HiddenBubblesPauseAndSpeed();
+			BubbleFollowsGoblinOnStairs();
 			RealIncidentsMakeBubbles();
 			PresentationLeavesTheSimAlone();
 			await MainExpiresAfterEngineStall();
@@ -61,7 +65,7 @@ public partial class BubbleChecks : Node
 		foreach (var (incident, goblin, kind) in cases)
 		{
 			var board = new BubbleBoard();
-			board.Observe([incident], s, viewZ: 0);
+			board.Observe([incident], s);
 			Require(board.Active.Count == 1, $"{incident} made {board.Active.Count} bubbles.");
 			var bubble = board.Active[0];
 			Require(bubble.Goblin == goblin && bubble.Kind == kind, $"{incident} made a {bubble.Kind} bubble over goblin {bubble.Goblin}.");
@@ -75,21 +79,21 @@ public partial class BubbleChecks : Node
 		var theft = new BubbleBoard();
 		for (var i = 0; i < 12; i++)
 		{
-			scuffle.Observe([new ScuffleStarted(0, 6)], s, 0);
-			theft.Observe([new TheftPickedUp(0, Goblins.Sim.Material.Grub)], s, 0);
+			scuffle.Observe([new ScuffleStarted(0, 6)], s);
+			theft.Observe([new TheftPickedUp(0, Goblins.Sim.Material.Grub)], s);
 			Require(scuffle.Active.Count == 1 && scuffle.Active[0].Goblin == 0, "A scuffle made a bubble for someone but the instigator.");
 		}
 
 		// Events that are not one of the four make nothing.
 		var quiet = new BubbleBoard();
-		quiet.Observe([new PausedChanged(true), new SpeedChanged(4), new TileDug(1, 1, 0, Goblins.Sim.Material.Dirt)], s, 0);
+		quiet.Observe([new PausedChanged(true), new SpeedChanged(4), new TileDug(1, 1, 0, Goblins.Sim.Material.Dirt)], s);
 		Require(quiet.Active.Count == 0, "A pause, a speed change and a dug tile made bubbles.");
 
 		// A fact seen once is one bubble: nothing is drawn from the board's own refreshes.
 		var once = new BubbleBoard();
-		once.Observe([new ShirkStarted(0)], s, 0);
+		once.Observe([new ShirkStarted(0)], s);
 		for (var i = 0; i < 100; i++)
-			once.Observe([], s, 0);
+			once.Observe([], s);
 		Require(once.Active.Count == 1 && once.Made == 1, "Observing no events changed the board.");
 	}
 
@@ -126,7 +130,7 @@ public partial class BubbleChecks : Node
 		foreach (var frames in new[] { 30, 60, 3, 1 })
 		{
 			var board = new BubbleBoard();
-			board.Observe([new ShirkStarted(0)], s, 0);
+			board.Observe([new ShirkStarted(0)], s);
 			var step = BubbleBoard.LifetimeSeconds / frames;
 			for (var i = 1; i < frames; i++)
 			{
@@ -138,14 +142,14 @@ public partial class BubbleChecks : Node
 		}
 
 		var edge = new BubbleBoard();
-		edge.Observe([new ShirkStarted(0)], s, 0);
+		edge.Observe([new ShirkStarted(0)], s);
 		Require(!edge.Advance(2.999), "A bubble reported a change with a millisecond to go.");
 		Require(edge.Active.Count == 1, "The bubble went with a millisecond to go.");
 		Require(edge.Advance(0.001) && edge.Active.Count == 0, "The bubble outlived exactly three seconds, or the board did not report it going.");
 
 		// Nothing owed: a zero or negative frame ages nothing.
 		var still = new BubbleBoard();
-		still.Observe([new ShirkStarted(0)], s, 0);
+		still.Observe([new ShirkStarted(0)], s);
 		still.Advance(0);
 		still.Advance(-5);
 		Require(Math.Abs(still.Active[0].Remaining - BubbleBoard.LifetimeSeconds) < 1e-9, "A zero or negative frame aged the bubble.");
@@ -157,44 +161,71 @@ public partial class BubbleChecks : Node
 		_scenarios++;
 		var s = NewState();
 		var board = new BubbleBoard();
-		board.Observe([new ShirkStarted(1)], s, 0);
+		board.Observe([new ShirkStarted(1)], s);
 		board.Advance(1.0);
-		board.Observe([new HaulCancelled(1)], s, 0);
+		board.Observe([new HaulCancelled(1)], s);
 		Require(board.Active.Count == 1 && board.Active[0].Kind == BubbleKind.LostHaul, "A second incident did not replace the goblin's bubble.");
 		Require(Math.Abs(board.Active[0].Remaining - BubbleBoard.LifetimeSeconds) < 1e-9, "The replacing bubble did not start its own three seconds.");
 
-		board.Observe([new ShirkStarted(2), new ShirkStarted(3)], s, 0);
+		board.Observe([new ShirkStarted(2), new ShirkStarted(3)], s);
 		Require(board.Active.Select(b => b.Goblin).SequenceEqual([1, 2, 3]), $"Three goblins: {string.Join(",", board.Active.Select(b => b.Goblin))}.");
-		board.Observe([new ShirkStarted(4)], s, 0);
+		board.Observe([new ShirkStarted(4)], s);
 		Require(board.Active.Select(b => b.Goblin).SequenceEqual([2, 3, 4]), "A fourth bubble did not push out the oldest.");
 		// Refreshing a goblin that already has one keeps the others.
-		board.Observe([new ShirkStarted(3)], s, 0);
+		board.Observe([new ShirkStarted(3)], s);
 		Require(board.Active.Select(b => b.Goblin).SequenceEqual([2, 4, 3]), "Replacing goblin 3's bubble disturbed another's.");
 		// Many in one frame: the last three win.
-		board.Observe([new ShirkStarted(0), new ShirkStarted(1), new ShirkStarted(5), new ShirkStarted(6)], s, 0);
+		board.Observe([new ShirkStarted(0), new ShirkStarted(1), new ShirkStarted(5), new ShirkStarted(6)], s);
 		Require(board.Active.Select(b => b.Goblin).SequenceEqual([1, 5, 6]), "Four at once did not leave the newest three.");
 		// A goblin's own bubble expiring does not free another's.
 		board.Advance(1.0);
-		board.Observe([new ShirkStarted(2)], s, 0);
+		board.Observe([new ShirkStarted(2)], s);
 		Require(board.Active.Select(b => b.Goblin).SequenceEqual([5, 6, 2]), "A new bubble beside older ones kept more than three.");
 	}
 
-	// A goblin on another level gets no bubble on this one; a bubble follows its goblin's level.
+	// An incident makes a bubble whichever level the goblin is on and whichever level is viewed; only the view decides what is drawn.
 	void OffLevelIncidents()
 	{
 		_scenarios++;
 		var s = NewState();
 		s.GoblinZ[2] = 1;
 		var board = new BubbleBoard();
-		board.Observe([new ShirkStarted(2), new HaulCancelled(2), new ScuffleStarted(2, 0), new TheftPickedUp(2, Goblins.Sim.Material.Grub)], s, viewZ: 0);
-		Require(board.Active.Count == 0, "An incident on level 1 made a bubble while viewing level 0.");
-		board.Observe([new ShirkStarted(2)], s, viewZ: 1);
-		Require(board.Active.Count == 1, "An incident on the viewed level 1 made no bubble.");
-		board.Observe([new ShirkStarted(99), new ShirkStarted(-1)], s, viewZ: 1);
+		board.Observe([new ShirkStarted(2)], s);
+		board.Observe([new HaulCancelled(2)], s);
+		board.Observe([new ScuffleStarted(2, 0)], s);
+		board.Observe([new TheftPickedUp(2, Goblins.Sim.Material.Grub)], s);
+		Require(board.Active.Count == 1 && board.Active[0].Kind == BubbleKind.Theft, "Incidents on level 1 did not each make (and replace) a bubble.");
+		foreach (var incident in new SimEvent[] { new ShirkStarted(2), new HaulCancelled(2), new ScuffleStarted(2, 0), new TheftPickedUp(2, Goblins.Sim.Material.Grub) })
+		{
+			var each = new BubbleBoard();
+			each.Observe([incident], s);
+			Require(each.Active.Count == 1 && each.Active[0].Goblin == 2, $"{incident} born off the viewed level made no bubble.");
+		}
+		board.Observe([new ShirkStarted(99), new ShirkStarted(-1)], s);
 		Require(board.Active.Count == 1, "An incident for a goblin that does not exist made a bubble.");
+	}
 
-		Require(!board.KeepLevel(s, viewZ: 1), "KeepLevel reported a change with the goblin on the viewed level.");
-		Require(board.KeepLevel(s, viewZ: 0) && board.Active.Count == 0, "A bubble stayed up on a level its goblin is not on.");
+	// Hidden bubbles count toward the three, and an off-level incident pushes out the oldest, visible or not.
+	void HiddenBubblesCountTowardTheCap()
+	{
+		_scenarios++;
+		var main = NewMain((_, _) => { });
+		try
+		{
+			var s = main.View.Sim!.State;
+			s.GoblinZ[1] = 1;
+			s.GoblinZ[2] = 1;
+			s.GoblinZ[3] = 1;
+			main.Bubbles.Observe([new ShirkStarted(0), new ShirkStarted(1), new ShirkStarted(2)], s);
+			Require(main.View.LayoutBubbles().Select(l => l.Bubble.Goblin).SequenceEqual([0]), "Only goblin 0's bubble belongs on the viewed level 0.");
+			main.Bubbles.Observe([new ShirkStarted(3)], s);
+			Require(main.Bubbles.Active.Select(b => b.Goblin).SequenceEqual([1, 2, 3]), "A fourth, off-level bubble did not push out the visible oldest.");
+			Require(main.View.LayoutBubbles().Count == 0, "The replaced bubble was still drawn on level 0.");
+			// A replaced incident never comes back.
+			Frames(main, 1, 0.1);
+			Require(!main.Bubbles.Active.Any(b => b.Goblin == 0), "A replaced bubble reappeared.");
+		}
+		finally { Dispose(main); }
 	}
 
 	// Bubbles sit clear of their own goblin, inside the map, and clear of each other, even for goblins in the corners or sharing a tile.
@@ -274,7 +305,7 @@ public partial class BubbleChecks : Node
 			{
 				var sim = main.View.Sim!;
 				var s = sim.State;
-				main.Bubbles.Observe([new ShirkStarted(0)], s, 0);
+				main.Bubbles.Observe([new ShirkStarted(0)], s);
 				var ticks0 = s.Tick;
 				Frames(main, 29, 0.1);
 				Require(main.Bubbles.Active.Count == 1, $"{speed}×: the bubble was gone after 2.9 s.");
@@ -295,7 +326,7 @@ public partial class BubbleChecks : Node
 				Require(main.Bubbles.Active.Count == 0, $"{speed}×: the bubble outlived its three unpaused seconds.");
 
 				// A long frame (a hitch) ages the bubble by real time but runs the sim only as far as it ever does.
-				main.Bubbles.Observe([new ShirkStarted(1)], s, 0);
+				main.Bubbles.Observe([new ShirkStarted(1)], s);
 				Frames(main, 1, 2.0);
 				Require(main.Bubbles.Active.Count == 1 && Math.Abs(main.Bubbles.Active[0].Remaining - 1.0) < 1e-9, $"{speed}×: a 2 s frame left {main.Bubbles.Active.FirstOrDefault()?.Remaining}.");
 			}
@@ -310,7 +341,7 @@ public partial class BubbleChecks : Node
 		var main = NewMain((_, _) => { });
 		try
 		{
-			main.Bubbles.Observe([new ShirkStarted(0)], main.View.Sim!.State, 0);
+			main.Bubbles.Observe([new ShirkStarted(0)], main.View.Sim!.State);
 			_clocks[main].Usec += 1_000_000;
 			using var pause = new InputEventKey { Keycode = Key.Space, Pressed = true };
 			main._UnhandledKeyInput(pause);
@@ -326,8 +357,16 @@ public partial class BubbleChecks : Node
 		finally { Dispose(main); }
 	}
 
-	// Bubbles on a level go when the player leaves it, and are made only for goblins on the level the player is on.
-	void MainDropsOffLevelAndKeepsOnLevelChange()
+	void Level(Main main, Key key)
+	{
+		using var press = new InputEventKey { Keycode = key, Pressed = true };
+		main._UnhandledKeyInput(press);
+	}
+
+	static List<int> Drawn(Main main) => main.View.LayoutBubbles().Select(l => l.Bubble.Goblin).ToList();
+
+	// Switching levels hides a bubble without deleting it; coming back before it expires shows it again with what is left.
+	void LevelRoundTripKeepsBubbles()
 	{
 		_scenarios++;
 		var main = NewMain((_, _) => { });
@@ -335,16 +374,101 @@ public partial class BubbleChecks : Node
 		{
 			var s = main.View.Sim!.State;
 			s.GoblinZ[1] = 1;
-			main.Bubbles.Observe([new ShirkStarted(0), new ShirkStarted(1)], s, 0);
-			Require(main.Bubbles.Active.Count == 1 && main.Bubbles.Active[0].Goblin == 0, "Only the goblin on the viewed level should have a bubble.");
-			using (var up = new InputEventKey { Keycode = Key.Period, Pressed = true })
-				main._UnhandledKeyInput(up);
-			Require(main.Bubbles.Active.Count == 0, "A bubble stayed up after the player went down a level.");
-			main.Bubbles.Observe([new ShirkStarted(1)], s, 1);
-			Require(main.Bubbles.Active.Count == 1, "A goblin on the viewed level 1 had no bubble.");
-			using (var down = new InputEventKey { Keycode = Key.Comma, Pressed = true })
-				main._UnhandledKeyInput(down);
-			Require(main.Bubbles.Active.Count == 0, "A bubble stayed up after the player went back up.");
+			main.Bubbles.Observe([new ShirkStarted(0), new ShirkStarted(1)], s);
+			Require(Drawn(main).SequenceEqual([0]), "Level 0 should draw goblin 0's bubble only.");
+			Frames(main, 10, 0.1);
+			Level(main, Key.Period);
+			Require(main.Bubbles.Active.Count == 2, "Going down a level deleted a bubble.");
+			Require(Drawn(main).SequenceEqual([1]), $"Level 1 drew {string.Join(",", Drawn(main))}, not goblin 1's bubble alone.");
+			Frames(main, 5, 0.1);
+			Level(main, Key.Comma);
+			Require(main.Bubbles.Active.Count == 2, "Coming back deleted a bubble.");
+			Require(Drawn(main).SequenceEqual([0]), "Level 0 did not show goblin 0's bubble again, alone.");
+			Require(Math.Abs(main.Bubbles.Active.Single(b => b.Goblin == 0).Remaining - 1.5) < 1e-9, "The bubble did not keep the lifetime it had left.");
+		}
+		finally { Dispose(main); }
+	}
+
+	// A bubble ages while hidden, expires off-level, and does not come back on return.
+	void ExpiryOffLevel()
+	{
+		_scenarios++;
+		var main = NewMain((_, _) => { });
+		try
+		{
+			var s = main.View.Sim!.State;
+			main.Bubbles.Observe([new ShirkStarted(0)], s);
+			Level(main, Key.Period);
+			Require(Drawn(main).Count == 0 && main.Bubbles.Active.Count == 1, "Level 1 drew goblin 0's bubble, or it was lost on leaving.");
+			Frames(main, 29, 0.1);
+			Require(main.Bubbles.Active.Count == 1, "A hidden bubble expired early.");
+			Frames(main, 1, 0.1);
+			Require(main.Bubbles.Active.Count == 0, "A hidden bubble outlived its three seconds.");
+			Level(main, Key.Comma);
+			Require(Drawn(main).Count == 0 && main.Bubbles.Active.Count == 0, "An expired bubble reappeared on return.");
+		}
+		finally { Dispose(main); }
+	}
+
+	// Pause freezes bubbles on other levels too, and the hidden lifetime is the same at 1× and 4×.
+	void HiddenBubblesPauseAndSpeed()
+	{
+		foreach (var speed in new[] { 1, 4 })
+		{
+			_scenarios++;
+			var main = NewMain((_, sim) => sim.Apply(new SetSpeed(speed)));
+			try
+			{
+				var sim = main.View.Sim!;
+				main.Bubbles.Observe([new ShirkStarted(0)], sim.State);
+				Level(main, Key.Period);
+				Frames(main, 10, 0.1);
+				sim.Apply(new SetPaused(true));
+				var left = main.Bubbles.Active[0].Remaining;
+				Require(Math.Abs(left - 2.0) < 1e-9, $"{speed}×: a hidden bubble had {left}s left after 1 s, not 2.");
+				Frames(main, 100, 0.1);
+				Require(main.Bubbles.Active.Count == 1 && Math.Abs(main.Bubbles.Active[0].Remaining - left) < 1e-9, $"{speed}×: a pause did not freeze a hidden bubble.");
+				sim.Apply(new SetPaused(false));
+				Frames(main, 19, 0.1);
+				Require(main.Bubbles.Active.Count == 1, $"{speed}×: a hidden bubble expired early.");
+				Frames(main, 1, 0.1);
+				Require(main.Bubbles.Active.Count == 0, $"{speed}×: a hidden bubble outlived its three unpaused seconds.");
+			}
+			finally { Dispose(main); }
+		}
+	}
+
+	// A bubble follows its goblin up and down the stairs: hidden when it leaves the viewed level, drawn over the goblin's own tile when it arrives,
+	// and never over another goblin.
+	void BubbleFollowsGoblinOnStairs()
+	{
+		_scenarios++;
+		var main = NewMain((_, _) => { });
+		try
+		{
+			var s = main.View.Sim!.State;
+			(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (5, 6, 0);
+			(s.GoblinX[1], s.GoblinY[1], s.GoblinZ[1]) = (20, 20, 1);
+			main.Bubbles.Observe([new ShirkStarted(0)], s);
+			var anchor = main.View.LayoutBubbles().Single().Anchor;
+			Require(anchor.Position.X >= 5 * WarrenView.CellSize && anchor.Position.X < 6 * WarrenView.CellSize, "The bubble did not hang from goblin 0's tile.");
+			Frames(main, 5, 0.1);
+
+			// Goblin 0 takes the stairs down to level 1, arriving at (20,20,1) where goblin 1 stands.
+			(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (20, 20, 1);
+			Frames(main, 1, 0.1);
+			Require(Drawn(main).Count == 0 && main.Bubbles.Active.Count == 1, "The bubble stayed over level 0 or was deleted when its goblin took the stairs.");
+			Level(main, Key.Period);
+			var laid = main.View.LayoutBubbles();
+			Require(laid.Count == 1 && laid[0].Bubble.Goblin == 0, "Level 1 did not show goblin 0's bubble.");
+			Require(laid[0].Anchor.Position.X >= 20 * WarrenView.CellSize && laid[0].Anchor.Position.X < 21 * WarrenView.CellSize, "The bubble hangs from a tile other than where goblin 0 now is.");
+			Require(!laid.Any(l => l.Bubble.Goblin == 1), "Goblin 1, who had no incident, got a bubble.");
+
+			// And back up: it hangs where goblin 0 now stands, not where it began.
+			(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (7, 7, 0);
+			Level(main, Key.Comma);
+			var back = main.View.LayoutBubbles().Single();
+			Require(back.Anchor.Position.X >= 7 * WarrenView.CellSize && back.Anchor.Position.X < 8 * WarrenView.CellSize, "The bubble did not follow its goblin back up.");
 		}
 		finally { Dispose(main); }
 	}
@@ -468,7 +592,7 @@ public partial class BubbleChecks : Node
 				main.View.Sim!.Apply(new SetSpeed(speed));
 				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-				main.Bubbles.Observe([new ShirkStarted(0)], main.View.Sim.State, 0);
+				main.Bubbles.Observe([new ShirkStarted(0)], main.View.Sim.State);
 				var start = Time.GetTicksUsec();
 				OS.DelayMsec(3200);
 				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
