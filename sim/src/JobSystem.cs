@@ -487,7 +487,7 @@ public sealed partial class JobSystem
 
 	// One goblin's FindBed answer for its own turn: the goblin, whether it was a collapse, the bed, and the first step and length of the path to it.
 	// Set by TryMeet and consumed by SeekHeap in the same turn, then dropped at the start of the next goblin's turn; it never outlives a turn or enters a save.
-	record BedMemo(int Goblin, bool Collapse, Bed Bed, int Next, int PathLength);
+	readonly record struct BedMemo(int Goblin, bool Collapse, Bed Bed, int Next, int PathLength);
 
 	BedMemo? _bedMemo;
 
@@ -520,7 +520,7 @@ public sealed partial class JobSystem
 			return;
 
 		var collapse = s.GoblinSleep[goblin] == 0;
-		var memo = _bedMemo is { } m && m.Goblin == goblin && m.Collapse == collapse ? m : null;
+		BedMemo? memo = _bedMemo is { } m && m.Goblin == goblin && m.Collapse == collapse ? m : null;
 		_bedMemo = null;
 		switch (memo?.Bed ?? FindBed(s, goblin, collapse))
 		{
