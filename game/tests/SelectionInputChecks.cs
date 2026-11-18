@@ -154,7 +154,7 @@ public partial class SelectionInputChecks : Node
 				Require(s.RoomAt(s.TileIndex(10, 11, 0)) == RoomKind.None, "Dig stairs left a Heap on a Stairs tile.");
 			});
 
-			// The real game: Grunts craving Sleep walk to a painted Heap, share its one tile, and sleep there to a full meter.
+			// The real game: Grunts craving Sleep walk to a painted Heap, one takes it and the others sleep on the floor, never two to a tile, and all sleep to a full meter.
 			WithMain((main, view, sim) =>
 			{
 				var s = sim.State;
@@ -169,19 +169,21 @@ public partial class SelectionInputChecks : Node
 				(s.GoblinSleep[0], s.GoblinSleep[1], s.GoblinSleep[2]) = (25, 20, 29);
 				sim.Apply(new SetPaused(false));
 				sim.Apply(new SetSpeed(4));
-				var shared = 0;
+				var asleepAtOnce = 0;
+				var onHeap = 0;
 				var frames = 0;
-				while (frames++ < 200 && !(shared == 3 && Enumerable.Range(0, 3).All(g => (GoblinTask)s.GoblinTask[g] != GoblinTask.Sleeping)))
+				while (frames++ < 300 && !(asleepAtOnce == 3 && Enumerable.Range(0, 3).All(g => (GoblinTask)s.GoblinTask[g] != GoblinTask.Sleeping)))
 				{
 					main._Process(0.25);
 					Require(GoblinTasks.FindViolation(s) is null, "A Task rule broke while the Grunts went to bed.");
-					shared = Math.Max(shared, Enumerable.Range(0, 3).Count(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Sleeping
-						&& s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]) == heap));
-					Require(Enumerable.Range(0, 3).All(g => (GoblinTask)s.GoblinTask[g] != GoblinTask.Sleeping
-						|| s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]) == heap), "A Grunt slept off the Heap.");
+					var sleepers = Enumerable.Range(0, 3).Where(g => (GoblinTask)s.GoblinTask[g] == GoblinTask.Sleeping).ToList();
+					asleepAtOnce = Math.Max(asleepAtOnce, sleepers.Count);
+					onHeap = Math.Max(onHeap, sleepers.Count(g => s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]) == heap));
+					Require(sleepers.Select(g => s.TileIndex(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g])).Distinct().Count() == sleepers.Count, "Two Grunts slept on one tile.");
 				}
-				Require(shared == 3, $"{shared} Grunts slept on the Heap at once, not 3.");
-				Require(frames < 200, "The Grunts never woke from the Heap.");
+				Require(asleepAtOnce == 3, $"{asleepAtOnce} Grunts slept at once, not 3.");
+				Require(onHeap == 1, $"{onHeap} Grunts slept on the one Heap tile, not 1.");
+				Require(frames < 300, "The Grunts never woke.");
 				sim.Apply(new SetPaused(true));
 				// Waking means a full meter, which then drains again at the usual rate.
 				Require(Enumerable.Range(0, 3).All(g => s.GoblinSleep[g] >= 90), "A Grunt woke without a full Sleep meter.");

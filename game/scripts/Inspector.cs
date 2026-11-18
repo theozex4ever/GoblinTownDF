@@ -101,6 +101,7 @@ public static class Inspector
 			GoblinTask.Approaching => jobTile >= 0 ? $"Off to tend the {RoomName(s.RoomAt(jobTile))}" : "Off to tend something",
 			GoblinTask.Tending => jobTile >= 0 ? $"Tending the {RoomName(s.RoomAt(jobTile))}" : "Tending",
 			GoblinTask.SeekingHeap => "Looking for a Heap to sleep on",
+			GoblinTask.AwaitingBed => "Waiting for a free patch of floor. Every bed is spoken for",
 			GoblinTask.Sleeping => s.RoomAt(position) == RoomKind.SleepingHeap ? "Asleep on a Heap" : "Asleep on the bare floor",
 			GoblinTask.Gathering => "Off to fetch Fungus for brewing",
 			GoblinTask.Taking => "Taking Fungus for brewing",
