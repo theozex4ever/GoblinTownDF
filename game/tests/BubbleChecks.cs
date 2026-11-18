@@ -36,6 +36,7 @@ public partial class BubbleChecks : Node
 			HiddenBubblesPauseAndSpeed();
 			BubbleFollowsGoblinOnStairs();
 			RealIncidentsMakeBubbles();
+			RealIncidentsWhileViewingAnotherLevel();
 			PresentationLeavesTheSimAlone();
 			await MainExpiresAfterEngineStall();
 			GD.Print($"Bubble checks passed ({_scenarios} scenarios).");
@@ -221,9 +222,21 @@ public partial class BubbleChecks : Node
 			main.Bubbles.Observe([new ShirkStarted(3)], s);
 			Require(main.Bubbles.Active.Select(b => b.Goblin).SequenceEqual([1, 2, 3]), "A fourth, off-level bubble did not push out the visible oldest.");
 			Require(main.View.LayoutBubbles().Count == 0, "The replaced bubble was still drawn on level 0.");
-			// A replaced incident never comes back.
+			// A replaced incident never comes back: not next frame, not after a level round trip, not once a slot opens.
 			Frames(main, 1, 0.1);
 			Require(!main.Bubbles.Active.Any(b => b.Goblin == 0), "A replaced bubble reappeared.");
+			Level(main, Key.Period);
+			Frames(main, 5, 0.1);
+			Level(main, Key.Comma);
+			Require(!main.Bubbles.Active.Any(b => b.Goblin == 0) && main.View.LayoutBubbles().Count == 0, "A replaced bubble came back after a level round trip.");
+			// Goblins 1..3 expire together; advance until every slot is free.
+			for (var i = 0; i < 40 && main.Bubbles.Active.Count > 0; i++)
+			{
+				Frames(main, 1, 0.1);
+				Require(!main.Bubbles.Active.Any(b => b.Goblin == 0), "A replaced bubble reappeared when a slot opened.");
+			}
+			Require(main.Bubbles.Active.Count == 0, "The remaining bubbles never expired.");
+			Require(main.View.LayoutBubbles().Count == 0, "The replaced bubble was drawn after the slots opened.");
 		}
 		finally { Dispose(main); }
 	}
@@ -438,37 +451,88 @@ public partial class BubbleChecks : Node
 		}
 	}
 
-	// A bubble follows its goblin up and down the stairs: hidden when it leaves the viewed level, drawn over the goblin's own tile when it arrives,
-	// and never over another goblin.
+	// A bubble follows its goblin down the stairs: hidden when it leaves the viewed level, drawn over the goblin's own tile when it arrives, and never
+	// over another goblin. The goblin walks the stairs itself, dug by the sim from Commands; nothing is placed by hand.
 	void BubbleFollowsGoblinOnStairs()
 	{
 		_scenarios++;
 		var main = NewMain((_, _) => { });
 		try
 		{
-			var s = main.View.Sim!.State;
-			(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (5, 6, 0);
-			(s.GoblinX[1], s.GoblinY[1], s.GoblinZ[1]) = (20, 20, 1);
-			main.Bubbles.Observe([new ShirkStarted(0)], s);
-			var anchor = main.View.LayoutBubbles().Single().Anchor;
-			Require(anchor.Position.X >= 5 * WarrenView.CellSize && anchor.Position.X < 6 * WarrenView.CellSize, "The bubble did not hang from goblin 0's tile.");
-			Frames(main, 5, 0.1);
+			var sim = main.View.Sim!;
+			var s = sim.State;
+			sim.Apply(new Designate(DesignationKind.DigStairs, 0, 20, 12, 20, 12));
+			sim.Apply(new Designate(DesignationKind.DigStairs, 1, 20, 12, 20, 12));
+			sim.Apply(new Designate(DesignationKind.Dig, 1, 21, 12, 24, 13));
+			main.Bubbles.Observe([new ShirkStarted(0), new ShirkStarted(1)], s);
 
-			// Goblin 0 takes the stairs down to level 1, arriving at (20,20,1) where goblin 1 stands.
-			(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (20, 20, 1);
-			Frames(main, 1, 0.1);
-			Require(Drawn(main).Count == 0 && main.Bubbles.Active.Count == 1, "The bubble stayed over level 0 or was deleted when its goblin took the stairs.");
+			// Run the sim alone (no bubble time passes) until a goblin has taken the stairs down.
+			var walker = -1;
+			for (var i = 0; i < 6000 && walker < 0; i++)
+			{
+				sim.Advance(0.1);
+				sim.DrainEvents();
+				for (var g = 0; g < 2 && walker < 0; g++)
+					if (s.GoblinZ[g] == 1) walker = g;
+			}
+			Require(walker >= 0, "No goblin took the stairs down in 6000 steps.");
+			var other = 1 - walker;
+			Require(s.GoblinZ[other] != s.GoblinZ[walker] || (s.GoblinX[other], s.GoblinY[other]) != (s.GoblinX[walker], s.GoblinY[walker]), "The goblins share a tile, so the check cannot tell their bubbles apart.");
+			Require(main.Bubbles.Active.Count == 2, "A bubble was lost when its goblin took the stairs.");
+
+			Require(!Drawn(main).Contains(walker), "The bubble stayed over level 0 after its goblin left it.");
 			Level(main, Key.Period);
 			var laid = main.View.LayoutBubbles();
-			Require(laid.Count == 1 && laid[0].Bubble.Goblin == 0, "Level 1 did not show goblin 0's bubble.");
-			Require(laid[0].Anchor.Position.X >= 20 * WarrenView.CellSize && laid[0].Anchor.Position.X < 21 * WarrenView.CellSize, "The bubble hangs from a tile other than where goblin 0 now is.");
-			Require(!laid.Any(l => l.Bubble.Goblin == 1), "Goblin 1, who had no incident, got a bubble.");
+			var mine = laid.Where(l => l.Bubble.Goblin == walker).ToList();
+			Require(mine.Count == 1, "Level 1 did not show the walker's bubble.");
+			foreach (var l in laid)
+			{
+				Require(s.GoblinZ[l.Bubble.Goblin] == 1, $"Level 1 drew goblin {l.Bubble.Goblin}'s bubble, who is on level {s.GoblinZ[l.Bubble.Goblin]}.");
+				AnchoredOnGoblin(s, l.Bubble.Goblin, l.Anchor);
+			}
 
-			// And back up: it hangs where goblin 0 now stands, not where it began.
-			(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (7, 7, 0);
+			// Back on level 0 the walker's bubble is hidden again and the other goblin's, if it stayed up there, hangs from its own tile.
 			Level(main, Key.Comma);
-			var back = main.View.LayoutBubbles().Single();
-			Require(back.Anchor.Position.X >= 7 * WarrenView.CellSize && back.Anchor.Position.X < 8 * WarrenView.CellSize, "The bubble did not follow its goblin back up.");
+			foreach (var l in main.View.LayoutBubbles())
+			{
+				Require(l.Bubble.Goblin != walker, "The walker's bubble was drawn on the level it left.");
+				AnchoredOnGoblin(s, l.Bubble.Goblin, l.Anchor);
+			}
+		}
+		finally { Dispose(main); }
+	}
+
+	static void AnchoredOnGoblin(SimState s, int goblin, Rect2 anchor)
+	{
+		var (x0, y0) = (s.GoblinX[goblin] * WarrenView.CellSize, s.GoblinY[goblin] * WarrenView.CellSize);
+		Require(anchor.Position.X >= x0 && anchor.Position.X < x0 + WarrenView.CellSize, $"Goblin {goblin}'s bubble anchor X {anchor.Position.X} is outside its tile column {x0}.");
+		Require(anchor.Position.Y >= y0 && anchor.Position.Y < y0 + WarrenView.CellSize, $"Goblin {goblin}'s bubble anchor Y {anchor.Position.Y} is outside its tile row {y0}.");
+	}
+
+	// Real incidents reach Main._Process while another level is viewed: bubbles are made, hidden there, and shown on return to the goblins' level.
+	void RealIncidentsWhileViewingAnotherLevel()
+	{
+		_scenarios++;
+		var main = NewMain((_, sim) =>
+		{
+			sim.Apply(new SetSpeed(4));
+			var s = sim.State;
+			for (var g = 0; g < s.GoblinCount; g++)
+				s.GoblinChaos[g] = 80;
+		});
+		try
+		{
+			var s = main.View.Sim!.State;
+			Require(Enumerable.Range(0, s.GoblinCount).All(g => s.GoblinZ[g] == 0), "The goblins did not start on level 0.");
+			Level(main, Key.Period);
+			for (var frame = 0; frame < 4000 && main.Bubbles.Made == 0; frame++)
+				Frames(main, 1, 0.05);
+			Require(main.Bubbles.Made > 0, "An incident delivered while viewing level 1 made no bubble: Main filters by the viewed level.");
+			Require(main.Bubbles.Active.Count > 0, "The bubble made while viewing level 1 is not on the board.");
+			Require(Drawn(main).Count == 0, "Level 1 drew a bubble for a goblin on level 0.");
+			Level(main, Key.Comma);
+			var onLevel0 = main.Bubbles.Active.Select(b => b.Goblin).Where(g => s.GoblinZ[g] == 0).OrderBy(g => g).ToList();
+			Require(onLevel0.Count > 0 && Drawn(main).OrderBy(g => g).SequenceEqual(onLevel0), "Returning to level 0 did not show the bubbles made while away.");
 		}
 		finally { Dispose(main); }
 	}
