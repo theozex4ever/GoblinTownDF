@@ -23,8 +23,6 @@ public partial class WarrenView : Node2D
 	// A right-drag unmakes, so its box is red whatever the Tool.
 	public static readonly Color RemovalColor = new(0.92f, 0.36f, 0.28f);
 	static readonly Color HoverColor = new(1f, 1f, 1f, 0.85f);
-	public static readonly Color PausedColor = new(0.95f, 0.72f, 0.25f);
-	public const int PausedFontSize = 13;
 	public static readonly Color GoblinColor = new(0.35f, 0.75f, 0.30f);
 	public static readonly Color FaintGoblinColor = new(0.35f, 0.75f, 0.30f, 0.35f);
 	// A Starving goblin's body, tinted from healthy green to a sickly yellow.
@@ -267,21 +265,13 @@ public partial class WarrenView : Node2D
 		if (Hover is { } hover)
 			DrawRect(new Rect2(hover.X * CellSize, hover.Y * CellSize, CellSize, CellSize), HoverColor, filled: false, width: 1);
 
-		// Chat bubbles last, over everything on the map but the pause frame; they take no input, being only drawn.
+		// Chat bubbles last, over everything on the map; they take no input, being only drawn.
 		var bubbles = LayoutBubbles();
 		// Tails can cross other bubbles in a crowd; every paper body and its text must cover every tail.
 		foreach (var (_, rect, anchor) in bubbles)
 			DrawBubbleTail(rect, anchor);
 		foreach (var (bubble, rect, _) in bubbles)
 			DrawBubble(bubble, rect);
-
-		// Paused, the map wears a frame and a label just outside its edge, so nothing on the map itself is covered.
-		if (s.Paused)
-		{
-			var map = new Rect2(0, 0, s.Width * CellSize, s.Height * CellSize);
-			DrawRect(map.Grow(2), PausedColor, filled: false, width: 2);
-			DrawString(ThemeDB.FallbackFont, new Vector2(0, -6), "PAUSED · the warren holds its breath", HorizontalAlignment.Left, -1, PausedFontSize, PausedColor);
-		}
 	}
 
 	// Only exposed faces get a lip; adjoining Solid tiles stay one continuous mass.

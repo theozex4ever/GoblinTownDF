@@ -184,6 +184,12 @@ public partial class Main : Node
 	/// <summary>The clock in the top bar.</summary>
 	public string ClockText => _topBar.ClockText;
 
+	/// <summary>The pause cue in the top bar: empty unless the warren is paused.</summary>
+	public string PausedText => _topBar.PausedText;
+
+	/// <summary>The top bar's pause cue, for layout checks.</summary>
+	public Label PausedBanner => _topBar.PausedBanner;
+
 	/// <summary>What the Inspector shows: the goblin or tile under the cursor on the viewed level, or <see cref="Inspection.Nothing"/> off the map.</summary>
 	public Inspection Inspection { get; private set; } = Inspection.Nothing;
 
@@ -487,7 +493,6 @@ public partial class Main : Node
 	void SyncHud()
 	{
 		_topBar.Sync(_sim.State, _viewZ);
-		// The map's paused frame comes and goes with the pause.
 		_view.QueueRedraw();
 		_palette.Sync(_tool);
 	}

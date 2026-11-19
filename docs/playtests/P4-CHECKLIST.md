@@ -23,7 +23,7 @@ Record each row as **observed / failed / not seen**, with a line of evidence (ti
 Bubbles are a provisional experiment. They appear over a goblin for three seconds when a shirk begins, a scuffle starts, a thief picks up its unit, or another goblin's meal eats its Haul.
 
 - **1× and 4×:** does a bubble last about the same time at both? Can you read it before it goes?
-- **Pause:** pause while one is up. It should hold, and carry on when you unpause.
+- **Pause:** pause while one is up. It should hold, and carry on when you unpause. The top bar should show the amber PAUSED banner, even when zoomed in.
 - **Overlap:** with several goblins close together, are the bubbles still readable and attached to the right goblin? Never more than three, one per goblin.
 - **Levels:** change level while one is up; it should not appear over the wrong place.
 - **After they go:** the name, fight partner, theft material, Need pips and carried resources in the Inspector and on the map are all still there.

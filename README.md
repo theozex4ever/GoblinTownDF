@@ -134,7 +134,7 @@ You can also open `game/project.godot` in the Godot .NET editor and build and ru
 
 | Key | Action |
 |---|---|
-| <kbd>Space</kbd> | Pause |
+| <kbd>Space</kbd> | Pause (an amber banner in the top bar shows it, at any zoom) |
 | <kbd>1</kbd> <kbd>2</kbd> <kbd>4</kbd> | Set speed |
 | <kbd>,</kbd> <kbd>.</kbd> | Move up / down a z-level |
 | Mouse wheel over the map | Zoom towards / away from the pointer, from 1× to 4× |

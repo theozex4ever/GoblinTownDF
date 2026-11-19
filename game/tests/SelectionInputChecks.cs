@@ -793,8 +793,10 @@ public partial class SelectionInputChecks : Node
 				// The pause was applied straight to the sim, so the HUD hears of it next frame.
 				main._Process(0);
 				Require(ButtonNamed(main, "Pause").ButtonPressed, "The Pause button does not show the paused warren.");
+				Require(main.PausedText == TopBar.PausedLine, "The top bar does not wear the pause cue while paused.");
 				Press(main, "Pause");
 				Require(!s.Paused && !ButtonNamed(main, "Pause").ButtonPressed, "The Pause button did not unpause the warren.");
+				Require(main.PausedText == "", "The top bar kept the pause cue after unpausing.");
 				Key(main, Godot.Key.Space);
 				Require(s.Paused && ButtonNamed(main, "Pause").ButtonPressed, "Space paused the warren but the button did not show it.");
 
