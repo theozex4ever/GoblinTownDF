@@ -30,7 +30,7 @@ public partial class SummaryPanel : VBoxContainer
 		stock.AddChild(Column("loose"));
 		for (var i = 0; i < Shown.Length; i++)
 		{
-			stock.AddChild(UiTheme.Swatch(WarrenView.MaterialColor(Shown[i])));
+			stock.AddChild(MaterialSprites.Icon(Shown[i]));
 			stock.AddChild(new Label { Text = Shown[i].ToString() });
 			_stored[i] = Number();
 			stock.AddChild(_stored[i]);

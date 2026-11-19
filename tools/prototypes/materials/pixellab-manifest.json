@@ -1,0 +1,49 @@
+{
+  "generator": "PixelLab Pixen MCP create_image_pixen",
+  "size": [
+    16,
+    16
+  ],
+  "transparent": true,
+  "successful_generations": 5,
+  "view": "high top-down",
+  "outline": "single color outline",
+  "detail": "low detail",
+  "assets": [
+    {
+      "name": "dirt",
+      "seed": 73150,
+      "job_id": "2dc1988d-7b56-4eb0-9367-03f66f72428b",
+      "asset_id": "8cc99900-f1f1-50c0-ac57-d9f6ab1d920e",
+      "description": "One tiny fantasy colony-game resource sprite: a single compact irregular clod of earth, warm ochre-brown clay with one small root sticking from the side; squat lumpy mound silhouette. 16x16 pixel art, large simple readable pixel clusters, dark warm-brown one-pixel outline, two or three flat shades, limited colours, warm upper-left highlight. Rough handmade goblin-warren aesthetic. Exactly ONE object centered, fills most of the canvas with a one-pixel transparent margin. No ground shadow, no scenery, no letters, no numbers, no frame, no sprite sheet. Clear silhouette and opaque centre, readable when displayed at six pixels. No extra tiny decorations."
+    },
+    {
+      "name": "stone",
+      "seed": 73151,
+      "job_id": "fd8470a5-fb60-430c-ac98-b508fd0c56ee",
+      "asset_id": "ea73f631-be51-5756-98c2-197e7d32079f",
+      "description": "One tiny fantasy colony-game resource sprite: a single angular slate-grey rock, broad asymmetrical polygon with two simple cool-grey facets and one pale highlight; chunky solid silhouette. 16x16 pixel art, large simple readable pixel clusters, dark warm-brown one-pixel outline, two or three flat shades, limited colours, warm upper-left highlight. Rough handmade goblin-warren aesthetic. Exactly ONE object centered, fills most of the canvas with a one-pixel transparent margin. No ground shadow, no scenery, no letters, no numbers, no frame, no sprite sheet. Clear silhouette and opaque centre, readable when displayed at six pixels. No extra tiny decorations."
+    },
+    {
+      "name": "grub",
+      "seed": 73152,
+      "job_id": "5521042b-90cb-475c-a919-362c4e40c239",
+      "asset_id": "e084c4b7-d731-5d4c-814e-d2fe538db778",
+      "description": "One tiny fantasy colony-game resource sprite: a single fat pink edible grub curled into a chunky crescent, warm salmon pink body and a small cream head; broad simple food-morsel silhouette. 16x16 pixel art, large simple readable pixel clusters, dark warm-brown one-pixel outline, two or three flat shades, limited colours, warm upper-left highlight. Rough handmade goblin-warren aesthetic. Exactly ONE object centered, fills most of the canvas with a one-pixel transparent margin. No ground shadow, no scenery, no letters, no numbers, no frame, no sprite sheet. Clear silhouette and opaque centre, readable when displayed at six pixels. No extra tiny decorations."
+    },
+    {
+      "name": "fungus",
+      "seed": 73153,
+      "job_id": "e093a909-9d14-48f7-87d7-39e4529e3643",
+      "asset_id": "4c5b5fc3-4ed7-5395-8596-21ce29d2fb2e",
+      "description": "One tiny fantasy colony-game resource sprite: a single stout purple mushroom, very broad violet cap, short thick cream stem, one lavender highlight; unmistakable mushroom silhouette. 16x16 pixel art, large simple readable pixel clusters, dark warm-brown one-pixel outline, two or three flat shades, limited colours, warm upper-left highlight. Rough handmade goblin-warren aesthetic. Exactly ONE object centered, fills most of the canvas with a one-pixel transparent margin. No ground shadow, no scenery, no letters, no numbers, no frame, no sprite sheet. Clear silhouette and opaque centre, readable when displayed at six pixels. No extra tiny decorations."
+    },
+    {
+      "name": "grog",
+      "seed": 73154,
+      "job_id": "65ba4356-01c4-418a-ac4e-585707965da7",
+      "asset_id": "70f2ad69-1bf7-5bc0-9773-5e9fd8316487",
+      "description": "One tiny fantasy colony-game resource sprite: a single squat teal-green ceramic drink jug, broad rounded body, short neck with a brown cork, one small side handle; unmistakable round jug silhouette. 16x16 pixel art, large simple readable pixel clusters, dark warm-brown one-pixel outline, two or three flat shades, limited colours, warm upper-left highlight. Rough handmade goblin-warren aesthetic. Exactly ONE object centered, fills most of the canvas with a one-pixel transparent margin. No ground shadow, no scenery, no letters, no numbers, no frame, no sprite sheet. Clear silhouette and opaque centre, readable when displayed at six pixels. No extra tiny decorations."
+    }
+  ]
+}

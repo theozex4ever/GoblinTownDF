@@ -124,6 +124,10 @@ public partial class InspectorLayoutChecks : Node
 				if (frame < 2)
 					await Capture($"1-settling-frame-{frame}");
 			}
+			// The pause cue sits in the top bar: it must show its whole line inside the viewport, even at the narrowest window.
+			var banner = _main.PausedBanner.GetGlobalRect();
+			var lineWidth = _main.PausedBanner.GetThemeFont("font").GetStringSize(TopBar.PausedLine, HorizontalAlignment.Left, -1, _main.PausedBanner.GetThemeFontSize("font_size")).X;
+			Expect(_main.PausedText == TopBar.PausedLine && banner.End.X <= size.X + 0.5f && banner.Size.X >= lineWidth, $"The pause cue {banner} is clipped or off screen at {size.X}x{size.Y}; its line needs {lineWidth} px.");
 			var right = column.GetGlobalRect();
 			Expect(right.End.Y <= size.Y + 0.5f && right.Position.Y >= -0.5f, $"The right panel {right} leaves the {size.X}x{size.Y} viewport.");
 			report["right panel, seven goblins"] = RectOf(right);
@@ -384,9 +388,10 @@ public partial class InspectorLayoutChecks : Node
 	async Task Wheel(Vector2 at, bool down)
 	{
 		var button = down ? MouseButton.WheelDown : MouseButton.WheelUp;
-		using (var press = new InputEventMouseButton { ButtonIndex = button, Pressed = true, Position = at, GlobalPosition = at, Factor = 1 })
+		var overMap = ((Control)_view.GetParent()).GetGlobalRect().HasPoint(at);
+		using (var press = new InputEventMouseButton { ButtonIndex = button, Pressed = true, Position = at, GlobalPosition = at, Factor = 1, ShiftPressed = overMap })
 			_viewport.PushInput(press, inLocalCoords: true);
-		using (var release = new InputEventMouseButton { ButtonIndex = button, Pressed = false, Position = at, GlobalPosition = at })
+		using (var release = new InputEventMouseButton { ButtonIndex = button, Pressed = false, Position = at, GlobalPosition = at, ShiftPressed = overMap })
 			_viewport.PushInput(release, inLocalCoords: true);
 		await Frames(2);
 	}

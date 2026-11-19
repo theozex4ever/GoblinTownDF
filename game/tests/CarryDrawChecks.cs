@@ -14,10 +14,29 @@ namespace AThousandGoblinsDeep;
 /// </summary>
 public partial class CarryDrawChecks : Node
 {
-	static readonly Color DirtSquare = new(0.55f, 0.36f, 0.18f);
-	static readonly Color StoneSquare = new(0.36f, 0.40f, 0.48f);
 	static readonly Material[] Materials = Enum.GetValues<Material>()[1..];
-	static readonly Color GoblinBody = new(0.35f, 0.75f, 0.30f);
+	static Image? _gruntSprite;
+	static readonly Dictionary<string, Image> TerrainImages = [];
+
+	static Color TerrainPixel(string name, int x, int y, bool transpose = false)
+	{
+		if (!TerrainImages.TryGetValue(name, out var image))
+			TerrainImages[name] = image = GD.Load<Texture2D>($"res://art/terrain/{name}.png").GetImage();
+		var px = (int)((x + 0.5f) * image.GetWidth() / WarrenView.CellSize);
+		var py = (int)((y + 0.5f) * image.GetHeight() / WarrenView.CellSize);
+		return transpose ? image.GetPixel(py, px) : image.GetPixel(px, py);
+	}
+
+	// The authored PNG is the reference for the rendered sprite, including transparent pixels that leave the floor visible.
+	static Color SpritePixel(int x, int y, bool starving = false)
+	{
+		var sprite = _gruntSprite ??= GD.Load<Texture2D>("res://art/goblins/grunt-idle.png").GetImage();
+		var pixel = sprite.GetPixel((int)((x + 0.5f) * sprite.GetWidth() / WarrenView.CellSize),
+			(int)((y + 0.5f) * sprite.GetHeight() / WarrenView.CellSize));
+		if (pixel.A == 0)
+			return TerrainPixel("surface", x, y);
+		return starving ? pixel * WarrenView.StarvingGoblinColor : pixel;
+	}
 
 	public override async void _Ready()
 	{
@@ -34,11 +53,15 @@ public partial class CarryDrawChecks : Node
 
 			if (DisplayServer.GetName() == "headless")
 			{
-				GD.Print("Carry draw checks: layout checks passed; the 17 pixel scenarios were SKIPPED, not passed: no renderer under --headless.");
+				GD.Print("Carry draw checks: layout checks passed; the 21 pixel scenarios were SKIPPED, not passed: no renderer under --headless.");
 				GetTree().Quit();
 				return;
 			}
 
+			await TerrainCheck();
+			await GruntSpriteCheck();
+			await ResourceSpriteCheck();
+			await RoomSpriteCheck();
 			await CoveredByBodyCheck();
 			await FullTileCheck();
 			await FullCountCheck();
@@ -56,7 +79,7 @@ public partial class CarryDrawChecks : Node
 			await BubblePileUpCheck();
 			await BubbleKeepsCuesCheck();
 			await BubbleOffLevelCheck();
-			GD.Print("Carry draw checks passed (layout, colours, count order, 17 pixel scenarios).");
+			GD.Print("Carry draw checks passed (layout, colours, count order, 21 pixel scenarios).");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -84,6 +107,228 @@ public partial class CarryDrawChecks : Node
 		}
 	}
 
+	// Terrain comes from tile kind, material and level; its visuals never write the simulation.
+	async System.Threading.Tasks.Task TerrainCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		s.GoblinCount = 0;
+		s.TileMaterials[s.TileIndex(6, 4, 0)] = (byte)Material.Stone;
+		for (var z = 1; z <= 2; z++)
+		{
+			for (var x = 10; x <= 12; x++)
+				s.TileKinds[s.TileIndex(x, 10, z)] = (byte)TileKind.Floor;
+			s.TileKinds[s.TileIndex(11, 10, z)] = (byte)TileKind.Stairs;
+			s.TileKinds[s.TileIndex(13, 10, z)] = (byte)TileKind.OpenAir;
+		}
+		var before = SimJson.Serialize(sim);
+		var surface = await Render(sim);
+		var dirt = await Render(sim, viewZ: 1);
+		var stone = await Render(sim, viewZ: 2);
+		Color At(Image image, int x, int y, int px = 9, int py = 9) => image.GetPixel(x * WarrenView.CellSize + px, y * WarrenView.CellSize + py);
+		Require(IsNear(At(surface, 4, 4), TerrainPixel("surface", 9, 9)), "Surface Floor did not draw its earth-and-grass texture.");
+		Require(IsNear(At(surface, 6, 4), TerrainPixel("stone-floor", 9, 9)), "A stone Floor on the Surface ignored its material.");
+		Require(IsNear(At(dirt, 4, 4, 4, 8), TerrainPixel("dirt-solid", 4, 8, transpose: true)), "Solid dirt did not draw its coordinate-selected texture orientation.");
+		Require(IsNear(At(dirt, 10, 10), TerrainPixel("dirt-floor", 9, 9)), "Dug dirt did not draw packed-earth Floor.");
+		Require(IsNear(At(stone, 4, 4, 4, 8), TerrainPixel("stone-solid", 4, 8)), "Solid stone did not draw its rock texture.");
+		Require(IsNear(At(stone, 10, 10), TerrainPixel("stone-floor", 9, 9)), "Dug stone did not draw stone Floor.");
+		foreach (var image in new[] { dirt, stone })
+		{
+			Require(IsNear(At(image, 13, 10), WarrenView.OpenAirColor), "Open air looks like walkable Floor.");
+			Require(IsNear(At(image, 11, 10, 9, 9), new Color(0.76f, 0.56f, 0.30f)), "Stairs lost their ladder rungs.");
+			Require(IsNear(At(image, 11, 10, 7, 7), WarrenView.OpenAirColor), "Stairs lost their dark opening.");
+		}
+		Require(!IsNear(At(dirt, 10, 9, 9, 16), TerrainPixel("dirt-solid", 9, 16)), "The exposed Solid dirt edge has no visible lip.");
+		Require(!IsNear(At(stone, 10, 9, 9, 16), TerrainPixel("stone-solid", 9, 16, transpose: true)), "The exposed Solid stone edge has no visible lip.");
+		Require(SimJson.Serialize(sim) == before, "Drawing terrain changed the sim or its seeded RNG.");
+		foreach (var image in TerrainImages.Values)
+			Require(image.GetWidth() == 32 && image.GetHeight() == 32, "A terrain texture is not 32×32.");
+		var captures = OS.GetEnvironment("GOBLINTOWN_CAPTURE_DIR");
+		if (captures != "")
+		{
+			System.IO.Directory.CreateDirectory(captures);
+			surface.SavePng(System.IO.Path.Combine(captures, "terrain-surface.png"));
+			dirt.SavePng(System.IO.Path.Combine(captures, "terrain-dirt.png"));
+			stone.SavePng(System.IO.Path.Combine(captures, "terrain-stone.png"));
+		}
+	}
+
+	// The shared sprite keeps its palette and transparency and is tinted only for starvation.
+	async System.Threading.Tasks.Task GruntSpriteCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		for (var g = 0; g < s.GoblinCount; g++)
+			(s.GoblinGrub[g], s.GoblinGrog[g], s.GoblinSleep[g]) = (100, 100, 100);
+		(s.GoblinX[0], s.GoblinY[0]) = (4, 4);
+		(s.GoblinX[1], s.GoblinY[1]) = (6, 4);
+		s.GoblinGrub[1] = 0;
+		var image = await Render(sim);
+		for (var g = 0; g < 2; g++)
+		for (var y = 1; y < WarrenView.CellSize - 1; y++)
+		for (var x = 1; x < WarrenView.CellSize - 1; x++)
+		{
+			// The starving Grunt also has its Grub pip, drawn above the sprite.
+			if (g == 1 && WarrenView.PipRect(new Rect2(3, 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6)).HasPoint(new Vector2(x, y)))
+				continue;
+			ExpectColor(image, s.GoblinX[g] * WarrenView.CellSize + x, s.GoblinY[g] * WarrenView.CellSize + y,
+				SpritePixel(x, y, starving: g == 1), $"Grunt {g}: the sprite's palette, transparency or nearest-neighbour sampling changed.");
+		}
+		Require(_gruntSprite!.GetWidth() == 32 && _gruntSprite.GetHeight() == 32, "The Grunt source sprite is not 32×32.");
+	}
+
+	async System.Threading.Tasks.Task ResourceSpriteCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		s.GoblinCount = 0;
+		Array.Clear(s.TileItems);
+		var background = await Render(sim);
+		foreach (var material in Materials)
+			s.AddItems(s.TileIndex(4, 4, 0), material, 1);
+		sim.RecheckReachability();
+		var before = SimJson.Serialize(sim);
+		var waiting = await Render(sim);
+		Require(SimJson.Serialize(sim) == before, "Drawing resources changed the sim or its seeded RNG.");
+		var tile = new Rect2(4 * WarrenView.CellSize, 4 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
+		foreach (var material in Materials)
+		{
+			var normal = MaterialSprites.Get(material).GetImage();
+			var grey = MaterialSprites.Get(material, waiting: true).GetImage();
+			Require(normal.GetWidth() == 16 && normal.GetHeight() == 16, $"{material} is not 16×16.");
+			var transparent = 0;
+			for (var y = 0; y < 16; y++)
+			for (var x = 0; x < 16; x++)
+			{
+				var a = normal.GetPixel(x, y);
+				var b = grey.GetPixel(x, y);
+				Require(Math.Abs(a.A - b.A) < 0.01f, $"Waiting {material} changed its silhouette.");
+				Require(Math.Abs(b.R - b.G) < 0.01f && Math.Abs(b.G - b.B) < 0.01f, $"Waiting {material} is not grey.");
+				if (a.A == 0) transparent++;
+			}
+			Require(transparent > 0, $"{material} has no transparent background.");
+			ExpectMaterial(waiting, WarrenView.LooseSquare(tile, (int)material - 1), material, "Waiting resource lost its shape.", waiting: true, background: background);
+		}
+		// The smallest carrier slots deliberately retain solid material colours.
+		s.GoblinCount = SimState.MaxGoblins;
+		for (var g = 0; g < s.GoblinCount; g++)
+		{
+			(s.GoblinX[g], s.GoblinY[g], s.GoblinZ[g]) = (10, 10, 0);
+			(s.GoblinGrub[g], s.GoblinGrog[g], s.GoblinSleep[g]) = (100, 100, 100);
+			GoblinTasks.FinishPickUp(s, g, Materials[g % Materials.Length]);
+		}
+		var crowded = await Render(sim);
+		var captures = OS.GetEnvironment("GOBLINTOWN_CAPTURE_DIR");
+		if (captures != "")
+		{
+			System.IO.Directory.CreateDirectory(captures);
+			waiting.SavePng(System.IO.Path.Combine(captures, "resources-waiting.png"));
+			crowded.SavePng(System.IO.Path.Combine(captures, "resources-crowded.png"));
+		}
+		for (var g = 0; g < s.GoblinCount; g++)
+			ExpectMaterial(crowded, CarryRect(s, g, g, s.GoblinCount), Materials[g % Materials.Length], "A crowded carrier lost its colour.");
+	}
+
+	// Fixtures use authored pixels, stay inside their painted tile, and disappear immediately when the Room is removed.
+	async System.Threading.Tasks.Task RoomSpriteCheck()
+	{
+		var sim = Simulation.NewWorld(seed: 1);
+		var s = sim.State;
+		s.GoblinCount = 1;
+		(s.GoblinX[0], s.GoblinY[0], s.GoblinZ[0]) = (2, 7, 1);
+		(s.GoblinGrub[0], s.GoblinGrog[0], s.GoblinSleep[0]) = (100, 100, 100);
+		Array.Clear(s.TileItems);
+		for (var y = 7; y <= 11; y++)
+		for (var x = 2; x <= 22; x++)
+			s.TileKinds[s.TileIndex(x, y, 1)] = (byte)TileKind.Floor;
+		sim.RecheckReachability();
+		var bare = await Render(sim, viewZ: 1);
+		var rooms = new[] { RoomKind.Pile, RoomKind.GrubPit, RoomKind.FungusFarm, RoomKind.Brewery, RoomKind.SleepingHeap };
+		for (var i = 0; i < rooms.Length; i++)
+			sim.Apply(new PaintRoom(rooms[i], 1, 4 + i * 3, 9, 4 + i * 3, 9));
+		var before = SimJson.Serialize(sim);
+		var image = await Render(sim, viewZ: 1);
+		Require(SimJson.Serialize(sim) == before, "Drawing Room fixtures changed simulation state or RNG.");
+		for (var i = 0; i < rooms.Length; i++)
+		{
+			var room = rooms[i];
+			var x = 4 + i * 3;
+			ExpectRoomSprite(image, x, 9, room);
+			var source = RoomSprites.Get(room).GetImage();
+			Require(source.GetWidth() == 32 && source.GetHeight() == 32, $"{room} is not 32×32.");
+			Require(source.GetPixel(0, 0).A == 0, $"{room} has no transparent margin.");
+			// No neighbour receives a fixture, even beside a painted tile.
+			for (var py = 0; py < WarrenView.CellSize; py++)
+			for (var px = 0; px < WarrenView.CellSize; px++)
+				ExpectColor(image, (x + 1) * WarrenView.CellSize + px, 9 * WarrenView.CellSize + py,
+					bare.GetPixel((x + 1) * WarrenView.CellSize + px, 9 * WarrenView.CellSize + py), $"{room} spilled into a neighbouring tile.");
+		}
+		var captures = OS.GetEnvironment("GOBLINTOWN_CAPTURE_DIR");
+		if (captures != "")
+		{
+			System.IO.Directory.CreateDirectory(captures);
+			image.SavePng(System.IO.Path.Combine(captures, "room-fixtures.png"));
+		}
+		// A working goblin and its Need pip remain above the fixture, including its transparent edges.
+		(s.GoblinX[0], s.GoblinY[0], s.GoblinGrub[0]) = (16, 9, 20);
+		var occupied = await Render(sim, viewZ: 1);
+		using var grunt = GD.Load<Texture2D>("res://art/goblins/grunt-idle.png").GetImage();
+		var marker = new Rect2(3, 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
+		for (var y = 1; y < WarrenView.CellSize - 1; y++)
+		for (var x = 1; x < WarrenView.CellSize - 1; x++)
+		{
+			if (WarrenView.PipRect(marker).HasPoint(new Vector2(x, y))) continue;
+			var pixel = grunt.GetPixel((int)((x + 0.5f) * 32 / WarrenView.CellSize), (int)((y + 0.5f) * 32 / WarrenView.CellSize));
+			var px = 16 * WarrenView.CellSize + x;
+			var py = 9 * WarrenView.CellSize + y;
+			ExpectColor(occupied, px, py, pixel.A == 0 ? image.GetPixel(px, py) : pixel, "A Room fixture covered its goblin or its transparent edge.");
+		}
+		var pip = WarrenView.PipRect(marker).GetCenter();
+		ExpectColor(occupied, 16 * WarrenView.CellSize + (int)pip.X, 9 * WarrenView.CellSize + (int)pip.Y, WarrenView.NeedColor(Need.Grub), "A Room fixture covered a Need pip.");
+		(s.GoblinX[0], s.GoblinY[0], s.GoblinGrub[0]) = (2, 7, 100);
+
+		for (var i = 0; i < rooms.Length; i++)
+			sim.Apply(new RemoveRoom(rooms[i], 1, 4 + i * 3, 9, 4 + i * 3, 9));
+		var removed = await Render(sim, viewZ: 1);
+		Require(removed.GetData().SequenceEqual(bare.GetData()), "Removing Rooms left stale artwork or tint.");
+	}
+
+	static void ExpectRoomSprite(Image actual, int tileX, int tileY, RoomKind room, bool waiting = false)
+	{
+		using var source = GD.Load<Texture2D>($"res://art/rooms/{RoomSprites.FileName(room)}.png").GetImage();
+		if (waiting) source.AdjustBcs(0.8f, 1, 0);
+		var opaque = 0;
+		for (var y = 0; y < WarrenView.CellSize; y++)
+		for (var x = 0; x < WarrenView.CellSize; x++)
+		{
+			// A Brewery's loose Grog in the waiting/ready scenario draws above its fixture.
+			if (room == RoomKind.Brewery && WarrenView.LooseSquare(new Rect2(0, 0, WarrenView.CellSize, WarrenView.CellSize), (int)Material.Grog - 1).HasPoint(new Vector2(x, y)))
+				continue;
+			var pixel = source.GetPixel((int)((x + 0.5f) * 32 / WarrenView.CellSize), (int)((y + 0.5f) * 32 / WarrenView.CellSize));
+			if (pixel.A < 0.99f) continue;
+			opaque++;
+			ExpectColor(actual, tileX * WarrenView.CellSize + x, tileY * WarrenView.CellSize + y, pixel, $"{room} has the wrong sprite or waiting palette.");
+		}
+		Require(opaque > 20, $"{room} has too few visible fixture pixels.");
+	}
+
+	static void ExpectRoomFloor(Image image, int tileX, int tileY, RoomKind room, string terrain, Color tint)
+	{
+		using var source = RoomSprites.Get(room).GetImage();
+		// Read exposed Floor below the fixture and away from all five loose-item slots.
+		for (var y = 12; y < WarrenView.CellSize - 1; y++)
+		for (var x = 1; x < WarrenView.CellSize - 1; x++)
+		{
+			if (source.GetPixel((int)((x + 0.5f) * 32 / WarrenView.CellSize), (int)((y + 0.5f) * 32 / WarrenView.CellSize)).A != 0)
+				continue;
+			var floor = TerrainPixel(terrain, x, y);
+			var tinted = floor * (1 - tint.A) + tint * tint.A;
+			ExpectColor(image, tileX * WarrenView.CellSize + x, tileY * WarrenView.CellSize + y, new Color(tinted.R, tinted.G, tinted.B), $"{room} lost its Floor tint.");
+			return;
+		}
+		throw new Exception($"{room} has no exposed Floor for the tint check.");
+	}
+
 	// Goblin 0 carries dirt and goblin 2 stands on its tile, drawn after it in goblin order.
 	async System.Threading.Tasks.Task CoveredByBodyCheck()
 	{
@@ -93,8 +338,8 @@ public partial class CarryDrawChecks : Node
 		GoblinTasks.FinishPickUp(s, 0, Goblins.Sim.Material.Dirt);
 		var image = await Render(sim);
 		var square = Square(s, 0, slot: 0, carriers: 1);
-		ExpectColor(image, square.X, square.Y, DirtSquare, "A carrier's square was covered by a body on its tile.");
-		ExpectColor(image, square.X, square.Y - 5, GoblinBody, "The goblin body was not drawn around the square.");
+		ExpectMaterial(image, CarryRect(s, 0, 0, 1), Material.Dirt, "A carrier's item was covered by a body on its tile.");
+		ExpectColor(image, square.X, square.Y - 5, SpritePixel(9, 4), "The goblin body was not drawn around the square.");
 	}
 
 	// Every goblin carries on one tile: each slot shows its goblin's material, inside the marker, and the tiles around stay clean.
@@ -104,16 +349,15 @@ public partial class CarryDrawChecks : Node
 		var s = sim.State;
 		var (tileX, tileY) = (s.GoblinX[0], s.GoblinY[0]);
 		for (var g = 0; g < s.GoblinCount; g++)
-		{
 			(s.GoblinX[g], s.GoblinY[g]) = (tileX, tileY);
+		var background = await Render(sim);
+		for (var g = 0; g < s.GoblinCount; g++)
 			GoblinTasks.FinishPickUp(s, g, Materials[g % Materials.Length]);
-		}
 		var image = await Render(sim);
 
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
-			var square = Square(s, g, slot: g, carriers: s.GoblinCount);
-			ExpectColor(image, square.X, square.Y, WarrenView.MaterialColor(Materials[g % Materials.Length]), $"Carrier {g}'s slot does not show its material.");
+			ExpectMaterial(image, CarryRect(s, g, g, s.GoblinCount), Materials[g % Materials.Length], $"Carrier {g}'s slot does not show its material.", background: background);
 		}
 
 		var cell = WarrenView.CellSize;
@@ -123,8 +367,7 @@ public partial class CarryDrawChecks : Node
 			var inMarker = x >= tileX * cell + 3 && x < (tileX + 1) * cell - 3 && y >= tileY * cell + 3 && y < (tileY + 1) * cell - 3;
 			if (inMarker)
 				continue;
-			var pixel = image.GetPixel(x, y);
-			Require(!Materials.Any(m => IsNear(pixel, WarrenView.MaterialColor(m))), $"A carried colour was drawn at ({x}, {y}), outside the carrier's marker.");
+			ExpectColor(image, x, y, background.GetPixel(x, y), $"A carried square changed the terrain or sprite outside its marker at ({x}, {y}).");
 		}
 	}
 
@@ -187,8 +430,7 @@ public partial class CarryDrawChecks : Node
 		var rect = new Rect2(4 * WarrenView.CellSize, 4 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
 		foreach (var material in Materials)
 		{
-			var center = WarrenView.LooseSquare(rect, (int)material - 1).GetCenter();
-			ExpectColor(image, (int)center.X, (int)center.Y, WarrenView.MaterialColor(material), $"The loose {material} square is missing or the wrong colour.");
+			ExpectMaterial(image, WarrenView.LooseSquare(rect, (int)material - 1), material, $"Loose {material} is missing.");
 		}
 	}
 
@@ -206,15 +448,11 @@ public partial class CarryDrawChecks : Node
 		sim.RecheckReachability();
 		var image = await Render(sim);
 
-		var floor = new Color(0.62f, 0.62f, 0.64f);
-		var tint = WarrenView.GrubPitTint;
-		var tinted = floor * (1 - tint.A) + tint * tint.A;
-		var rect = new Rect2(10 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
-		var centre = rect.GetCenter();
-		ExpectColor(image, (int)centre.X, (int)centre.Y, new Color(tinted.R, tinted.G, tinted.B), "A Grub Pit tile is not tinted.");
+		var floor = TerrainPixel("surface", 9, 9);
+		ExpectRoomFloor(image, 10, 10, RoomKind.GrubPit, "surface", WarrenView.GrubPitTint);
 		ExpectColor(image, 12 * WarrenView.CellSize + 9, 10 * WarrenView.CellSize + 9, floor, "A tile beside the Grub Pit is tinted.");
-		var square = WarrenView.LooseSquare(new Rect2(11 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize), (int)Material.Grub - 1).GetCenter();
-		ExpectColor(image, (int)square.X, (int)square.Y, WarrenView.MaterialColor(Material.Grub), "The Grub loose on a Grub Pit is hidden by its tint.");
+		var square = WarrenView.LooseSquare(new Rect2(11 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize), (int)Material.Grub - 1);
+		ExpectMaterial(image, square, Material.Grub, "The Grub loose on a Grub Pit is hidden by its tint.");
 	}
 
 	// A Fungus Farm tile on z1 is tinted over the floor, its tint differs from the Grub Pit's, and the Fungus lying loose on it still shows over the tint.
@@ -234,26 +472,19 @@ public partial class CarryDrawChecks : Node
 		var image = await Render(sim, viewZ: 1);
 
 		Require(!IsNear(WarrenView.FungusFarmTint, WarrenView.GrubPitTint), "The Fungus Farm and Grub Pit tints are the same.");
-		var floor = new Color(0.62f, 0.62f, 0.64f);
-		var tint = WarrenView.FungusFarmTint;
-		var tinted = floor * (1 - tint.A) + tint * tint.A;
-		var centre = new Rect2(10 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize).GetCenter();
-		ExpectColor(image, (int)centre.X, (int)centre.Y, new Color(tinted.R, tinted.G, tinted.B), "A Fungus Farm tile is not tinted.");
+		var floor = TerrainPixel("dirt-floor", 9, 9);
+		ExpectRoomFloor(image, 10, 10, RoomKind.FungusFarm, "dirt-floor", WarrenView.FungusFarmTint);
 		ExpectColor(image, 12 * WarrenView.CellSize + 9, 10 * WarrenView.CellSize + 9, floor, "A tile beside the Fungus Farm is tinted.");
-		var square = WarrenView.LooseSquare(new Rect2(11 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize), (int)Material.Fungus - 1).GetCenter();
-		ExpectColor(image, (int)square.X, (int)square.Y, WarrenView.MaterialColor(Material.Fungus), "The Fungus loose on a Fungus Farm is hidden by its tint.");
+		var square = WarrenView.LooseSquare(new Rect2(11 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize), (int)Material.Fungus - 1);
+		ExpectMaterial(image, square, Material.Fungus, "The Fungus loose on a Fungus Farm is hidden by its tint.");
 	}
 
 	// A Brewery tile is tinted over the floor in its own colour; it greys while no Pile in reach has room for Grog, and goes back to its
 	// colour when one is painted. The Grog lying loose on it shows over either tint.
 	async System.Threading.Tasks.Task BreweryTintCheck()
 	{
-		var floor = new Color(0.62f, 0.62f, 0.64f);
-		Color Over(Color tint) { var c = floor * (1 - tint.A) + tint * tint.A; return new Color(c.R, c.G, c.B); }
 		var cell = WarrenView.CellSize;
-		// The bottom right corner of the tile: the loose squares fill a three-by-three grid and the ninth slot is no material's.
-		var centre = new Vector2(10 * cell + cell - 3, 10 * cell + cell - 3);
-		var loose = WarrenView.LooseSquare(new Rect2(10 * cell, 10 * cell, cell, cell), (int)Material.Grog - 1).GetCenter();
+		var loose = WarrenView.LooseSquare(new Rect2(10 * cell, 10 * cell, cell, cell), (int)Material.Grog - 1);
 
 		Require(!IsNear(WarrenView.BreweryTint, WarrenView.GrubPitTint) && !IsNear(WarrenView.BreweryTint, WarrenView.FungusFarmTint)
 			&& !IsNear(WarrenView.BreweryTint, WarrenView.SleepingHeapTint) && !IsNear(WarrenView.BreweryTint, WarrenView.WaitingBreweryTint),
@@ -265,14 +496,16 @@ public partial class CarryDrawChecks : Node
 		s.AddItems(s.TileIndex(10, 10, 0), Material.Grog, 1);
 		sim.RecheckReachability();
 		var waiting = await Render(sim);
-		ExpectColor(waiting, (int)centre.X, (int)centre.Y, Over(WarrenView.WaitingBreweryTint), "A Brewery with no Pile for its Grog is not greyed out.");
-		ExpectColor(waiting, (int)loose.X, (int)loose.Y, WarrenView.WaitingHaulColor, "The Grog waiting on a Brewery with no Pile is not greyed.");
+		ExpectRoomFloor(waiting, 10, 10, RoomKind.Brewery, "surface", WarrenView.WaitingBreweryTint);
+		ExpectRoomSprite(waiting, 10, 10, RoomKind.Brewery, waiting: true);
+		ExpectMaterial(waiting, loose, Material.Grog, "Waiting Grog lost its grey sprite.", waiting: true);
 
 		sim.Apply(new PaintPile(0, 20, 20, 20, 20));
 		var ready = await Render(sim);
-		ExpectColor(ready, (int)centre.X, (int)centre.Y, Over(WarrenView.BreweryTint), "A Brewery with a Pile for its Grog is not tinted.");
-		ExpectColor(ready, 12 * cell + 9, 10 * cell + 9, floor, "A tile beside the Brewery is tinted.");
-		ExpectColor(ready, (int)loose.X, (int)loose.Y, WarrenView.MaterialColor(Material.Grog), "The Grog loose on a Brewery is hidden by its tint.");
+		ExpectRoomFloor(ready, 10, 10, RoomKind.Brewery, "surface", WarrenView.BreweryTint);
+		ExpectRoomSprite(ready, 10, 10, RoomKind.Brewery);
+		ExpectColor(ready, 12 * cell + 9, 10 * cell + 9, TerrainPixel("surface", 9, 9), "A tile beside the Brewery is tinted.");
+		ExpectMaterial(ready, loose, Material.Grog, "The Grog loose on a Brewery is hidden by its tint.");
 	}
 
 	// A Sleeping Heap tile is tinted over the floor, a sleeping goblin wears "zzz" and an awake one does not, and a goblin craving Sleep
@@ -291,11 +524,8 @@ public partial class CarryDrawChecks : Node
 		(s.GoblinGrub[4], s.GoblinGrog[4], s.GoblinSleep[4]) = (25, 25, 10);
 		var image = await Render(sim);
 
-		var floor = new Color(0.62f, 0.62f, 0.64f);
-		var tint = WarrenView.SleepingHeapTint;
-		var tinted = floor * (1 - tint.A) + tint * tint.A;
-		var centre = new Rect2(10 * WarrenView.CellSize, 10 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize).GetCenter();
-		ExpectColor(image, (int)centre.X, (int)centre.Y, new Color(tinted.R, tinted.G, tinted.B), "A Sleeping Heap tile is not tinted.");
+		var floor = TerrainPixel("surface", 9, 9);
+		ExpectRoomFloor(image, 10, 10, RoomKind.SleepingHeap, "surface", WarrenView.SleepingHeapTint);
 		ExpectColor(image, 11 * WarrenView.CellSize + 9, 10 * WarrenView.CellSize + 9, floor, "A tile beside the Heap is tinted.");
 
 		Rect2 Marker(int g) => new(s.GoblinX[g] * WarrenView.CellSize + 3, s.GoblinY[g] * WarrenView.CellSize + 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
@@ -314,7 +544,7 @@ public partial class CarryDrawChecks : Node
 		Require(HasZzz(0), "A sleeping goblin has no \"zzz\".");
 		Require(HasZzz(1), "A goblin asleep and craving Sleep has no \"zzz\".");
 		Require(!HasZzz(2) && !HasZzz(3), "An awake goblin wears \"zzz\".");
-		Require(IsNear(PipAt(0), GoblinBody), "A sleeping goblin with a comfortable meter has a pip.");
+		Require(IsNear(PipAt(0), SpritePixel(14, 4)), "A sleeping goblin with a comfortable meter has a pip.");
 		Require(IsNear(PipAt(1), WarrenView.NeedColor(Need.Sleep)), "A goblin craving Sleep in its sleep has no Sleep pip over its \"zzz\".");
 		Require(IsNear(PipAt(3), WarrenView.NeedColor(Need.Sleep)), "A goblin craving Sleep has no Sleep pip.");
 		Require(IsNear(PipAt(2), WarrenView.NeedColor(Need.Grub)), "On a three-way tie the pip should be Grub's.");
@@ -351,7 +581,7 @@ public partial class CarryDrawChecks : Node
 
 		Require(IsNear(Band(0), WarrenView.ShirkColor), "A shirking goblin has no band across its body.");
 		Require(IsNear(Ring(0), WarrenView.ShirkColor), "A shirking goblin has no ring round it.");
-		Require(IsNear(Band(1), GoblinBody) && !IsNear(Ring(1), WarrenView.ShirkColor), "A goblin that is not shirking wears the shirk marks.");
+		Require(IsNear(Band(1), SpritePixel(9, 9)) && !IsNear(Ring(1), WarrenView.ShirkColor), "A goblin that is not shirking wears the shirk marks.");
 		var pip = WarrenView.PipRect(Marker(2)).GetCenter();
 		Require(IsNear(image.GetPixel((int)pip.X, (int)pip.Y), WarrenView.NeedColor(Need.Grub)), "A shirking goblin that craves Grub has lost its pip.");
 		Require(IsNear(Band(2), WarrenView.ShirkColor), "A shirking goblin that craves has lost its band.");
@@ -398,11 +628,11 @@ public partial class CarryDrawChecks : Node
 		Color Centre(int g) => image.GetPixel((int)Marker(g).GetCenter().X, (int)Marker(g).GetCenter().Y);
 
 		Require(IsNear(Ring(0), WarrenView.FightColor), "A pursuing goblin has no fight ring.");
-		Require(IsNear(Centre(0), GoblinBody), "A pursuing goblin wears the scuffle cross.");
+		Require(IsNear(Centre(0), SpritePixel(9, 9)), "A pursuing goblin wears the scuffle cross.");
 		Require(IsNear(Ring(2), WarrenView.FightColor) && IsNear(Ring(3), WarrenView.FightColor), "A scuffling goblin or its victim has no fight ring.");
 		Require(IsNear(Centre(2), WarrenView.FightColor) && IsNear(Centre(3), WarrenView.FightColor), "A scuffling goblin or its victim has no cross over its body.");
 		Require(IsNear(Ring(4), WarrenView.FightRestColor) && IsNear(Ring(5), WarrenView.FightRestColor), "A recovering goblin has no banked-down ring.");
-		Require(IsNear(Centre(4), GoblinBody), "A recovering goblin wears the scuffle cross.");
+		Require(IsNear(Centre(4), SpritePixel(9, 9)), "A recovering goblin wears the scuffle cross.");
 		Require(!IsNear(Ring(1), WarrenView.FightColor), "The target of a pursuit wears a fight ring before contact.");
 		Require(!IsNear(Ring(6), WarrenView.FightColor) && !IsNear(Ring(6), WarrenView.FightRestColor), "A goblin in no fight wears a fight ring.");
 		var pip = WarrenView.PipRect(Marker(2)).GetCenter();
@@ -454,9 +684,9 @@ public partial class CarryDrawChecks : Node
 
 		foreach (var thief in new[] { 0, 1, 2 })
 			Require(IsNear(Ring(thief), WarrenView.ThiefColor) && IsNear(Mask(thief), WarrenView.ThiefColor), $"Thief {thief} has lost its ring or mask.");
-		Require(IsNear(Centre(0), GoblinBody), "A thief with nothing yet in hand has something over its body.");
-		Require(IsNear(Centre(1), WarrenView.MaterialColor(Material.Grub)), "A thief making off with Grub does not show the Grub.");
-		Require(IsNear(Centre(2), WarrenView.MaterialColor(Material.Grog)), "A thief making off with Grog does not show the Grog.");
+		Require(IsNear(Centre(0), SpritePixel(9, 9)), "A thief with nothing yet in hand has something over its body.");
+		ExpectMaterial(image, CarryRect(s, 1, 0, 1), Material.Grub, "A thief making off with Grub does not show the Grub.");
+		ExpectMaterial(image, CarryRect(s, 2, 0, 1), Material.Grog, "A thief making off with Grog does not show the Grog.");
 		var pip = WarrenView.PipRect(Marker(2)).GetCenter();
 		Require(IsNear(image.GetPixel((int)pip.X, (int)pip.Y), WarrenView.NeedColor(Need.Grub)), "A thief that craves Grub has lost its pip.");
 		Require(!IsNear(Ring(3), WarrenView.ThiefColor) && !IsNear(Mask(3), WarrenView.ThiefColor), "A goblin that is not stealing wears the thief's cue.");
@@ -512,7 +742,7 @@ public partial class CarryDrawChecks : Node
 					ink++;
 			Require(ink >= 20, $"{where}: only {ink} pixels of text.");
 			var marker = new Rect2(s.GoblinX[0] * WarrenView.CellSize + 3, s.GoblinY[0] * WarrenView.CellSize + 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
-			ExpectColor(image, (int)marker.GetCenter().X, (int)marker.GetCenter().Y, GoblinBody, $"{where}: the goblin's body is covered.");
+			ExpectColor(image, (int)marker.GetCenter().X, (int)marker.GetCenter().Y, SpritePixel(9, 9), $"{where}: the goblin's body is covered.");
 		}
 		Require(Enum.GetValues<BubbleKind>().Select(WarrenView.BubbleColor).Distinct().Count() == 4, "Two kinds of bubble share a symbol colour.");
 	}
@@ -577,11 +807,10 @@ public partial class CarryDrawChecks : Node
 		Rect2 Marker(int g) => new(s.GoblinX[g] * WarrenView.CellSize + 3, s.GoblinY[g] * WarrenView.CellSize + 3, WarrenView.CellSize - 6, WarrenView.CellSize - 6);
 		void ExpectCues(Image image, string when)
 		{
-			var square = Square(s, 0, slot: 0, carriers: 1);
-			ExpectColor(image, square.X, square.Y, DirtSquare, $"{when}: the carried square is covered.");
+			ExpectMaterial(image, CarryRect(s, 0, 0, 1), Material.Dirt, $"{when}: the carried item is covered.");
 			ExpectColor(image, (int)WarrenView.PipRect(Marker(0)).GetCenter().X, (int)WarrenView.PipRect(Marker(0)).GetCenter().Y, WarrenView.NeedColor(Need.Grub), $"{when}: the Grub pip is covered.");
 			ExpectColor(image, (int)WarrenView.PipRect(Marker(1)).GetCenter().X, (int)WarrenView.PipRect(Marker(1)).GetCenter().Y, WarrenView.NeedColor(Need.Grog), $"{when}: the neighbour's Grog pip is covered.");
-			ExpectColor(image, (int)Marker(0).GetCenter().X, (int)Marker(0).Position.Y + 1, GoblinBody, $"{when}: a body is covered.");
+			ExpectColor(image, (int)Marker(0).GetCenter().X, (int)Marker(0).Position.Y + 1, SpritePixel(9, 4), $"{when}: a body is covered.");
 		}
 
 		ExpectCues(await Render(sim, bubbles: board), "With bubbles");
@@ -645,19 +874,18 @@ public partial class CarryDrawChecks : Node
 			return (Vector2I)WarrenView.PipRect(marker).GetCenter();
 		}
 
-		Require(IsNear(Body(0), GoblinBody), "A craving goblin's body should stay green.");
+		Require(IsNear(Body(0), SpritePixel(5, 13)), "A craving goblin's sprite should keep its colours.");
 		ExpectColor(image, Pip(0).X, Pip(0).Y, WarrenView.MaterialColor(Material.Grub), "A goblin craving Grub has no Grub pip.");
 		ExpectColor(image, Pip(1).X, Pip(1).Y, WarrenView.MaterialColor(Material.Grog), "A goblin craving Grog has no Grog pip.");
-		Require(IsNear(Body(1), GoblinBody), "A goblin craving Grog should stay green.");
+		Require(IsNear(Body(1), SpritePixel(5, 13)), "A goblin craving Grog should keep its sprite colours.");
 		ExpectColor(image, Pip(2).X, Pip(2).Y, WarrenView.MaterialColor(Material.Grog), "With the lower Grog meter, the pip should be Grog's.");
 		ExpectColor(image, Pip(5).X, Pip(5).Y, WarrenView.MaterialColor(Material.Grub), "On a tie the pip should be Grub's.");
-		Require(IsNear(Body(3), WarrenView.StarvingGoblinColor), "A Starving goblin's body is not tinted.");
+		Require(IsNear(Body(3), SpritePixel(5, 13, starving: true)), "A Starving goblin's body is not tinted.");
 		ExpectColor(image, Pip(3).X, Pip(3).Y, WarrenView.MaterialColor(Material.Grub), "A Starving goblin has no Grub pip.");
-		var square = Square(s, 3, slot: 0, carriers: 1);
-		ExpectColor(image, square.X, square.Y, DirtSquare, "The pip covered the Starving carrier's square.");
-		Require(IsNear(Body(4), GoblinBody), "A fed goblin's body should be green.");
-		ExpectColor(image, Pip(4).X, Pip(4).Y, GoblinBody, "A fed goblin has a pip.");
-		Require(IsNear(Body(6), GoblinBody), "Grog at 0 should not tint the goblin.");
+		ExpectMaterial(image, CarryRect(s, 3, 0, 1), Material.Dirt, "The pip covered the Starving carrier's item.");
+		Require(IsNear(Body(4), SpritePixel(5, 13)), "A fed goblin's sprite should keep its colours.");
+		ExpectColor(image, Pip(4).X, Pip(4).Y, SpritePixel(14, 4), "A fed goblin has a pip.");
+		Require(IsNear(Body(6), SpritePixel(5, 13)), "Grog at 0 should not tint the goblin.");
 		ExpectColor(image, Pip(6).X, Pip(6).Y, WarrenView.MaterialColor(Material.Grog), "A goblin with Grog at 0 has no Grog pip.");
 	}
 
@@ -683,9 +911,10 @@ public partial class CarryDrawChecks : Node
 	static void ExpectCount(Image image, int tileX, int slot, Material material, bool chip)
 	{
 		Require(HasChip(image, tileX, 4, slot) == chip, $"Tile {tileX}, slot {slot}: the chip is {(chip ? "missing" : "present")}.");
+		var rect = new Rect2(tileX * WarrenView.CellSize, 4 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
+		ExpectMaterial(image, WarrenView.PileIconRect(rect, slot), material, "The Pile count has the wrong material icon.");
 		if (chip)
 			return;
-		var rect = new Rect2(tileX * WarrenView.CellSize, 4 * WarrenView.CellSize, WarrenView.CellSize, WarrenView.CellSize);
 		var baseline = WarrenView.CountBaseline(rect, slot);
 		var found = false;
 		for (var y = (int)baseline.Y - (WarrenView.CountFontSize - 2); y <= (int)baseline.Y && !found; y++)
@@ -720,12 +949,58 @@ public partial class CarryDrawChecks : Node
 		}
 	}
 
-	static (int X, int Y) Square(SimState s, int goblin, int slot, int carriers)
+	static Rect2 CarryRect(SimState s, int goblin, int slot, int carriers)
 	{
 		var marker = new Rect2(s.GoblinX[goblin] * WarrenView.CellSize + 3, s.GoblinY[goblin] * WarrenView.CellSize + 3,
 			WarrenView.CellSize - 6, WarrenView.CellSize - 6);
-		var center = WarrenView.CarriedRect(marker, slot, carriers).GetCenter();
+		return WarrenView.CarriedRect(marker, slot, carriers);
+	}
+
+	static (int X, int Y) Square(SimState s, int goblin, int slot, int carriers)
+	{
+		var center = CarryRect(s, goblin, slot, carriers).GetCenter();
 		return ((int)center.X, (int)center.Y);
+	}
+
+	// Compare every sampled opaque source pixel, rather than assuming the centre of every silhouette is filled.
+	static void ExpectMaterial(Image actual, Rect2 rect, Material material, string message, bool waiting = false, Image? background = null)
+	{
+		var sprite = GD.Load<Texture2D>($"res://art/materials/{material.ToString().ToLowerInvariant()}.png").GetImage();
+		if (waiting)
+			sprite.AdjustBcs(0.8f, 1, 0);
+		var opaque = 0;
+		for (var y = 0; y < (int)rect.Size.Y; y++)
+		for (var x = 0; x < (int)rect.Size.X; x++)
+		{
+			var px = (int)rect.Position.X + x;
+			var py = (int)rect.Position.Y + y;
+			if (rect.Size.X < 3 || rect.Size.Y < 3)
+			{
+				ExpectColor(actual, px, py, WarrenView.MaterialColor(material), message);
+				opaque++;
+				continue;
+			}
+			var sx = (x + 0.5f) * sprite.GetWidth() / rect.Size.X;
+			var sy = (y + 0.5f) * sprite.GetHeight() / rect.Size.Y;
+			// Downsampling 16 to 6 lands some samples exactly on texel boundaries. GPU rounding may select either neighbour.
+			var minX = Math.Max(0, (int)(sx - 0.0001f));
+			var minY = Math.Max(0, (int)(sy - 0.0001f));
+			var matched = false;
+			for (var iy = minY; iy <= (int)sy && !matched; iy++)
+			for (var ix = minX; ix <= (int)sx && !matched; ix++)
+			{
+				var color = sprite.GetPixel(ix, iy);
+				if (color.A > 0.99f && IsNear(actual.GetPixel(px, py), color))
+				{
+					matched = true;
+					opaque++;
+				}
+				else if (color.A == 0 && (background == null || IsNear(actual.GetPixel(px, py), background.GetPixel(px, py))))
+					matched = true;
+			}
+			Require(matched, $"{message} {material} pixel ({px}, {py}) differs from the sprite: {actual.GetPixel(px, py)}.");
+		}
+		Require(opaque > 0, $"{material} has no visible opaque pixels at {rect.Size}.");
 	}
 
 	async System.Threading.Tasks.Task<Image> Render(Simulation sim, int viewZ = 0, BubbleBoard? bubbles = null)

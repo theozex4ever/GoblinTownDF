@@ -1,0 +1,89 @@
+{
+  "generator": "PixelLab Pixen MCP create_image_pixen and edit_image_pixen",
+  "size": [
+    32,
+    32
+  ],
+  "transparent": true,
+  "view": "high top-down",
+  "outline": "single color outline",
+  "detail": "low detail",
+  "successful_generations": 9,
+  "assets": [
+    {
+      "name": "pile",
+      "seed": 81240,
+      "job_id": "c54671ca-91e8-4b20-9b0c-76ffaa61cf6c",
+      "asset_id": "b24913b6-340c-566b-b101-5d32ba59042c",
+      "description": "Use case: stylized-concept. Asset type: one 32x32 transparent game sprite for a rough goblin colony's pile room tile. Subject: a crude low storage rack made from crooked dark timber, rope lashings and two empty open wicker baskets; no stored goods, low open construction. Chunky pixel art with large clean pixel clusters, warm dark-brown one-pixel outlines, limited earthy palette, two or three flat shades per surface, warm light from upper left. Overhead square-map game viewed from high top-down with a small visible front edge. Rough handmade early goblin society, charmingly crooked but legible construction. Isolated roofless floor fixture centered in a square footprint with two transparent pixels of margin. Low profile, no enclosing walls, no roof, no goblins, no characters, no text, no lettering, no icon frame, no landscape, no ground plane, no cast shadow, exactly one fixture, no sprite sheet. Show the contents from above. Match brown earth terrain, olive goblins, purple fungi and teal drink jugs. Readable silhouette when displayed in an 18-pixel tile."
+    },
+    {
+      "name": "grub-pit",
+      "seed": 81301,
+      "tool": "edit_image_pixen",
+      "job_id": "38fc022b-19ea-4114-b537-6001c2f12880",
+      "asset_id": "48cf164b-5c32-55c3-9712-59ffa4cb89d9",
+      "description": "Remove all three pink worms/grubs from the soil and fill their places with plain dark-brown compost matching the surrounding soil. Keep the clay rim, soil-bed shape, framing, pixel style, colours, overhead viewpoint and transparent background unchanged. The result must be an EMPTY grub-growing bed: bare soil only, no food, larvae, eggs, crops, tools or decorations. Keep the 32x32 canvas.",
+      "source_job_id": "26f8d048-cb40-490c-b6bb-873e039dfb6c"
+    },
+    {
+      "name": "fungus-farm",
+      "seed": 81302,
+      "tool": "edit_image_pixen",
+      "job_id": "99f91e34-ec3b-4cd9-8c3b-278d0830669f",
+      "asset_id": "64c57fb7-17cf-52c7-9e4a-674fbafb6b7e",
+      "description": "Remove every mushroom completely, including every cap and stem, and remove the teal plants, containers and other objects. Leave ONLY the low rectangular bed: crooked log edging surrounding EMPTY dark-brown compost. Fill the entire bed interior with plain soil. Preserve the existing bed's footprint, log construction, perspective, chunky pixel style and warm earthy palette. Keep 32x32 and transparent outside the bed. No crops, food, sprouts, fungus, decorations or tools.",
+      "source_job_id": "678c5e71-8d2b-40fc-bf8d-f7712418857a"
+    },
+    {
+      "name": "brewery",
+      "seed": 81243,
+      "job_id": "aec1e2db-4d58-45a9-95a2-b74316c70d59",
+      "asset_id": "ecc86f2a-85c4-5bde-af1c-a2b682517b09",
+      "description": "Use case: stylized-concept. Asset type: one 32x32 transparent game sprite for a rough goblin colony's brewery room tile. Subject: one squat round wooden brewing vat held by rope bands, visible greenish liquid in its open top, a short wooden stirring paddle resting across its rim and a tiny side spout. Chunky pixel art with large clean pixel clusters, warm dark-brown one-pixel outlines, limited earthy palette, two or three flat shades per surface, warm light from upper left. Overhead square-map game viewed from high top-down with a small visible front edge. Rough handmade early goblin society, charmingly crooked but legible construction. Isolated roofless floor fixture centered in a square footprint with two transparent pixels of margin. Low profile, no enclosing walls, no roof, no goblins, no characters, no text, no lettering, no icon frame, no landscape, no ground plane, no cast shadow, exactly one fixture, no sprite sheet. Show the contents from above. Match brown earth terrain, olive goblins, purple fungi and teal drink jugs. Readable silhouette when displayed in an 18-pixel tile."
+    },
+    {
+      "name": "sleeping-heap",
+      "seed": 81254,
+      "job_id": "d9cc89ce-f5ee-46c8-b7c4-cdbbef36c0aa",
+      "asset_id": "6826673c-b1ec-5335-8be8-f52e0bcc44d9",
+      "description": "One small 32x32 pixel art game sprite: a primitive sleeping mat lying FLAT on the floor, made from an untidy flattened oval heap of straw, with a small folded faded blue cloth blanket covering the bottom half and one small rectangular beige sack pillow at the top. Empty bedding only, seen directly from overhead looking straight down. A simple low flat straw sleeping mat, horizontal wide oval silhouette. Transparent background with 3 transparent pixels around every side. Chunky pixel art, broad clean clusters, dark brown outline, only earthy gold straw, beige cloth and faded indigo blue, 3 flat shades. Rustic poor fantasy settlement prop. No sleeper, no goblins, no people, no faces, no eyes, no mouth, no furniture, no wooden frame, no headboard, no posts, no raised bed, no roof, no walls, no scenery, no background tile, no shadows, no text, no sprite sheet. Exactly one empty flattened straw mat with a blue blanket and sack pillow."
+    }
+  ],
+  "rejected": [
+    {
+      "name": "grub-pit",
+      "seed": 81241,
+      "job_id": "40652931-3305-4fdb-95e2-9c098eb568ef",
+      "asset_id": "7eac854a-2c81-5a87-b09e-df5ef8c5013c",
+      "description": "Use case: stylized-concept. Asset type: one 32x32 transparent game sprite for a rough goblin colony's grub-pit room tile. Subject: a shallow oval pit of dark compost with a rough ochre clay rim, three tiny salmon-pink grubs partly buried in the soil and one broken wooden tending stick. Chunky pixel art with large clean pixel clusters, warm dark-brown one-pixel outlines, limited earthy palette, two or three flat shades per surface, warm light from upper left. Overhead square-map game viewed from high top-down with a small visible front edge. Rough handmade early goblin society, charmingly crooked but legible construction. Isolated roofless floor fixture centered in a square footprint with two transparent pixels of margin. Low profile, no enclosing walls, no roof, no goblins, no characters, no text, no lettering, no icon frame, no landscape, no ground plane, no cast shadow, exactly one fixture, no sprite sheet. Show the contents from above. Match brown earth terrain, olive goblins, purple fungi and teal drink jugs. Readable silhouette when displayed in an 18-pixel tile.",
+      "reason": "Square backdrop and multicoloured objects obscured the soil-bed silhouette."
+    },
+    {
+      "name": "sleeping-heap",
+      "seed": 81244,
+      "job_id": "5e704666-82f4-4637-a997-250292795810",
+      "asset_id": "cca03288-8e30-5b0f-909a-8c7114d2647b",
+      "description": "Use case: stylized-concept. Asset type: one 32x32 transparent game sprite for a rough goblin colony's sleeping-heap room tile. Subject: a flat untidy nest of yellow-brown straw and burlap sacks, one small faded indigo blanket and a lumpy sack pillow; humble bedding with no bedframe. Chunky pixel art with large clean pixel clusters, warm dark-brown one-pixel outlines, limited earthy palette, two or three flat shades per surface, warm light from upper left. Overhead square-map game viewed from high top-down with a small visible front edge. Rough handmade early goblin society, charmingly crooked but legible construction. Isolated roofless floor fixture centered in a square footprint with two transparent pixels of margin. Low profile, no enclosing walls, no roof, no goblins, no characters, no text, no lettering, no icon frame, no landscape, no ground plane, no cast shadow, exactly one fixture, no sprite sheet. Show the contents from above. Match brown earth terrain, olive goblins, purple fungi and teal drink jugs. Readable silhouette when displayed in an 18-pixel tile.",
+      "reason": "Raised bed and face-like bedding were too elaborate for a starting Sleeping Heap."
+    }
+  ],
+  "superseded": [
+    {
+      "name": "grub-pit",
+      "seed": 81251,
+      "job_id": "26f8d048-cb40-490c-b6bb-873e039dfb6c",
+      "asset_id": "aed77d99-e6fc-5aec-8b7f-c57c19dc970c",
+      "description": "One 32x32 pixel art game object: a low shallow oval compost bed surrounded by an uneven rim of tan clay. Dark brown soil with three tiny pale pink curled worms half buried in it. The worms are small plain pink crescents without faces or eyes. Directly overhead view looking straight down into the soil bed. Flat low object on transparent background, all four outside corners transparent, at least 3 transparent pixels around the entire object. Chunky pixels, broad simple shapes, dark brown outline, warm earthy brown and ochre palette, 3 flat shades, no glossy highlights. Exactly one grub farming soil bed. No raised walls, no buildings, no characters, no goblins, no faces, no eyes, no symbols, no colorful gems, no square background, no terrain, no shadows, no text, no sprite sheet.",
+      "reason": "Remove depicted crops so only actual resource yields signal production."
+    },
+    {
+      "name": "fungus-farm",
+      "seed": 81242,
+      "job_id": "678c5e71-8d2b-40fc-bf8d-f7712418857a",
+      "asset_id": "71d72f10-be0f-5236-85c0-822f7083888d",
+      "description": "Use case: stylized-concept. Asset type: one 32x32 transparent game sprite for a rough goblin colony's fungus-farm room tile. Subject: a low rectangular bed of dark compost held by crooked logs, a small cluster of broad purple mushrooms with thick cream stems. Chunky pixel art with large clean pixel clusters, warm dark-brown one-pixel outlines, limited earthy palette, two or three flat shades per surface, warm light from upper left. Overhead square-map game viewed from high top-down with a small visible front edge. Rough handmade early goblin society, charmingly crooked but legible construction. Isolated roofless floor fixture centered in a square footprint with two transparent pixels of margin. Low profile, no enclosing walls, no roof, no goblins, no characters, no text, no lettering, no icon frame, no landscape, no ground plane, no cast shadow, exactly one fixture, no sprite sheet. Show the contents from above. Match brown earth terrain, olive goblins, purple fungi and teal drink jugs. Readable silhouette when displayed in an 18-pixel tile.",
+      "reason": "Remove depicted crops so only actual resource yields signal production."
+    }
+  ]
+}

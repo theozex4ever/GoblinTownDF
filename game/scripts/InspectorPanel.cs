@@ -87,8 +87,7 @@ public partial class InspectorPanel : VBoxContainer
 	{
 		var row = new HBoxContainer();
 		row.AddThemeConstantOverride("separation", 8);
-		var color = line.Waiting ? WarrenView.WaitingHaulColor : WarrenView.MaterialColor(line.Material);
-		row.AddChild(UiTheme.Swatch(color));
+		row.AddChild(MaterialSprites.Icon(line.Material, line.Waiting));
 		row.AddChild(new Label { Text = line.Material.ToString(), SizeFlagsHorizontal = SizeFlags.ExpandFill });
 		var tag = line.Full ? "full" : line.Waiting ? "waiting" : "";
 		if (tag != "")

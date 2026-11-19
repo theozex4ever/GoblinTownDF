@@ -23,10 +23,10 @@ Record each row as **observed / failed / not seen**, with a line of evidence (ti
 Bubbles are a provisional experiment. They appear over a goblin for three seconds when a shirk begins, a scuffle starts, a thief picks up its unit, or another goblin's meal eats its Haul.
 
 - **1× and 4×:** does a bubble last about the same time at both? Can you read it before it goes?
-- **Pause:** pause while one is up. It should hold, and carry on when you unpause.
+- **Pause:** pause while one is up. It should hold, and carry on when you unpause. The top bar should show the amber PAUSED banner, even when zoomed in.
 - **Overlap:** with several goblins close together, are the bubbles still readable and attached to the right goblin? Never more than three, one per goblin.
 - **Levels:** change level while one is up; it should not appear over the wrong place.
-- **After they go:** the name, fight partner, theft material, Need pips and carried squares in the Inspector and on the map are all still there.
+- **After they go:** the name, fight partner, theft material, Need pips and carried resources in the Inspector and on the map are all still there.
 - **Not in the way:** you can still drag, dig and paint under a bubble.
 
 **Theo's preference to record (his own words):** keep bubbles as they are, replace them with representative icons, or try something else? Lost-Haul bubbles may be the most frequent in the starting setup, which is worth saying if they feel like noise.
@@ -36,6 +36,16 @@ Bubbles are a provisional experiment. They appear over a goblin for three second
 Check this on the first build that includes the #59 fix (bubbles survive level changes); it was not part of the run above. Record it as **observed / failed / not seen**.
 
 - **Level round trip:** change level while a bubble is up, then come back before three seconds are up. It should be hidden while away, back over the same goblin (including after stairs), never over the wrong goblin or level, and gone for good once its time is up. Bubbles on other levels still count toward the three.
+
+## Visual-pass verification on the next build
+
+The historical `cfa4e85` verdict above stays pending. These checks cover the later approved sprite and camera pass; they do not record a new fun-check verdict.
+
+- Compare 1× overview with 2×–4× close zoom: faces, carried resources, Need pips, sleep and Chaos marks stay readable. Mouse wheel over the map zooms around the pointer; middle-drag pans, and Home or Overview resets it. The HUD stays fixed.
+- Shift-wheel over a crowded tile scrolls the Inspector without moving the camera; ordinary wheel over the Inspector scrolls there.
+- Paint each Room: its fixture appears immediately and right-drag removes it. Grub Pit and Fungus Farm beds look empty until actual yield resources appear, then return to an empty appearance after those items are hauled away or consumed. Fungus Farms still skip the Surface.
+- Waiting loose resources retain their silhouette in grey; Piles keep two icon/count rows and highlight only full materials. Brewery vat and tint grey out when Grog has no reachable storage.
+- Dug Solid edge connections remain a known visual follow-up, separate from room placement or pathfinding.
 
 ## Then
 

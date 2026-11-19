@@ -62,7 +62,8 @@ One meaning per term. Use these words in code, tests, tickets, and commits. Add 
 | Legend | A chronicle entry written from a notable event. |
 | Tick | One fixed sim step; 10 per second at normal speed. |
 | Speed | How many ticks run per second of real time: 1×, 2× or 4×. Never changes the tick length. |
-| Pause | A flag, separate from Speed, that stops ticks. Commands still apply, and Speed is kept for unpausing. |
+| Pause | A flag, separate from Speed, that stops ticks. Commands still apply, and Speed is kept for unpausing. The top bar shows an amber banner while paused. |
+| Zoom | Magnification of the viewed z-level, from the whole-map overview at 1× to a close view at 4×. It changes only the view, never the warren or the passage of time. |
 | Command | An input from Godot to the sim. |
 | Event | An output from the sim to Godot. |
 | Tracer bullet | A thin, end-to-end, playable slice of a milestone. |

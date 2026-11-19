@@ -466,16 +466,18 @@ public partial class BubbleChecks : Node
 			sim.Apply(new Designate(DesignationKind.Dig, 1, 21, 12, 24, 13));
 			main.Bubbles.Observe([new ShirkStarted(0), new ShirkStarted(1)], s);
 
-			// Run the sim alone (no bubble time passes) until a goblin has taken the stairs down.
+			// Wait for distinct tiles: goblins may legally take the stairs together, so the first arrival can share its tile.
+			// Run the sim alone so no bubble time passes.
 			var walker = -1;
 			for (var i = 0; i < 6000 && walker < 0; i++)
 			{
 				sim.Advance(0.1);
 				sim.DrainEvents();
 				for (var g = 0; g < 2 && walker < 0; g++)
-					if (s.GoblinZ[g] == 1) walker = g;
+					if (s.GoblinZ[g] == 1 && (s.GoblinZ[1 - g] != 1
+						|| (s.GoblinX[1 - g], s.GoblinY[1 - g]) != (s.GoblinX[g], s.GoblinY[g]))) walker = g;
 			}
-			Require(walker >= 0, "No goblin took the stairs down in 6000 steps.");
+			Require(walker >= 0, "No goblin took the stairs down to a distinct tile in 6000 steps.");
 			var other = 1 - walker;
 			Require(s.GoblinZ[other] != s.GoblinZ[walker] || (s.GoblinX[other], s.GoblinY[other]) != (s.GoblinX[walker], s.GoblinY[walker]), "The goblins share a tile, so the check cannot tell their bubbles apart.");
 			Require(main.Bubbles.Active.Count == 2, "A bubble was lost when its goblin took the stairs.");

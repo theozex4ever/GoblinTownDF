@@ -18,11 +18,17 @@ public partial class TopBar : HBoxContainer
 	readonly Button _down;
 	readonly Label _depth;
 	readonly Label _clock;
+	readonly Label _zoom;
+	readonly Label _paused;
+	public const string PausedLine = "PAUSED · the warren holds its breath";
+	public static readonly Color PausedColor = new(0.95f, 0.72f, 0.25f);
+	static readonly StyleBoxFlat PausedStyle = new() { BgColor = PausedColor, CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3, CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3 };
 
 	public event Action? PauseClicked;
 	public event Action<int>? SpeedClicked;
 	/// <summary>-1 to go up a level, 1 to go down.</summary>
 	public event Action<int>? LevelClicked;
+	public event Action? OverviewClicked;
 
 	public TopBar()
 	{
@@ -46,20 +52,45 @@ public partial class TopBar : HBoxContainer
 		_up = MakeButton("DepthUp", "Up · ,", toggle: false);
 		_up.TooltipText = "Look one level up, towards the sky and its many disappointments.";
 		_up.Pressed += () => LevelClicked?.Invoke(-1);
-		_depth = new Label { CustomMinimumSize = new Vector2(150, 0), HorizontalAlignment = HorizontalAlignment.Center };
+		_depth = new Label { CustomMinimumSize = new Vector2(130, 0), HorizontalAlignment = HorizontalAlignment.Center };
 		AddChild(_depth);
 		_down = MakeButton("DepthDown", "Down · .", toggle: false);
 		_down.TooltipText = "Look one level down, where the good stuff is.";
 		_down.Pressed += () => LevelClicked?.Invoke(1);
 
-		AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
+		AddChild(new VSeparator());
+		_zoom = UiTheme.Text("Zoom 1×", UiTheme.MutedLabel);
+		_zoom.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+		_zoom.TooltipText = "Wheel: zoom. Middle-drag: pan. Goblins prefer their good side.";
+		AddChild(_zoom);
+		var overview = MakeButton("Overview", "Overview · Home", toggle: false);
+		overview.TooltipText = "Show the whole warren. Every corner has an opinion.";
+		overview.Pressed += () => OverviewClicked?.Invoke();
+
+		// The pause cue takes the spacer's place and its room, so it is always on screen whatever the zoom. Empty, it is the spacer.
+		_paused = new Label
+		{
+			Name = "PausedBanner",
+			SizeFlagsHorizontal = SizeFlags.ExpandFill,
+			SizeFlagsVertical = SizeFlags.Fill,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			VerticalAlignment = VerticalAlignment.Center,
+			ClipText = true,
+			MouseFilter = MouseFilterEnum.Ignore,
+		};
+		_paused.AddThemeFontSizeOverride("font_size", 12);
+		_paused.AddThemeColorOverride("font_color", new Color(0.12f, 0.10f, 0.06f));
+		AddChild(_paused);
 		_clock = UiTheme.Text("", UiTheme.MutedLabel);
 		_clock.SizeFlagsVertical = SizeFlags.ShrinkCenter;
 		AddChild(_clock);
 	}
 
 	public string DepthText => _depth.Text;
+	public string PausedText => _paused.Text;
+	public Label PausedBanner => _paused;
 	public string ClockText => _clock.Text;
+	public void SyncZoom(float zoom) => _zoom.Text = $"Zoom {zoom:0}×";
 
 	Button MakeButton(string name, string text, bool toggle)
 	{
@@ -75,6 +106,11 @@ public partial class TopBar : HBoxContainer
 		_pause.Text = s.Paused ? "Paused · Space" : "Pause · Space";
 		for (var i = 0; i < Speeds.Length; i++)
 			_speeds[i].SetPressedNoSignal(s.Speed == Speeds[i]);
+		_paused.Text = s.Paused ? PausedLine : "";
+		if (s.Paused)
+			_paused.AddThemeStyleboxOverride("normal", PausedStyle);
+		else
+			_paused.RemoveThemeStyleboxOverride("normal");
 		_up.Disabled = viewZ <= 0;
 		_down.Disabled = viewZ >= s.Depth - 1;
 		_depth.Text = $"Depth {viewZ} · {BandName(viewZ)}";
