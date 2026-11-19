@@ -21,9 +21,9 @@ Goblins are earnest underdogs who take absurd traditions seriously. Failure shou
 ## Development status
 
 > [!NOTE]
-> **Early grey-box prototype.** P1, P2 and P3 have been played and logged. P3 passed its fun check with five yeses out of five. P4 (Chaos) is built and waiting for its human fun check: unmet Needs raise Chaos and a goblin can shirk, pick a fight or steal supplies, each shown by a brief provisional chat bubble.
+> **Early prototype with a first pixel-art pass.** P1, P2 and P3 have been played and logged. P3 passed its fun check with five yeses out of five. P4 (Chaos) is built; its human playtest has finished and its fun-check verdict is not yet logged: unmet Needs raise Chaos and a goblin can shirk, pick a fight or steal supplies, each shown by a brief provisional chat bubble.
 
-The first prototype asks one question: **is it fun to dig a warren and watch goblins mess it up?** It grows through six playable milestones, each tested for fun before any art or extra systems.
+The first prototype asks one question: **is it fun to dig a warren and watch goblins mess it up?** It grows through six playable milestones, each tested for fun before new gameplay systems. Theo approved an early visual pass for Grunts, terrain, resources and Room fixtures, with close zoom; P4's fun-check verdict remains pending.
 
 | | Milestone | Adds | Status |
 |:-:|---|---|---|
@@ -91,7 +91,7 @@ The Need a Grunt is eating, drinking or sleeping to restore adds nothing while i
 - **Finishing.** A full 100 ticks of shirking removes 40 Chaos. A Craving it can meet, or Collapse, ends the shirk early for no relief, and it does not resume. Either way the Grunt then waits 300 ticks before it can act out again, though its Chaos can keep rising. Starving does not lengthen any of this.
 - **Seeing it.** A shirking Grunt wears a lilac ring and a lilac band across its body, and the Inspector shows its Chaos beside its Needs.
 - **Fighting.** At 70 Chaos with no cooldown, a Grunt chooses equally among the behaviours available: shirking, fighting when an eligible Grunt is reachable, and theft when supplies and a private destination are available. With neither a fight nor a theft available, it simply shirks. A fight picks the nearest reachable Grunt, ties to the lower number, and skips anyone asleep, meeting a Need, acting out, in a cooldown, or holding a unit with nowhere legal to put it. The instigator stomps after its target for up to 100 ticks while the target carries on working; on contact, the same tile or a side-on neighbour, the target is rechecked, and if it is still fair game it abandons its work as a shirker would. The two scuffle for 30 ticks: the victim gains 15 Chaos, once, and nobody is hurt. A scuffle that runs its course takes 40 Chaos off the instigator alone, then both sit out 100 ticks of recovery and start their 300-tick cooldown together. A Craving it can meet, or Collapse, in either Grunt ends the scuffle for both with no relief and no recovery, though the victim keeps its 15; a Need can also end recovery early without restarting the cooldown. A pursuit that times out, loses its path or finds its target gone ends with the instigator's cooldown and nobody else's. Starving slows only the pursuer's walk.
-- **Seeing a fight.** An orange ring marks a Grunt chasing, scuffling or being scuffled, with an orange cross over the two scuffling; a duller ring marks the recovery. The Inspector names the other Grunt in each one's Task, and the Need pip and any carried square still show.
+- **Seeing a fight.** An orange ring marks a Grunt chasing, scuffling or being scuffled, with an orange cross over the two scuffling; a duller ring marks the recovery. The Inspector names the other Grunt in each one's Task, and the Need pip and any carried resource still show.
 
 - **Chat bubbles (provisional).** When a shirk begins, a scuffle starts, a thief picks up its unit or another goblin's meal eats a Haul, a small cream bubble with a symbol, the goblin's name and a line appears over it for three seconds of unpaused real time, so it lasts as long at 4× as at 1× and holds still while paused. A goblin has at most one bubble and the warren at most three, bubbles on other levels included; a newer one replaces the oldest. A bubble hangs over its goblin and is shown only while you view that goblin's level; changing level hides it, it keeps ticking down, and it is back if you return before its three seconds are up. It is only drawn: the map, the Inspector, names, fight partners, theft material and every marker work as before once it has gone, and nothing is logged. Whether to keep bubbles, swap them for icons or try something else is for Theo to decide after play; [`docs/playtests/P4-CHECKLIST.md`](docs/playtests/P4-CHECKLIST.md) has the P4 playtest checklist.
 
@@ -109,7 +109,7 @@ The Need a Grunt is eating, drinking or sleeping to restore adds nothing while i
 | 🌱 **Grub Pit** | Any floor | One Grunt tends a tile for 20 ticks | 3 Grub, one every 200 ticks |
 | 🍄 **Fungus Farm** | z1 or deeper | One Grunt tends a tile for 20 ticks | 1 Fungus, 300 ticks later. Nobody eats it. |
 | 🍺 **Brewery** | Any floor | One brewer per tile works 1 Fungus for 20 ticks | 1 Grog, loose on the tile |
-| 💤 **Sleeping Heap** | Any floor | Any number of Grunts share a tile | +1 Sleep per 5 ticks (bare floor: +1 per 10) |
+| 💤 **Sleeping Heap** | Any floor | One sleeping Grunt per tile; awake Grunts may share it | +1 Sleep per 5 ticks (bare floor: +1 per 10) |
 
 All produce lies loose until the Grunts haul it to a Pile. A sleepy Grunt walks to the nearest Heap it can reach, or lies down on the floor if none is in reach.
 
@@ -137,6 +137,10 @@ You can also open `game/project.godot` in the Godot .NET editor and build and ru
 | <kbd>Space</kbd> | Pause |
 | <kbd>1</kbd> <kbd>2</kbd> <kbd>4</kbd> | Set speed |
 | <kbd>,</kbd> <kbd>.</kbd> | Move up / down a z-level |
+| Mouse wheel over the map | Zoom towards / away from the pointer, from 1× to 4× |
+| Middle-drag | Pan the map while zoomed in |
+| <kbd>Home</kbd> or **Overview** | Reset zoom and pan to show the whole map |
+| <kbd>Shift</kbd> + mouse wheel over a tile | Scroll that tile's Inspector list |
 | <kbd>Esc</kbd> | Clear the selected tool and any active drag |
 
 Pick a tool, then **click a tile or left-drag a rectangle** to designate it or paint a Room on its Floor tiles. **Right-drag removes** what the active tool makes. With no tool picked, right-drag cancels designations.
@@ -155,9 +159,17 @@ A tile holds one Room, so painting skips a tile that already holds a different o
 
 ### Reading the map
 
-**Piles.** Each Pile tile holds up to 30 units of each material. Goblins carry to the nearest Pile with room, or wait holding the unit until one appears. Painting skips any tile holding more than 30 of a material. A Pile tile draws two counts in their materials' colours: a full material first (highlighted), then the largest.
+**Grunts.** Each Grunt uses one static 32×32-pixel sprite: a rough tunic, rope belt and bare feet. The overview draws it inside an 18-pixel tile with nearest-neighbour filtering; wheel zoom enlarges tiles up to 72 pixels for a closer look. Carried materials and Need, Sleep and Chaos markers draw over it; goblins one level away still appear as faint markers. Zoom and pan stay within the map panel, leaving the HUD in place, and carry across level changes.
 
-**Inspector.** The right-hand panel shows what is under the cursor: over goblins, one block for each goblin on the tile in order, with its name and Role, its Task, its Grub, Grog and Sleep meters as bars with the Craving threshold marked, and its Chaos bar with the acting-out threshold marked (a crowd taller than the panel scrolls inside it, by the mouse wheel over the tile, or over the panel once the pointer has left the map for it, or by its scrollbar; the map never moves); over a Pile tile, every count; over any other tile, what it is, what is marked on it and what lies loose there. Above it, the **Warren summary** totals each material, stored and loose, and counts the goblins working, idle, craving and asleep.
+**Terrain.** The Surface is muted earth with sparse grass; underground, packed-earth and slate Floors are lighter than the surrounding Solid dirt and stone. Exposed Solid edges outline dug tunnels. Stairs show wooden ladder rungs over a dark opening on both levels, and Open air is dark. The five terrain textures are 32×32-pixel assets. Room tints, loose materials and dig designations draw above them; Rooms keep their prototype colours beneath their fixtures. Dug Solid edge connections still need a later terrain pass.
+
+**Rooms.** Painting a Room now lays out rough, roofless 32×32-pixel fixtures: storage racks for Piles, empty clay-rimmed compost beds for Grub Pits, empty log-edged soil beds for Fungus Farms, wooden brewing vats for Breweries and straw bedding for Sleeping Heaps. Matching icons appear on the Room tools. Each painted tile gets a fixture, with goblins, loose resources and Pile counts drawn above it. Farm fixtures stay empty; only actual Grub and Fungus yields appear as resource sprites on the beds. A Brewery waiting for Grog storage turns grey. These are static visual fixtures; room placement, production, walking and costs follow the existing prototype rules. Right-drag removes the artwork with the Room.
+
+**Resources.** PixelLab sprites distinguish earth clods, slate rocks, pink Grub, purple Fungus and teal Grog jugs. The same transparent 16×16 artwork appears loose, carried, beside Pile counts, in the Inspector and in the Warren summary. Waiting loose items keep their silhouette in grey. At extreme crowding, one- and two-pixel carried slots use the material colour.
+
+**Piles.** Each Pile tile holds up to 30 units of each material. Goblins carry to the nearest Pile with room, or wait holding the unit until one appears. Painting skips any tile holding more than 30 of a material. A Pile tile draws two material icons and counts: a full material first (highlighted), then the largest. Counts keep their material colours.
+
+**Inspector.** The right-hand panel shows what is under the cursor: over goblins, one block for each goblin on the tile in order, with its name and Role, its Task, its Grub, Grog and Sleep meters as bars with the Craving threshold marked, and its Chaos bar with the acting-out threshold marked (a crowd taller than the panel scrolls inside it, by Shift + mouse wheel over the tile, or over the panel once the pointer has left the map for it, or by its scrollbar; Inspector scrolling keeps the camera in place); over a Pile tile, every count; over any other tile, what it is, what is marked on it and what lies loose there. Above it, the **Warren summary** totals each material, stored and loose, and counts the goblins working, idle, craving and asleep.
 
 | You see | It means |
 |---|---|
@@ -170,10 +182,10 @@ A tile holds one Room, so painting skips a tile that already holds a different o
 | Orange ring (crossed while scuffling) | Pursuing, scuffling or being scuffled |
 | Dull orange ring | Recovering from a scuffle |
 | Cream speech bubble over a goblin, three seconds | Provisional: it has just started shirking (⊘ lilac), started a scuffle (orange starburst), picked up stolen supplies (crimson mask), or had its Haul eaten (grey crossed box). One per goblin, three at most across all levels; real time, so the same length at 4×, and frozen while paused. |
-| Blue tile | Sleeping Heap |
-| Green tile | Fungus Farm |
-| Rust-red tile | Brewery |
-| Grey Brewery tile | Its Brews wait for room to put the Grog |
+| Straw bedding on a blue-tinted tile | Sleeping Heap |
+| Empty log-edged soil bed on a green-tinted tile | Fungus Farm; actual Fungus drops supply the crop cue |
+| Wooden vat on a rust-red tile | Brewery |
+| Grey Brewery vat and tile | Its Brews wait for room to put the Grog |
 
 ### Saves
 
@@ -186,6 +198,7 @@ The simulation is a pure C# library that runs without Godot. Godot renders the w
 - [`sim/src/`](sim/src/) — simulation state and logic.
 - [`sim/tests/`](sim/tests/) — headless simulation tests using xUnit.
 - [`game/`](game/) — Godot rendering, input, and UI.
+- [`game/art/`](game/art/README.md) — runtime sprite sizes, draw order, provenance and art validation.
 - [`docs/design/GDD.md`](docs/design/GDD.md) — game design and prototype milestones.
 - [`docs/GLOSSARY.md`](docs/GLOSSARY.md) — game and simulation vocabulary.
 - [`docs/adr/`](docs/adr/) — architecture decisions.
@@ -204,3 +217,5 @@ bash tools/check.sh
 ```
 
 If your Godot executable has another name or location, set `GODOT_PATH` when running the check script.
+
+Rendered checks need a display; under `--headless` their pixel scenarios are skipped, not passed. Set `GOBLINTOWN_CAPTURE_DIR` to save captures, and see the [visual-pass evidence](docs/evidence/pixel-art-pass/README.md) for before/after images and the checked commands.

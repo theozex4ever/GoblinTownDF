@@ -1,0 +1,21 @@
+extends SceneTree
+
+# Freeze the actual Main scene at its identical starting layout, before any sim tick.
+func _initialize():
+	root.size = Vector2i(1280, 720)
+	setup.call_deferred()
+
+func setup():
+	var main = load("res://scenes/Main.tscn").instantiate()
+	root.add_child(main)
+	main.set_process(false)
+	capture.call_deferred()
+
+func capture():
+	for frame in range(3):
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var destination = OS.get_cmdline_user_args()[0]
+	var error = root.get_texture().get_image().save_png(destination)
+	print("Frozen Main overview capture: ", destination, " result=", error)
+	quit(0 if error == OK else 1)
