@@ -46,13 +46,13 @@ public partial class ColourKey : VBoxContainer
 		Row("Marked, out of reach", WarrenView.UnreachableColor, outline: true);
 	}
 
-	// Dirt, Stone, Grub, Fungus and Grog side by side: the colour of a loose square, a carried square and a Pile count.
+	// Match the map's loose and carried items, in Material order.
 	void MaterialRow()
 	{
 		var row = new HBoxContainer();
 		row.AddThemeConstantOverride("separation", 2);
 		for (var material = Goblins.Sim.Material.Dirt; (int)material <= SimState.CountedMaterials; material++)
-			row.AddChild(UiTheme.Swatch(WarrenView.MaterialColor(material)));
+			row.AddChild(MaterialSprites.Icon(material));
 		row.AddChild(new Control { CustomMinimumSize = new Vector2(4, 0) });
 		row.AddChild(UiTheme.Text("Materials", UiTheme.MutedLabel));
 		_rows.AddChild(row);

@@ -515,6 +515,9 @@ public partial class SelectionInputChecks : Node
 				Require(Stored(Goblins.Sim.Material.Grub) == 14 && Stored(Goblins.Sim.Material.Grog) == 7,
 					$"The Pile holds {Stored(Goblins.Sim.Material.Grub)} Grub and {Stored(Goblins.Sim.Material.Grog)} Grog, not 14 and 7.");
 				sim.Apply(new SetPaused(true));
+				// Idle goblins may finish on the stocked Pile. Clear the inspection fixture after checking the completed haul.
+				for (var g = 0; g < s.GoblinCount; g++)
+					(s.GoblinX[g], s.GoblinY[g]) = (0, 0);
 				// A goblin standing on the tile would put its own meter on the line, so pick a stocked tile with none.
 				var (stockedX, stockedY) = new[] { (12, 12), (13, 12), (12, 13), (13, 13) }
 					.First(p => s.StoredCount(s.TileIndex(p.Item1, p.Item2, 0), Goblins.Sim.Material.Grub) > 0
@@ -980,6 +983,7 @@ public partial class SelectionInputChecks : Node
 			});
 
 			await RealMouseCheck();
+			await ZoomAndPanCheck();
 			CountLabelChecks();
 			PileCountChecks();
 
@@ -1147,6 +1151,106 @@ public partial class SelectionInputChecks : Node
 		input.Dispose();
 	}
 
+	// Zoom and pan through the GUI input path: the cursor keeps its tile, editing follows the transformed map,
+	// hidden map cells cannot receive clicks through the HUD, and reset restores the overview.
+	async Task ZoomAndPanCheck()
+	{
+		_scenarios++;
+		var main = new Main();
+		AddChild(main);
+		try
+		{
+			for (var frame = 0; frame < 3; frame++)
+				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+			var view = main.View;
+			var sim = view.Sim!;
+			sim.Apply(new SetPaused(true));
+			var mapFrame = (Control)view.GetParent();
+			var bounds = mapFrame.GetGlobalRect();
+			var overview = ButtonNamed(main, "Overview");
+			var buttonBounds = overview.GetGlobalRect();
+			var origin = view.GlobalPosition;
+			var pointer = Position(view, 16, 16);
+			var anchor = view.ToLocal(pointer);
+			var before = SimJson.Serialize(sim);
+
+			void Wheel(bool up, Vector2 at, bool shift = false)
+			{
+				var button = up ? MouseButton.WheelUp : MouseButton.WheelDown;
+				Push(new InputEventMouseButton { ButtonIndex = button, Pressed = true, Position = at, GlobalPosition = at, ShiftPressed = shift });
+				Push(new InputEventMouseButton { ButtonIndex = button, Pressed = false, Position = at, GlobalPosition = at, ShiftPressed = shift });
+			}
+
+			Push(new InputEventMouseMotion { Position = pointer, GlobalPosition = pointer });
+			Wheel(true, pointer);
+			Require(view.Scale == Vector2.One * 2, "The map wheel did not zoom to 2×.");
+			Require(view.ToLocal(pointer).DistanceTo(anchor) < 0.01f && view.Hover == new Vector2I(16, 16), "Zoom moved the tile under the pointer or lost its hover.");
+			Require(mapFrame.ClipContents && overview.GetGlobalRect() == buttonBounds, "Zoom moved the HUD or left the enlarged map unclipped.");
+			Wheel(true, pointer, shift: true);
+			Require(view.Scale == Vector2.One * 2, "Shift-wheel changed map zoom.");
+			Wheel(true, buttonBounds.GetCenter());
+			Require(view.Scale == Vector2.One * 2, "Wheel over a HUD button zoomed the map.");
+			Require(SimJson.Serialize(sim) == before, "Camera navigation changed the paused simulation.");
+			await CaptureZoom("zoom-2x.png");
+
+			Key(main, Godot.Key.P);
+			Drag(main, view, MouseButton.Left, 16, 16, 17, 17);
+			ExpectRooms(sim.State, RoomKind.Pile, 16, 16, 17, 17);
+			Drag(main, view, MouseButton.Right, 16, 16, 16, 16);
+			Require(sim.State.RoomAt(sim.State.TileIndex(16, 16, 0)) == RoomKind.None, "Removal after zoom targeted the wrong tile.");
+
+			var start = Position(view, 16, 16);
+			var panFrom = view.Position;
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Middle, Pressed = true, Position = start, GlobalPosition = start });
+			Push(new InputEventMouseMotion { Position = start + new Vector2(72, 36), GlobalPosition = start + new Vector2(72, 36), ButtonMask = MouseButtonMask.Middle });
+			Require(view.Position.DistanceTo(panFrom + new Vector2(72, 36)) < 0.01f, "Middle-drag did not pan the zoomed map.");
+			// Release over the HUD: a later move back onto the map must not keep panning.
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Middle, Pressed = false, Position = buttonBounds.GetCenter(), GlobalPosition = buttonBounds.GetCenter() });
+			var panEnd = view.Position;
+			Push(new InputEventMouseMotion { Position = start, GlobalPosition = start });
+			Require(view.Position == panEnd, "A middle-button release over the HUD left panning active.");
+			Drag(main, view, MouseButton.Left, 16, 16, 16, 16);
+			Require(sim.State.IsPile(sim.State.TileIndex(16, 16, 0)), "Painting after pan targeted the wrong tile.");
+
+			for (var i = 0; i < 6; i++) Wheel(true, bounds.GetCenter());
+			Require(view.Scale == Vector2.One * 4, "Zoom did not stop at 4×.");
+			await CaptureZoom("zoom-4x.png");
+			var panAt = bounds.GetCenter();
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Middle, Pressed = true, Position = panAt, GlobalPosition = panAt });
+			Push(new InputEventMouseMotion { Position = panAt + Vector2.One * 10000, GlobalPosition = panAt + Vector2.One * 10000, ButtonMask = MouseButtonMask.Middle });
+			Require(view.Position == Vector2.Zero, "Panning past the map's top-left edge exposed empty space.");
+			Push(new InputEventMouseMotion { Position = panAt - Vector2.One * 10000, GlobalPosition = panAt - Vector2.One * 10000, ButtonMask = MouseButtonMask.Middle });
+			Require(view.Position.DistanceTo(-bounds.Size * 3) < 0.01f, "Panning past the bottom-right edge was not clamped.");
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Middle, Pressed = false, Position = panAt, GlobalPosition = panAt });
+			Key(main, Godot.Key.Period);
+			Require(view.Scale == Vector2.One * 4, "Changing levels reset the close view.");
+			Key(main, Godot.Key.Home);
+			Require(view.Scale == Vector2.One && view.Position == Vector2.Zero && !mapFrame.ClipContents, "Home did not restore the overview.");
+			Require(view.GlobalPosition == origin, "Reset shifted the overview's layout.");
+			for (var i = 0; i < 4; i++) Wheel(false, bounds.GetCenter());
+			Require(view.Scale == Vector2.One && view.Position == Vector2.Zero, "Zoom-out went past the overview.");
+			Wheel(true, bounds.GetCenter());
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = buttonBounds.GetCenter(), GlobalPosition = buttonBounds.GetCenter() });
+			Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = buttonBounds.GetCenter(), GlobalPosition = buttonBounds.GetCenter() });
+			Require(view.Scale == Vector2.One && view.Position == Vector2.Zero, "The Overview button did not reset zoom and pan.");
+
+			async Task CaptureZoom(string filename)
+			{
+				var directory = OS.GetEnvironment("GOBLINTOWN_CAPTURE_DIR");
+				if (directory == "" || DisplayServer.GetName() == "headless")
+					return;
+				System.IO.Directory.CreateDirectory(directory);
+				await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+				GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(directory, filename));
+			}
+		}
+		finally
+		{
+			RemoveChild(main);
+			main.Free();
+		}
+	}
+
 	// Every scenario goes through here, so the passing line reports how many actually ran.
 	int _scenarios;
 
@@ -1170,7 +1274,7 @@ public partial class SelectionInputChecks : Node
 	}
 
 	static Vector2 Position(WarrenView view, int x, int y) =>
-		view.GlobalPosition + new Vector2((x + 0.5f) * WarrenView.CellSize, (y + 0.5f) * WarrenView.CellSize);
+		view.ToGlobal(new Vector2((x + 0.5f) * WarrenView.CellSize, (y + 0.5f) * WarrenView.CellSize));
 
 	static void Button(Main main, WarrenView view, MouseButton button, bool pressed, int x, int y)
 	{

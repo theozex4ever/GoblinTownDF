@@ -5,25 +5,24 @@ using Goblins.Sim;
 
 namespace AThousandGoblinsDeep;
 
-/// <summary>Draws one z-level of the warren as grey boxes. Reads sim state; never writes it.</summary>
+/// <summary>Draws one z-level of the warren, with a shared Grunt sprite. Reads sim state; never writes it.</summary>
 public partial class WarrenView : Node2D
 {
 	public const int CellSize = 18;
 
 	public static readonly Color FloorColor = new(0.62f, 0.62f, 0.64f);
-	static readonly Color DirtColor = new(0.30f, 0.26f, 0.22f);
 	static readonly Color StoneColor = new(0.36f, 0.40f, 0.48f);
-	static readonly Color GridColor = new(0f, 0f, 0f, 0.15f);
-	public static readonly Color StairsColor = new(0.78f, 0.74f, 0.58f);
-	static readonly Color StairsMarkColor = new(0.25f, 0.22f, 0.15f);
+	static readonly Color GridColor = new(0f, 0f, 0f, 0.05f);
+	public static readonly Color OpenAirColor = new(0.07f, 0.06f, 0.055f);
+	static readonly Color DirtEdgeColor = new(0.60f, 0.40f, 0.24f);
+	static readonly Color StoneEdgeColor = new(0.48f, 0.50f, 0.56f);
+	public static readonly Color StairsColor = new(0.76f, 0.56f, 0.30f);
 	public static readonly Color DesignationColor = new(1f, 0.85f, 0.2f);
 	public static readonly Color UnreachableColor = new(0.55f, 0.55f, 0.55f);
 	static readonly Color ProgressColor = new(1f, 0.85f, 0.2f, 0.55f);
 	// A right-drag unmakes, so its box is red whatever the Tool.
 	public static readonly Color RemovalColor = new(0.92f, 0.36f, 0.28f);
 	static readonly Color HoverColor = new(1f, 1f, 1f, 0.85f);
-	// A dark rim around each goblin on the viewed level, so green bodies stand out on grey floor and green Piles.
-	public static readonly Color GoblinOutlineColor = new(0.08f, 0.10f, 0.06f, 0.85f);
 	public static readonly Color PausedColor = new(0.95f, 0.72f, 0.25f);
 	public const int PausedFontSize = 13;
 	public static readonly Color GoblinColor = new(0.35f, 0.75f, 0.30f);
@@ -65,8 +64,25 @@ public partial class WarrenView : Node2D
 	// A material whose count has reached the Pile's capacity is drawn dark on a bright chip.
 	public static readonly Color FullCountChipColor = new(1f, 0.85f, 0.2f);
 	static readonly Color FullCountTextColor = new(0.12f, 0.10f, 0.06f);
-	public const int CountFontSize = 9;
+	public const int CountFontSize = 8;
 	public const int CarriedSize = 6;
+	Texture2D _gruntSprite = null!;
+	Texture2D _surface = null!;
+	Texture2D _dirtFloor = null!;
+	Texture2D _dirtSolid = null!;
+	Texture2D _stoneFloor = null!;
+	Texture2D _stoneSolid = null!;
+
+	public override void _Ready()
+	{
+		TextureFilter = TextureFilterEnum.Nearest;
+		_gruntSprite = GD.Load<Texture2D>("res://art/goblins/grunt-idle.png");
+		_surface = GD.Load<Texture2D>("res://art/terrain/surface.png");
+		_dirtFloor = GD.Load<Texture2D>("res://art/terrain/dirt-floor.png");
+		_dirtSolid = GD.Load<Texture2D>("res://art/terrain/dirt-solid.png");
+		_stoneFloor = GD.Load<Texture2D>("res://art/terrain/stone-floor.png");
+		_stoneSolid = GD.Load<Texture2D>("res://art/terrain/stone-solid.png");
+	}
 
 	public Simulation? Sim { get; set; }
 	public int ViewZ { get; set; }
@@ -94,31 +110,40 @@ public partial class WarrenView : Node2D
 		{
 			var tile = s.TileIndex(x, y, ViewZ);
 			var kind = s.KindAt(tile);
-			var color = kind switch
-			{
-				TileKind.Solid => s.MaterialAt(tile) == Goblins.Sim.Material.Stone ? StoneColor : DirtColor,
-				TileKind.Stairs => StairsColor,
-				_ => FloorColor,
-			};
 			var rect = new Rect2(x * CellSize, y * CellSize, CellSize, CellSize);
-			DrawRect(rect, color);
+			if (kind == TileKind.OpenAir)
+				DrawRect(rect, OpenAirColor);
+			else
+			{
+				var stone = s.MaterialAt(tile) == Goblins.Sim.Material.Stone;
+				var texture = kind == TileKind.Solid ? (stone ? _stoneSolid : _dirtSolid)
+					: stone ? _stoneFloor : ViewZ == 0 ? _surface : _dirtFloor;
+				// Cosmetic orientation comes from coordinates, so drawing never advances the simulation's RNG.
+				DrawTextureRect(texture, rect, tile: false, transpose: kind == TileKind.Solid && ((x + y + ViewZ) & 1) != 0);
+				if (kind == TileKind.Solid)
+					DrawSolidEdges(s, tile, x, y, rect, stone ? StoneEdgeColor : DirtEdgeColor);
+			}
 			DrawRect(rect, GridColor, filled: false);
 
 			// Stairs get rungs on every level they link, so both ends read as stairs.
 			if (kind == TileKind.Stairs)
+			{
+				DrawRect(rect.Grow(-3), OpenAirColor);
+				DrawLine(rect.Position + new Vector2(4, 3), rect.Position + new Vector2(4, CellSize - 3), StairsColor, 1);
+				DrawLine(rect.Position + new Vector2(CellSize - 4, 3), rect.Position + new Vector2(CellSize - 4, CellSize - 3), StairsColor, 1);
 				for (var rung = 1; rung <= 3; rung++)
 				{
 					var ry = rect.Position.Y + rung * CellSize / 4f;
-					DrawLine(new Vector2(rect.Position.X + 3, ry), new Vector2(rect.End.X - 3, ry), StairsMarkColor, 2);
+					DrawLine(new Vector2(rect.Position.X + 3, ry), new Vector2(rect.End.X - 3, ry), StairsColor, 2);
 				}
+			}
 
-			// A Room tile is tinted. A Pile tile shows its two best stored counts, each in its material's colour: a full count first,
-			// then the larger. A count at the Pile's capacity sits on a bright chip. A loose item is a small square in the
-			// same colour (stone matches solid stone), greyed while its Haul waits for a Pile with room for its material
-			// that it can be carried to.
+			// Piles show their two best materials, full ones first, with an icon and a count. Loose icons keep their shape
+			// while greyed out for a Haul that cannot reach storage.
 			if (s.IsPile(tile))
 			{
 				DrawRect(rect, PileTint);
+				DrawTextureRect(RoomSprites.Get(RoomKind.Pile), rect, tile: false);
 				PileCounts.Pick(s, tile, out var first, out var second);
 				DrawPileCount(s, tile, first, 0, rect);
 				DrawPileCount(s, tile, second, 1, rect);
@@ -133,9 +158,12 @@ public partial class WarrenView : Node2D
 					DrawRect(rect, BrewSystem.IsWaiting(s, tile) ? WaitingBreweryTint : BreweryTint);
 				else if (s.RoomAt(tile) == RoomKind.SleepingHeap)
 					DrawRect(rect, SleepingHeapTint);
+				var room = s.RoomAt(tile);
+				if (room != RoomKind.None)
+					DrawTextureRect(RoomSprites.Get(room, waiting: room == RoomKind.Brewery && BrewSystem.IsWaiting(s, tile)), rect, tile: false);
 				for (var material = Goblins.Sim.Material.Dirt; (int)material <= SimState.CountedMaterials; material++)
 					if (s.LooseCount(tile, material) > 0)
-						DrawRect(LooseSquare(rect, (int)material - 1), s.IsHaulReachable(tile, material) ? MaterialColor(material) : WaitingHaulColor);
+						DrawMaterial(material, LooseSquare(rect, (int)material - 1), waiting: !s.IsHaulReachable(tile, material));
 			}
 
 			if (s.DesignationAt(tile) == DesignationKind.None)
@@ -152,20 +180,23 @@ public partial class WarrenView : Node2D
 			DrawRect(rect.Grow(-1), s.IsReachable(tile) ? DesignationColor : UnreachableColor, filled: false, width: 2);
 		}
 
-		// Every body first, then every carried square, so a goblin standing on a carrier's tile cannot cover it.
+		// Every body first, then every carried icon, so a goblin standing on a carrier's tile cannot cover its item.
 		for (var g = 0; g < s.GoblinCount; g++)
 		{
 			var dz = s.GoblinZ[g] - ViewZ;
 			if (dz == 0 && (GoblinTask)s.GoblinTask[g] == GoblinTask.Shirking)
-				DrawRect(MarkerRect(s, g, dz).Grow(2), ShirkColor);
+				DrawRect(MarkerRect(s, g, dz).Grow(2), ShirkColor, filled: false, width: 2);
 			else if (dz == 0 && FightRingColor((GoblinTask)s.GoblinTask[g]) is { } ring)
-				DrawRect(MarkerRect(s, g, dz).Grow(2), ring);
+				DrawRect(MarkerRect(s, g, dz).Grow(2), ring, filled: false, width: 2);
 			else if (dz == 0 && GoblinTasks.IsTheftTask((GoblinTask)s.GoblinTask[g]))
-				DrawRect(MarkerRect(s, g, dz).Grow(2), ThiefColor);
+				DrawRect(MarkerRect(s, g, dz).Grow(2), ThiefColor, filled: false, width: 2);
 			if (dz == 0)
-				DrawRect(MarkerRect(s, g, dz).Grow(1), GoblinOutlineColor);
-			if (Math.Abs(dz) <= 1)
-				DrawRect(MarkerRect(s, g, dz), dz == 0 ? BodyColor(s, g) : FaintGoblinColor);
+			{
+				var cell = new Rect2(s.GoblinX[g] * CellSize, s.GoblinY[g] * CellSize, CellSize, CellSize);
+				DrawTextureRect(_gruntSprite, cell, tile: false, modulate: BodyColor(s, g));
+			}
+			else if (Math.Abs(dz) == 1)
+				DrawRect(MarkerRect(s, g, dz), FaintGoblinColor);
 		}
 
 		// A scuffler carries nothing either, so its cross has the body to itself; the pip and a hovering cursor still draw over it.
@@ -207,7 +238,7 @@ public partial class WarrenView : Node2D
 				if (other < g)
 					slot++;
 			}
-			DrawRect(CarriedRect(MarkerRect(s, g, 0), slot, carriers), MaterialColor(carried));
+			DrawMaterial(carried, CarriedRect(MarkerRect(s, g, 0), slot, carriers));
 		}
 
 		// A sleeping goblin carries nothing, so its "zzz" has the body to itself.
@@ -251,6 +282,20 @@ public partial class WarrenView : Node2D
 			DrawRect(map.Grow(2), PausedColor, filled: false, width: 2);
 			DrawString(ThemeDB.FallbackFont, new Vector2(0, -6), "PAUSED · the warren holds its breath", HorizontalAlignment.Left, -1, PausedFontSize, PausedColor);
 		}
+	}
+
+	// Only exposed faces get a lip; adjoining Solid tiles stay one continuous mass.
+	void DrawSolidEdges(SimState s, int tile, int x, int y, Rect2 rect, Color color)
+	{
+		var edge = rect.Grow(-1);
+		if (x > 0 && s.KindAt(tile - 1) != TileKind.Solid)
+			DrawLine(edge.Position, new Vector2(edge.Position.X, edge.End.Y), color, 2);
+		if (x + 1 < s.Width && s.KindAt(tile + 1) != TileKind.Solid)
+			DrawLine(new Vector2(edge.End.X, edge.Position.Y), edge.End, color, 2);
+		if (y > 0 && s.KindAt(tile - s.Width) != TileKind.Solid)
+			DrawLine(edge.Position, new Vector2(edge.End.X, edge.Position.Y), color, 2);
+		if (y + 1 < s.Height && s.KindAt(tile + s.Width) != TileKind.Solid)
+			DrawLine(new Vector2(edge.Position.X, edge.End.Y), edge.End, color, 2);
 	}
 
 	/// <summary>
@@ -355,8 +400,8 @@ public partial class WarrenView : Node2D
 		_ => null,
 	};
 
-	/// <summary>A goblin's body colour: green, or tinted while it is Starving.</summary>
-	public static Color BodyColor(SimState s, int goblin) => NeedRules.IsStarving(s.GoblinGrub[goblin]) ? StarvingGoblinColor : GoblinColor;
+	/// <summary>Preserves the sprite's palette, or tints it while the goblin is Starving.</summary>
+	public static Color BodyColor(SimState s, int goblin) => NeedRules.IsStarving(s.GoblinGrub[goblin]) ? StarvingGoblinColor : Colors.White;
 
 	/// <summary>The pip of a craving goblin, in the top right corner of its <paramref name="marker"/>, half outside it.</summary>
 	public static Rect2 PipRect(Rect2 marker) => new(marker.End.X - PipSize + 1, marker.Position.Y - 1, PipSize, PipSize);
@@ -379,7 +424,7 @@ public partial class WarrenView : Node2D
 		_ => throw new ArgumentOutOfRangeException(nameof(need), need, "No colour for this Need."),
 	};
 
-	/// <summary>The colour of a material's loose squares, its Pile counts and the square on a carrying goblin.</summary>
+	/// <summary>A material's count colour and the fallback for a crowded carried icon too small to show its shape.</summary>
 	public static Color MaterialColor(Goblins.Sim.Material material) => material switch
 	{
 		Goblins.Sim.Material.Dirt => LooseDirtColor,
@@ -403,7 +448,10 @@ public partial class WarrenView : Node2D
 	}
 
 	/// <summary>Where the count in <paramref name="slot"/> (0 or 1) starts on a Pile tile.</summary>
-	public static Vector2 CountBaseline(Rect2 rect, int slot) => rect.Position + new Vector2(2, 9 + slot * (CellSize - 11));
+	public static Vector2 CountBaseline(Rect2 rect, int slot) => rect.Position + new Vector2(8, 8 + slot * 8);
+
+	/// <summary>The material icon to the left of a Pile count.</summary>
+	public static Rect2 PileIconRect(Rect2 rect, int slot) => new(rect.Position + new Vector2(1, 1 + slot * 8), new Vector2(6, 6));
 
 	static Rect2 MarkerRect(SimState s, int goblin, int dz)
 	{
@@ -440,7 +488,19 @@ public partial class WarrenView : Node2D
 	void DrawPileCount(SimState s, int tile, Goblins.Sim.Material material, int slot, Rect2 rect)
 	{
 		if (material != Goblins.Sim.Material.None)
+		{
+			DrawMaterial(material, PileIconRect(rect, slot));
 			DrawCount(s.StoredCount(tile, material), CountBaseline(rect, slot), MaterialColor(material));
+		}
+	}
+
+	void DrawMaterial(Goblins.Sim.Material material, Rect2 rect, bool waiting = false)
+	{
+		// A one- or two-pixel slot cannot convey a silhouette; keep crowded carriers distinguishable by colour.
+		if (rect.Size.X < 3 || rect.Size.Y < 3)
+			DrawRect(rect, waiting ? WaitingHaulColor : MaterialColor(material));
+		else
+			DrawTextureRect(MaterialSprites.Get(material, waiting), rect, tile: false);
 	}
 
 	// A count at the Pile's capacity is highlighted.
@@ -450,10 +510,11 @@ public partial class WarrenView : Node2D
 			return;
 
 		var label = CountLabel.Format(count);
+		// Counts need a quiet backing over the storage rack, with the existing bright highlight at capacity.
+		var width = ThemeDB.FallbackFont.GetStringSize(label, HorizontalAlignment.Left, -1, CountFontSize).X;
+		DrawRect(CountChipRect(baseline, width), count >= SimState.PileCapacity ? FullCountChipColor : new Color(0.10f, 0.09f, 0.07f, 0.92f));
 		if (count >= SimState.PileCapacity)
 		{
-			var width = ThemeDB.FallbackFont.GetStringSize(label, HorizontalAlignment.Left, -1, CountFontSize).X;
-			DrawRect(CountChipRect(baseline, width), FullCountChipColor);
 			color = FullCountTextColor;
 		}
 		DrawString(ThemeDB.FallbackFont, baseline, label, HorizontalAlignment.Left, -1, CountFontSize, color);

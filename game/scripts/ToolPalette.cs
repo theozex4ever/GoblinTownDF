@@ -43,7 +43,16 @@ public partial class ToolPalette : VBoxContainer
 				FocusMode = FocusModeEnum.None,
 				Alignment = HorizontalAlignment.Left,
 			};
-			UiTheme.SetSwatchIcon(button, ToolInfo.Swatch(tool));
+			var room = RoomSprites.ForTool(tool);
+			if (room != Goblins.Sim.RoomKind.None)
+			{
+				button.Icon = RoomSprites.Get(room);
+				button.ExpandIcon = true;
+				button.AddThemeConstantOverride("icon_max_width", 16);
+				button.TextureFilter = TextureFilterEnum.Nearest;
+			}
+			else
+				UiTheme.SetSwatchIcon(button, ToolInfo.Swatch(tool));
 			button.Pressed += () => ToolClicked?.Invoke(tool);
 			_buttons[tool] = button;
 			AddChild(button);

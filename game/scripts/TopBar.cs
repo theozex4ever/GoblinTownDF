@@ -18,11 +18,13 @@ public partial class TopBar : HBoxContainer
 	readonly Button _down;
 	readonly Label _depth;
 	readonly Label _clock;
+	readonly Label _zoom;
 
 	public event Action? PauseClicked;
 	public event Action<int>? SpeedClicked;
 	/// <summary>-1 to go up a level, 1 to go down.</summary>
 	public event Action<int>? LevelClicked;
+	public event Action? OverviewClicked;
 
 	public TopBar()
 	{
@@ -52,6 +54,15 @@ public partial class TopBar : HBoxContainer
 		_down.TooltipText = "Look one level down, where the good stuff is.";
 		_down.Pressed += () => LevelClicked?.Invoke(1);
 
+		AddChild(new VSeparator());
+		_zoom = UiTheme.Text("Zoom 1×", UiTheme.MutedLabel);
+		_zoom.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+		_zoom.TooltipText = "Wheel: zoom. Middle-drag: pan. Goblins prefer their good side.";
+		AddChild(_zoom);
+		var overview = MakeButton("Overview", "Overview · Home", toggle: false);
+		overview.TooltipText = "Show the whole warren. Every corner has an opinion.";
+		overview.Pressed += () => OverviewClicked?.Invoke();
+
 		AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
 		_clock = UiTheme.Text("", UiTheme.MutedLabel);
 		_clock.SizeFlagsVertical = SizeFlags.ShrinkCenter;
@@ -60,6 +71,7 @@ public partial class TopBar : HBoxContainer
 
 	public string DepthText => _depth.Text;
 	public string ClockText => _clock.Text;
+	public void SyncZoom(float zoom) => _zoom.Text = $"Zoom {zoom:0}×";
 
 	Button MakeButton(string name, string text, bool toggle)
 	{

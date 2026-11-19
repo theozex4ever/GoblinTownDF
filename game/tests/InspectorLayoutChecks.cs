@@ -384,9 +384,10 @@ public partial class InspectorLayoutChecks : Node
 	async Task Wheel(Vector2 at, bool down)
 	{
 		var button = down ? MouseButton.WheelDown : MouseButton.WheelUp;
-		using (var press = new InputEventMouseButton { ButtonIndex = button, Pressed = true, Position = at, GlobalPosition = at, Factor = 1 })
+		var overMap = ((Control)_view.GetParent()).GetGlobalRect().HasPoint(at);
+		using (var press = new InputEventMouseButton { ButtonIndex = button, Pressed = true, Position = at, GlobalPosition = at, Factor = 1, ShiftPressed = overMap })
 			_viewport.PushInput(press, inLocalCoords: true);
-		using (var release = new InputEventMouseButton { ButtonIndex = button, Pressed = false, Position = at, GlobalPosition = at })
+		using (var release = new InputEventMouseButton { ButtonIndex = button, Pressed = false, Position = at, GlobalPosition = at, ShiftPressed = overMap })
 			_viewport.PushInput(release, inLocalCoords: true);
 		await Frames(2);
 	}

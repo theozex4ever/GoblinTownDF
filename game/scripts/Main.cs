@@ -8,6 +8,9 @@ public partial class Main : Node
 {
 	Simulation _sim = null!;
 	WarrenView _view = null!;
+	Control _mapFrame = null!;
+	bool _panning;
+	Vector2 _panPointer;
 	TopBar _topBar = null!;
 	ToolPalette _palette = null!;
 	InspectorPanel _inspector = null!;
@@ -92,6 +95,7 @@ public partial class Main : Node
 		_topBar.PauseClicked += () => Apply(new SetPaused(!_sim.State.Paused));
 		_topBar.SpeedClicked += speed => Apply(new SetSpeed(speed));
 		_topBar.LevelClicked += ChangeLevel;
+		_topBar.OverviewClicked += ResetMapView;
 		topBar.AddChild(_topBar);
 
 		var body = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
@@ -113,9 +117,9 @@ public partial class Main : Node
 
 		var mapArea = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
 		body.AddChild(mapArea);
-		var mapFrame = new Control { MouseFilter = Control.MouseFilterEnum.Ignore, CustomMinimumSize = mapSize };
-		mapArea.AddChild(mapFrame);
-		mapFrame.AddChild(_view);
+		_mapFrame = new Control { Name = "MapFrame", MouseFilter = Control.MouseFilterEnum.Ignore, CustomMinimumSize = mapSize, Size = mapSize };
+		mapArea.AddChild(_mapFrame);
+		_mapFrame.AddChild(_view);
 
 		var right = new PanelContainer { CustomMinimumSize = new Vector2(RightPanelWidth, 0) };
 		body.AddChild(right);
@@ -190,6 +194,11 @@ public partial class Main : Node
 	{
 		if (@event is InputEventMouseMotion motion)
 			Hover(motion.Position);
+		if (_panning && @event is InputEventMouse && HandleMapNavigation(@event))
+		{
+			GetViewport().SetInputAsHandled();
+			return;
+		}
 		if (@event is InputEventMouse && (_selection.Dragging || _removal.Dragging) && HandleMouse(@event))
 			GetViewport().SetInputAsHandled();
 	}
@@ -198,6 +207,11 @@ public partial class Main : Node
 	{
 		if (@event is InputEventMouseMotion motion)
 			Hover(motion.Position);
+		if (HandleMapNavigation(@event))
+		{
+			GetViewport().SetInputAsHandled();
+			return;
+		}
 		if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } wheel && ScrollInspector(wheel))
 		{
 			GetViewport().SetInputAsHandled();
@@ -211,17 +225,17 @@ public partial class Main : Node
 	{
 		_pointer = position;
 		_hoverOrigin = _view.GlobalPosition;
-		var cell = CellAt(position);
+		var cell = _mapFrame.GetGlobalRect().HasPoint(position) ? CellAt(position) : new Vector2I(-1, -1);
 		// A pointer on its way from a tile to the Inspector, to scroll it, keeps the tile; any other way off the map clears it.
 		if (IsOnMap(cell) || !IsReachingInspector(position))
 			_hoverCell = cell;
 		UpdateHover();
 	}
 
-	// The wheel over a tile scrolls the Inspector's list for that tile, so a crowd mid-map can be read to the end without leaving it.
+	// Shift-wheel keeps the Inspector shortcut available while the ordinary wheel zooms the map.
 	bool ScrollInspector(InputEventMouseButton wheel)
 	{
-		if (_selection.Dragging || _removal.Dragging || !IsOnMap(CellAt(wheel.Position)))
+		if (!wheel.ShiftPressed || _selection.Dragging || _removal.Dragging || !_mapFrame.GetGlobalRect().HasPoint(wheel.Position))
 			return false;
 		var bar = _inspectorScroll.GetVScrollBar();
 		if (bar.MaxValue <= bar.Page)
@@ -240,8 +254,8 @@ public partial class Main : Node
 		if (!IsOnMap(_hoverCell))
 			return false;
 		var inspector = _inspectorScroll.GetGlobalRect();
-		var east = _view.GlobalPosition.X + _sim.State.Width * WarrenView.CellSize;
-		var top = Math.Min(_view.GlobalPosition.Y, inspector.Position.Y);
+		var east = _mapFrame.GetGlobalRect().End.X;
+		var top = Math.Min(_mapFrame.GlobalPosition.Y, inspector.Position.Y);
 		return inspector.HasPoint(position) || (position.X >= east && position.Y >= top);
 	}
 
@@ -252,7 +266,67 @@ public partial class Main : Node
 			return _selection.Handle(@event);
 		if (_removal.Dragging)
 			return _removal.Handle(@event);
+		if (@event is InputEventMouseButton { Pressed: true } press && !_mapFrame.GetGlobalRect().HasPoint(press.Position))
+			return false;
 		return _removal.Handle(@event) || (_tool != Tool.None && _selection.Handle(@event));
+	}
+
+	bool HandleMapNavigation(InputEvent input)
+	{
+		if (input is InputEventMouseMotion motion && _panning)
+		{
+			_view.Position += motion.Position - _panPointer;
+			_panPointer = motion.Position;
+			ClampMapPosition();
+			Hover(motion.Position);
+			return true;
+		}
+		if (input is InputEventMouseButton { ButtonIndex: MouseButton.Middle, Pressed: false } && _panning)
+		{
+			_panning = false;
+			return true;
+		}
+		if (_panning)
+			return input is InputEventMouse;
+		if (_selection.Dragging || _removal.Dragging || input is not InputEventMouseButton { Pressed: true } button
+			|| !_mapFrame.GetGlobalRect().HasPoint(button.Position))
+			return false;
+		if (button.ButtonIndex == MouseButton.Middle && _view.Scale.X > 1)
+		{
+			_panning = true;
+			_panPointer = button.Position;
+			return true;
+		}
+		if (button.ShiftPressed || button.ButtonIndex is not (MouseButton.WheelUp or MouseButton.WheelDown))
+			return false;
+
+		var point = _view.ToLocal(button.Position);
+		var zoom = Math.Clamp(_view.Scale.X + (button.ButtonIndex == MouseButton.WheelUp ? 1 : -1), 1, 4);
+		_view.Scale = Vector2.One * zoom;
+		_view.Position = button.Position - _mapFrame.GlobalPosition - point * zoom;
+		_mapFrame.ClipContents = zoom > 1;
+		ClampMapPosition();
+		_topBar.SyncZoom(zoom);
+		Hover(button.Position);
+		return true;
+	}
+
+	void ClampMapPosition()
+	{
+		var size = new Vector2(_sim.State.Width, _sim.State.Height) * WarrenView.CellSize * _view.Scale;
+		_view.Position = new Vector2(Math.Clamp(_view.Position.X, _mapFrame.Size.X - size.X, 0),
+			Math.Clamp(_view.Position.Y, _mapFrame.Size.Y - size.Y, 0));
+	}
+
+	void ResetMapView()
+	{
+		CancelSelection();
+		_panning = false;
+		_view.Scale = Vector2.One;
+		_view.Position = Vector2.Zero;
+		_mapFrame.ClipContents = false;
+		_topBar.SyncZoom(1);
+		Hover(_pointer);
 	}
 
 	void UpdateHover()
@@ -291,7 +365,13 @@ public partial class Main : Node
 
 	Vector2I CellAt(Vector2 position)
 	{
-		var cell = (position - _view.GlobalPosition) / WarrenView.CellSize;
+		// A drag leaving the clipped close view ends at its visible edge, rather than painting beneath the HUD.
+		if (_view.Scale.X > 1 && (_selection?.Dragging == true || _removal?.Dragging == true))
+		{
+			var frame = _mapFrame.GetGlobalRect();
+			position = position.Clamp(frame.Position, frame.End - Vector2.One * 0.001f);
+		}
+		var cell = _view.ToLocal(position) / WarrenView.CellSize;
 		return new Vector2I(Mathf.FloorToInt(cell.X), Mathf.FloorToInt(cell.Y));
 	}
 
@@ -364,6 +444,7 @@ public partial class Main : Node
 			case Key.Escape: CancelSelection(); _tool = Tool.None; SyncHud(); break;
 			case Key.Comma: ChangeLevel(-1); break;
 			case Key.Period: ChangeLevel(1); break;
+			case Key.Home: ResetMapView(); break;
 			default: return;
 		}
 		GetViewport().SetInputAsHandled();
