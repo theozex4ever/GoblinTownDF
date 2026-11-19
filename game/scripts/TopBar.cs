@@ -22,6 +22,7 @@ public partial class TopBar : HBoxContainer
 	readonly Label _paused;
 	public const string PausedLine = "PAUSED · the warren holds its breath";
 	public static readonly Color PausedColor = new(0.95f, 0.72f, 0.25f);
+	static readonly StyleBoxFlat PausedStyle = new() { BgColor = PausedColor, CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3, CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3 };
 
 	public event Action? PauseClicked;
 	public event Action<int>? SpeedClicked;
@@ -107,7 +108,7 @@ public partial class TopBar : HBoxContainer
 			_speeds[i].SetPressedNoSignal(s.Speed == Speeds[i]);
 		_paused.Text = s.Paused ? PausedLine : "";
 		if (s.Paused)
-			_paused.AddThemeStyleboxOverride("normal", new StyleBoxFlat { BgColor = PausedColor, CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3, CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3 });
+			_paused.AddThemeStyleboxOverride("normal", PausedStyle);
 		else
 			_paused.RemoveThemeStyleboxOverride("normal");
 		_up.Disabled = viewZ <= 0;
