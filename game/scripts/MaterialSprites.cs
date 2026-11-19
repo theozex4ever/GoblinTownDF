@@ -21,7 +21,7 @@ internal static class MaterialSprites
 			return normal;
 		if (Waiting[index] is not { } grey)
 		{
-			var image = normal.GetImage();
+			using var image = normal.GetImage();
 			image.AdjustBcs(0.8f, 1, 0);
 			Waiting[index] = grey = ImageTexture.CreateFromImage(image);
 		}
