@@ -1,6 +1,6 @@
 # P4 playtest checklist
 
-**Prepared for Theo's real fun check. Theo's human playtest of head `cfa4e85` (seed 1794093817) has finished; its outcomes and fun-check verdict are not yet recorded, so every outcome below stays **not seen** and the verdict is pending.** Nothing is filled in until Theo says what he saw; scripted runs under `docs/evidence/` are not playtests. This is not a dated playtest record: after play, load the `fun-check` skill, which writes `docs/playtests/YYYY-MM-DD-P4.md` from [`TEMPLATE.md`](TEMPLATE.md) with the outcomes, the five fun answers and the verdict.
+**Logged.** Theo's playtest of `cfa4e85` (seed 1794093817) is recorded in [`2026-11-21-P4.md`](2026-11-21-P4.md): every row observed, five yeses, verdict Go. This file stays as the blank checklist; the outcomes live in the dated record.
 
 P4 advances to P5 only when fun questions 2 and 3 are both yes; otherwise tune P4. P3's starting map, goblins and supplies are unchanged, and there are no debug controls: create trouble by neglecting the warren, then fix it as a player would.
 

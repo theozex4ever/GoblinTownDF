@@ -198,7 +198,7 @@ The first prototype answers one question: is it fun to dig a warren and watch go
   - **HUD (added after the P3 fun check, #46):** the key-hint line becomes a Tool palette: one button per Tool, showing its key, with its joke as the tooltip and a short hint for the picked Tool. A top bar holds Pause, Speed and level buttons and a tick clock. Every key still works, and keys and buttons stay in step. The hover line becomes the Inspector. A Warren summary shows, per material, units stored on Piles and units loose, and counts goblins by state. This reverses P2's "no totals panel": that rule kept attention on the map while the fun was unproven, and P3's five yeses settled it. The original HUD used grey boxes and plain Godot Controls; Theo's approved visual pass below adds sprites and Room tool icons. While paused, the top bar wears an amber "PAUSED" banner, always on screen whatever the Zoom, rather than the map being dimmed or framed (a frame at the map edge is clipped in the close view), because the player plans and designates while paused.
   - **Later, not P3:** a goblin whose Haul gets eaten is annoyed, which can become a Grudge or Chaos in P4. A waiting carrier's boredom can move to Chaos in P4. The "zzz" gets replaced with something better.
 
-- [ ] **P4 — Chaos.** Chaos meter from unmet needs. At least 3 acting-out behaviours (shirk, fight, steal).
+- [x] **P4 — Chaos.** Chaos meter from unmet needs. At least 3 acting-out behaviours (shirk, fight, steal).
 
   **P4 decisions — approved 2026-11-07**
 
@@ -292,6 +292,7 @@ The biggest risk for a solo colony sim is scope, not tech. The prototype is deli
 
 - [ ] How does the goblin brain choose between needs, jobs, and chaos? (P3 settles needs against jobs; chaos is the next design pass.)
 - [ ] Is there a win condition, or is it endless until the warren falls?
+- [ ] Food and drink balance: Grub and Grog are too easy to over-produce, so a well-provisioned warren goes quiet (P4 playtest, 2026-11-21). Deferred by Theo: fine for testing, to be balanced properly later.
 - [x] Real-time with pause, or a fixed set of speeds? **Both:** real-time with pause, plus 1×, 2× and 4× speeds. Speed changes how many ticks run per frame, never the tick length.
 - [x] How much direct control: designations only, or can you order a specific goblin? **Designations only** for the prototype.
 - [x] Art direction for the visual version: **chunky pixel art**, with a square map viewed from above and characters drawn at a slight front angle so their faces, clothes and carried items are visible.
